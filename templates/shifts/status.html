@@ -9,7 +9,7 @@
   <h2 id="ctrl-title">Giá trị kiểm soát tạm tính tháng {{ month }}</h2>
   <dl class="figure-grid">
     <div class="figure-key"><dt>Giá trị kiểm soát tạm tính</dt><dd>{{ control.control_value|intcomma }} đ</dd></div>
-    <div><dt>Mục tiêu BO-01</dt><dd>dưới {{ control.target|intcomma }} đ</dd></div>
+    <div><dt>Mục tiêu BO-01</dt><dd class="dd-text">dưới {{ control.target|intcomma }} đ</dd></div>
     <div><dt>Tổn thất đã xác minh</dt><dd>{{ control.verified|intcomma }} đ</dd></div>
     <div><dt>Thiếu tiền đang xử lý</dt><dd>{{ control.in_process|intcomma }} đ</dd></div>
     <div><dt>Đã thu hồi</dt><dd>{{ control.recovered|intcomma }} đ</dd></div>

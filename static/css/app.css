@@ -490,9 +490,11 @@ select.input { appearance: auto; }
 .row-between { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .text-warn { color: var(--warn); }
 .discrepancy p { margin: 0.25rem 0 0; }
-.tabs { display: flex; gap: 0.25rem; }
-.tabs a { min-height: 40px; display: inline-flex; align-items: center; padding: 0 0.75rem; border-radius: var(--radius); text-decoration: none; color: var(--fg-2); font-weight: 600; }
-.tabs a[aria-current="page"] { background: var(--accent-soft); color: var(--accent-press); }
+.tabs { display: flex; gap: 0; border: 1px solid var(--border-input); border-radius: var(--radius); overflow: hidden; }
+.tabs a { min-height: 44px; background: var(--surface); display: inline-flex; align-items: center; padding: 0 0.75rem; border-radius: var(--radius); text-decoration: none; color: var(--fg-2); font-weight: 600; }
+.tabs a + a { border-left: 1px solid var(--border-input); }
+.tabs a:hover { background: var(--surface-2); color: var(--fg); }
+.tabs a[aria-current="page"] { background: var(--primary); color: var(--on-primary); }
 .exc-text { display: grid; gap: 0.125rem; min-width: 0; }
 .pre-line { white-space: pre-line; }
 .trail { margin: 0; padding-left: 1.25rem; display: grid; gap: 0.25rem; font-size: var(--text-sm); }

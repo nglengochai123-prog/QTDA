@@ -113,6 +113,7 @@ Bán hàng dự phòng và nhập bù (FR-06); đối chiếu tiêu hao trọng 
 - [x] Tải và thời gian chờ theo khung giờ, đánh dấu quá tải, số người có mặt theo vai trò (FR-36, BRU-27, AC-79)
 - [x] Trung tâm cảnh báo theo Bảng 5.4: giao người xử lý chính, thời hạn tham số, Mới, Đang xử lý, Đã đóng, tự đóng, đóng tay có ghi chú, chuyển cấp hoặc nhắc lại, thống kê tuần (FR-51, BRU-36, AC-102, AC-103); chưa có "Cần đặt hàng" (chờ dự báo) và Web Push
 - [x] Bảng điều khiển (FR-50, AC-100, AC-101), báo cáo kiểm soát doanh thu (FR-52, AC-104), báo cáo doanh thu có xuất Excel (FR-53, AC-105), báo cáo nguyên vật liệu theo kỳ (FR-54, AC-106; cột nhu cầu ước tính chờ dự báo)
+- [x] Giao diện quản trị vuông vức theo UI UX Pro Max (DESIGN.md 12/10/2026): token màu mới, góc 2px, không bóng, điều hướng theo nhóm nghiệp vụ, bảng điều khiển tách phần ca (Quản lý ca) và chỉ tiêu (Chủ quán); đã rà soát lại các màn hình Phần 1–3 và Phần 4 trên máy tính và điện thoại
 - [ ] Còn lại của Phần 4: ước tính nhu cầu và cảnh báo Cần đặt hàng (FR-28, FR-29, chờ Hai giải thích); Web Push (NFR-17); đo NFR-02, NFR-16 trong tuần chạy thử; kiểm thử đồng thời trên PostgreSQL (GD-13)
 
 
