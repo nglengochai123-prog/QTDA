@@ -54,7 +54,7 @@ Trạng thái: **Đúng** là làm đủ theo BRD và có kiểm thử; **Một 
 | FR-13 | Chênh lệch tích lũy | Đúng | AC-28 |
 | FR-14 | Báo cáo điều chỉnh | Đúng | AC-29 |
 | FR-15 | Ngoại lệ theo quy tắc | Một phần | AC-30, AC-31 đúng; giao cho Chủ quán, chưa có thời hạn và chuyển cấp theo Bảng 5.4 |
-| FR-16 | Đối chiếu tiêu hao trọng yếu | Chưa làm | Phần 4 |
+| FR-16 | Đối chiếu tiêu hao trọng yếu | Đúng | AC-32, AC-33 (`inventory/tests/test_consumption.py`): chạy khi kiểm kê nguyên liệu trọng yếu được áp dụng, so với lần kiểm kê áp dụng trước; vượt mức cho phép tạo ngoại lệ; kết quả hiện ở Báo cáo nguyên vật liệu (AC-34). Mức cho phép 5% là tham số, theo ví dụ AC-32 |
 | FR-17 | Xem xét ngoại lệ | Đúng | AC-35, AC-36, AC-37 |
 | FR-18 | Vụ việc tổn thất | Đúng | AC-38 đến AC-41 |
 | FR-20 | Danh mục nguyên vật liệu | Đúng | AC-44, AC-45 |

@@ -21,6 +21,7 @@ class ExceptionCase(StoreScopedModel):
         BACKUP_LATE = "pdp_qua_han", "Nhập bù phiếu dự phòng quá hạn"
         BACKUP_DUPLICATE = "pdp_trung", "Số phiếu dự phòng trùng"
         BACKUP_OUT_OF_RANGE = "pdp_ngoai_day", "Số phiếu dự phòng ngoài dãy đã cấp"
+        CONSUMPTION_OVER = "tieu_hao_vuot", "Tiêu hao nguyên liệu trọng yếu vượt mức"
 
     class Severity(models.TextChoices):
         IMPORTANT = "quan_trong", "Quan trọng"

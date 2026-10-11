@@ -14,7 +14,7 @@ from apps.accounts.permissions import Cap, capability_required, user_can
 from apps.core.idempotency import OperationKeyError
 
 from . import operations as ops
-from .models import (Ingredient, Payable, PurchaseOrder, QuickReport, ShortageCase, StockCount, Supplier,
+from .models import (ConsumptionCheck, Ingredient, Payable, PurchaseOrder, QuickReport, ShortageCase, StockCount, Supplier,
                      SupplierPayment, Waste)
 from .stock import ensure_stock_rows
 
@@ -211,4 +211,5 @@ def report(request):
         "shortage_by_day": shortage_month.values("day").annotate(n=Count("id")).order_by("-day"),
         "shortage_by_ingredient": shortage_month.values("ingredient__name").annotate(n=Count("id")).order_by("-n"),
         "shortages": shortage_month.select_related("ingredient"),
+        "consumption": ConsumptionCheck.objects.filter(**month).select_related("ingredient", "from_count", "to_count"),
     })

@@ -539,3 +539,29 @@ class Waste(StoreScopedModel):
         verbose_name = "Hao hụt xuất kho"
         verbose_name_plural = "Hao hụt xuất kho"
         ordering = ["-created_at"]
+
+
+class ConsumptionCheck(StoreScopedModel):
+    """Kết quả đối chiếu tiêu hao một nguyên liệu trọng yếu giữa hai lần kiểm kê (FR-16, BRU-17)."""
+
+    ingredient = models.ForeignKey(Ingredient, verbose_name="Nguyên vật liệu", on_delete=models.PROTECT,
+                                   related_name="consumption_checks")
+    from_count = models.ForeignKey(StockCount, verbose_name="Kiểm kê kỳ trước", on_delete=models.PROTECT,
+                                   related_name="+")
+    to_count = models.OneToOneField(StockCount, verbose_name="Kiểm kê kỳ này", on_delete=models.PROTECT,
+                                    related_name="consumption_check")
+    opening = models.DecimalField("Tồn kiểm kê kỳ trước", max_digits=14, decimal_places=2)
+    receipts = models.DecimalField("Nhập trong kỳ", max_digits=14, decimal_places=2)
+    closing = models.DecimalField("Tồn kiểm kê kỳ này", max_digits=14, decimal_places=2)
+    waste = models.DecimalField("Hao hụt xuất kho", max_digits=14, decimal_places=2)
+    actual = models.DecimalField("Tiêu hao thực tế", max_digits=14, decimal_places=2)
+    by_orders = models.DecimalField("Tiêu hao theo đơn", max_digits=14, decimal_places=2)
+    excess = models.DecimalField("Vượt (thực tế − theo đơn)", max_digits=14, decimal_places=2)
+    percent = models.DecimalField("Tỷ lệ vượt (%)", max_digits=9, decimal_places=2)
+    tolerance_percent = models.PositiveSmallIntegerField("Mức cho phép đã áp dụng (%)")
+    over = models.BooleanField("Vượt mức cho phép", default=False)
+
+    class Meta:
+        verbose_name = "Đối chiếu tiêu hao"
+        verbose_name_plural = "Đối chiếu tiêu hao"
+        ordering = ["-created_at"]

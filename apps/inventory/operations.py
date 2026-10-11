@@ -13,7 +13,7 @@ from apps.audit.services import record
 from apps.core import params
 from apps.core.idempotency import run_once
 
-from . import stock
+from . import consumption, stock
 from .models import (Ingredient, Payable, PurchaseOrder, QuickReport, Receipt, ReceiptLine, ShortageCase,
                      StockCount, StockMovement, Supplier, SupplierPayment, Waste)
 
@@ -285,6 +285,8 @@ def submit_count(user, operation_key, ingredient_id, counted, reason=""):
                       "chenh_lech": str(diff), "ty_le": f"{percent:.2f}%", "trang_thai": count.get_status_display()},
                reason=reason)
         _check_count_accumulated(count)
+        if not over:
+            consumption.check_after_count(count, user)  # FR-16
         return {"count": count.pk, "difference": str(diff), "percent": f"{percent:.1f}", "pending": over}
 
     return run_once(operation_key, "stock_count", payload, action, actor=user)
@@ -302,6 +304,8 @@ def confirm_count(user, count_id, approve=True):
     count.save(update_fields=["status", "confirmed_by", "confirmed_at", "updated_at"])
     if approve and count.difference != 0:
         _apply_count(count, user)
+    if approve:
+        consumption.check_after_count(count, user)  # FR-16
     record(Action.STATUS_CHANGE, actor=user, obj=count, object_type="inventory.StockCount",
            after={"trang_thai": count.get_status_display()})
     return count
