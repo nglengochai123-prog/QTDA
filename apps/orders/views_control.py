@@ -90,6 +90,13 @@ def approvals_count(request):
 @require_POST
 def decide(request, request_id):
     approve = request.POST.get("decision") == "approve"
+    req = get_object_or_404(AdjustmentRequest.objects.select_related("order"), pk=request_id)
+    if req.status == AdjustmentRequest.Status.PENDING and not adjustments.can_decide(request.user, req):
+        # Không thuộc người được duyệt ở cấp hiện tại: từ chối tại máy chủ và ghi nhật ký (AC-111, AC-22, AC-23).
+        from apps.accounts.permissions import _deny
+
+        _deny(request, Cap.PAID_INVOICE_CANCEL if req.kind == AdjustmentRequest.Kind.CANCEL_PAID
+              else Cap.ORDER_ADJUST_APPROVE)
     try:
         result, _ = adjustments.decide(request.user, request.POST.get("operation_key", ""), request_id, approve,
                                        request.POST.get("note", ""))

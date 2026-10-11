@@ -91,9 +91,34 @@ def _deny(request, cap):
     from apps.audit.models import Action
     from apps.audit.services import record
 
-    record(Action.ACCESS_DENIED, request=request, object_type="capability",
-           reason=f"{cap}: {CAPABILITIES[cap][0]}")
-    raise PermissionDenied
+    reason = f"{cap}: {CAPABILITIES[cap][0]}"
+    log = record(Action.ACCESS_DENIED, request=request, object_type="capability", reason=reason)
+    error = PermissionDenied()
+    # Với ATOMIC_REQUESTS, giao dịch của yêu cầu bị hủy khi ném lỗi nên dòng nhật ký trên mất theo;
+    # DeniedAccessLogMiddleware ghi lại sau khi giao dịch đã đóng.
+    error.lam_denied = {"log_id": getattr(log, "pk", None), "reason": reason}
+    raise error
+
+
+class DeniedAccessLogMiddleware:
+    """Bảo đảm lần bị từ chối quyền luôn còn trong nhật ký (AC-111), kể cả khi giao dịch yêu cầu bị hủy."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        return self.get_response(request)
+
+    def process_exception(self, request, exception):
+        info = getattr(exception, "lam_denied", None)
+        if info is None:
+            return None
+        from apps.audit.models import Action, AuditLog
+        from apps.audit.services import record
+
+        if not AuditLog.objects.filter(pk=info["log_id"]).exists():
+            record(Action.ACCESS_DENIED, request=request, object_type="capability", reason=info["reason"])
+        return None
 
 
 def capability_required(cap):
