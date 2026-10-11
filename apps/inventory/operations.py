@@ -168,12 +168,8 @@ def create_receipt(user, operation_key, supplier_id, lines, payment_type, *, inv
         for ingredient, qty, price, po in parsed:
             ReceiptLine.objects.create(receipt=receipt, ingredient=ingredient, quantity=qty, unit_price=price,
                                        purchase_order=po)
-            stock_row = stock._lock([ingredient.pk])[ingredient.pk]
-            stock_row.physical += qty
-            stock_row.save(update_fields=["physical", "updated_at"])
-            StockMovement.objects.create(store=supplier.store, ingredient=ingredient, kind=StockMovement.Kind.RECEIPT,
-                                         quantity=qty, balance_after=stock_row.physical, source_type="phieu_nhap",
-                                         source_id=receipt.code, actor=user, note=f"{supplier.name}")
+            stock.move(ingredient.pk, qty, kind=StockMovement.Kind.RECEIPT, actor=user, store=supplier.store,
+                       source_type="phieu_nhap", source_id=receipt.code, note=supplier.name)
             if po is not None:
                 po.received_quantity += qty
                 po.settle_status()
@@ -234,12 +230,8 @@ def record_waste(user, operation_key, ingredient_id, quantity, reason, note=""):
         qty = _dec(quantity, "Số lượng")
         waste = Waste.objects.create(store=ingredient.store, ingredient=ingredient, quantity=qty, reason=reason,
                                      note=note[:255], actor=user, operation_key=operation_key)
-        row = stock._lock([ingredient.pk])[ingredient.pk]
-        row.physical -= qty
-        row.save(update_fields=["physical", "updated_at"])
-        StockMovement.objects.create(store=ingredient.store, ingredient=ingredient, kind=StockMovement.Kind.WASTE,
-                                     quantity=-qty, balance_after=row.physical, source_type="hao_hut",
-                                     source_id=str(waste.pk), actor=user, note=waste.get_reason_display())
+        stock.move(ingredient.pk, -qty, kind=StockMovement.Kind.WASTE, actor=user, store=ingredient.store,
+                   source_type="hao_hut", source_id=waste.pk, note=waste.get_reason_display())
         record(Action.CREATE, actor=user, obj=waste, object_type="inventory.Waste",
                after={"nguyen_lieu": ingredient.name, "so_luong": str(qty), "ly_do": waste.get_reason_display()})
         return {"waste": waste.pk}
@@ -250,12 +242,9 @@ def record_waste(user, operation_key, ingredient_id, quantity, reason, note=""):
 # ---------------- Kiểm kê (FR-25, BRU-25) ----------------
 
 def _apply_count(count, actor):
-    row = stock._lock([count.ingredient_id])[count.ingredient_id]
-    row.physical += count.difference  # điều chỉnh theo chênh lệch lúc đếm, giữ các biến động phát sinh trong lúc đếm
-    row.save(update_fields=["physical", "updated_at"])
-    StockMovement.objects.create(store=count.store, ingredient=count.ingredient, kind=StockMovement.Kind.COUNT,
-                                 quantity=count.difference, balance_after=row.physical, source_type="kiem_ke",
-                                 source_id=str(count.pk), actor=actor, note=count.reason)
+    # Điều chỉnh theo chênh lệch lúc đếm, giữ nguyên các biến động phát sinh trong lúc chờ xác nhận.
+    stock.move(count.ingredient_id, count.difference, kind=StockMovement.Kind.COUNT, actor=actor, store=count.store,
+               source_type="kiem_ke", source_id=count.pk, note=count.reason)
 
 
 def submit_count(user, operation_key, ingredient_id, counted, reason=""):
