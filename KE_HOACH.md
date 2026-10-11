@@ -16,7 +16,7 @@ Mã nguồn được quản lý bằng Git trong `D:\QTDA` (nhánh main, chưa c
 
 ### Rà soát tích hợp Phần 1–3 (11/10/2026, xong)
 
-- [x] Bộ tài liệu chuẩn: BRD quyết định chức năng và quy tắc; PRODUCT.md bối cảnh; DESIGN.md giao diện; KE_HOACH.md tiến độ; `docs/DOI_CHIEU_YEU_CAU.md` đối chiếu, giả định và quyết định chờ Chủ quán
+- [x] Bộ tài liệu chuẩn: `BAO CAO SPRINT 1.docx` là tài liệu yêu cầu chính thức (BRD đã chỉnh sửa, Hai xác nhận) quyết định chức năng và quy tắc; PRODUCT.md bối cảnh; DESIGN.md giao diện; KE_HOACH.md tiến độ; `docs/DOI_CHIEU_YEU_CAU.md` đối chiếu, giả định và quyết định chờ Chủ quán
 - [x] AC-55, FR-24: phiếu nhập luôn cần ảnh hóa đơn; bỏ ngưỡng 500.000 đ tự đặt cho phiếu nhập (500.000 đ của BRU-33 chỉ áp cho khoản chi tiền mặt)
 - [x] Hoàn tiền khi hủy hóa đơn đã thanh toán: theo phương thức khách đã trả, ghi vào ca đang mở, mỗi yêu cầu tối đa một khoản, trừ một lần khi đối soát; không có ca mở thì chưa duyệt được (GD-07)
 - [x] Một nơi xử lý dùng chung: mọi thay đổi tồn kho qua `stock.move`; đơn, điều chỉnh, thanh toán, hoàn tiền, nhập, kiểm kê, hao hụt, vụ việc đều qua hàm nghiệp vụ (bảng ở mục 2 tài liệu đối chiếu)

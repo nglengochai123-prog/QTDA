@@ -6,7 +6,7 @@ Cập nhật 11/10/2026, sau đợt rà soát tích hợp trước Phần 4. B�
 
 | Tài liệu | Quy định điều gì | Khi khác nhau |
 |---|---|---|
-| Báo cáo yêu cầu (BRD) đã chỉnh sửa | Chức năng FR, quy tắc BRU, phi chức năng NFR, tiêu chí nghiệm thu AC, Bảng 5.2 tham số, Bảng 5.3 phân quyền, Bảng 5.4 cảnh báo, Bảng 9.1 sprint | BRD thắng. Mọi chỗ mã nguồn khác BRD được ghi ở mục 4 kèm lý do |
+| `BAO CAO SPRINT 1.docx` trong thư viện dự án: báo cáo yêu cầu (BRD) đã chỉnh sửa, tài liệu yêu cầu chính thức (Chủ quán xác nhận 11/10/2026) | Chức năng FR, quy tắc BRU, phi chức năng NFR, tiêu chí nghiệm thu AC, Bảng 5.2 tham số, Bảng 5.3 phân quyền, Bảng 5.4 cảnh báo, Bảng 9.1 sprint | BRD thắng. Mọi chỗ mã nguồn khác BRD được ghi ở mục 4 kèm lý do |
 | `PRODUCT.md` | Bối cảnh, người dùng, thiết bị, mục tiêu trải nghiệm | Không quy định nghiệp vụ |
 | `DESIGN.md` | Chuẩn giao diện (định hướng tạm "vở ô ly, mực tím, lề đỏ") | Không quy định nghiệp vụ |
 | `KE_HOACH.md` trong repo | Tiến độ thực tế và phần còn thiếu | Là bản tiến độ duy nhất đúng; các bản `KE_HOACH*.md` trong thư viện là bản cũ |
