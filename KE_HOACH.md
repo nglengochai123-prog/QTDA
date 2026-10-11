@@ -10,7 +10,7 @@ Mỗi phần là một lát cắt chạy được từ đầu đến cuối, là
 
 ## Tiến độ thực tế (cập nhật 11/10/2026)
 
-Trước ngày 11/10/2026 thư mục D:\QTDA chưa có mã nguồn; các mục Phần 1 từng đánh dấu đã xong là chưa đúng. Kiểm thử hiện tại: 134 bài, OK cả 134 (`.venv\Scripts\python.exe manage.py test`). Số bài kiểm thử không phải bằng chứng hoàn thành; đối chiếu từng chức năng với báo cáo nằm ở `docs/DOI_CHIEU_YEU_CAU.md`.
+Trước ngày 11/10/2026 thư mục D:\QTDA chưa có mã nguồn; các mục Phần 1 từng đánh dấu đã xong là chưa đúng. Kiểm thử hiện tại: 142 bài, OK cả 142 (`.venv\Scripts\python.exe manage.py test`). Số bài kiểm thử không phải bằng chứng hoàn thành; đối chiếu từng chức năng với báo cáo nằm ở `docs/DOI_CHIEU_YEU_CAU.md`.
 
 Mã nguồn được quản lý bằng Git trong `D:\QTDA` (nhánh main, chưa có kho từ xa).
 
@@ -24,7 +24,8 @@ Mã nguồn được quản lý bằng Git trong `D:\QTDA` (nhánh main, chưa c
 - [x] Tham số có lịch sử và thời điểm hiệu lực; yêu cầu điều chỉnh giữ thời hạn lúc tạo; chênh lệch ca lưu ngưỡng đã dùng; kiểm kê lưu ngưỡng %; trang Tham số hiện căn cứ và giá trị giả định
 - [x] Kiểm tra quá hạn tách khỏi việc mở màn hình: cấp duyệt, giao chậm tính khi đọc; lệnh `chay_dinh_ky` ghi trạng thái và nhật ký
 - [x] Kiểm thử luồng xuyên suốt nhập hàng → báo cáo cuối ca; lệnh `kiem_tra_toan_ven` đối chiếu chéo sổ kho, đơn, tiền, ca
-- [ ] Kiểm tra hai đơn đồng thời trên PostgreSQL: máy chưa cài, chờ Hai cho phép (GD-13)
+- [x] Thực hiện quyết định của Chủ quán (11/10/2026): hoàn tiền hai bước duyệt và đã hoàn (GD-07); bắt buộc người duyệt dự phòng, nhắc trước ca, chuyển thẳng Chủ quán chỉ là ngoại lệ có nhật ký (GD-08); đính chính báo cáo cuối ca có lý do, người duyệt, lịch sử, đối soát lại không trùng (GD-11); mục tiêu BO-01 tách khỏi ngưỡng cảnh báo toàn quán; báo cáo tính lại theo giao dịch và đính chính (GD-10)
+- [ ] Kiểm tra hai đơn đồng thời trên PostgreSQL: máy chưa cài, chờ Hai cho phép (GD-13); chưa kết luận đạt
 - [ ] Lên lịch chạy `chay_dinh_ky` mỗi phút khi triển khai (Task Scheduler hoặc `--lap 60`)
 
 ### Nền tảng (xong)
@@ -63,7 +64,7 @@ Mã nguồn được quản lý bằng Git trong `D:\QTDA` (nhánh main, chưa c
 - [x] Yêu cầu điều chỉnh có lý do bắt buộc: hủy món, giảm số lượng, đổi món, chuyển bàn hoặc gộp bàn, hủy hóa đơn đã thanh toán (FR-10, BRU-08, AC-19, AC-20)
 - [x] Phê duyệt trên điện thoại; không tự duyệt; hủy hóa đơn chỉ Chủ quán; quá 3 phút chuyển người duyệt dự phòng, rồi Chủ quán; cấp hiện hành tính khi đọc, mỗi lần chuyển ghi nhật ký khi chạy `chay_dinh_ky` (FR-11, BRU-09, AC-22, AC-23, AC-24)
 - [x] Duyệt hủy món chờ pha trả lại tồn có thể dùng; món đã pha ghi Hủy sau pha chế, không trừ kho lần nữa (BRU-19, AC-21, AC-49)
-- [ ] Nhắc Chủ quán trước giờ ca khi ca chưa có người duyệt dự phòng (AC-113): hiện trang Ca làm việc đã báo "Còn thiếu", chưa có nhắc tự động
+- [x] Ca phải có người duyệt dự phòng; nhắc Chủ quán trên trang chủ và qua lệnh định kỳ (AC-113, GD-08); thông báo đẩy làm cùng NFR-17
 - [ ] Kiểm kê nhanh khi thiếu nguyên liệu rồi gửi lại (AC-03 phần kiểm kê): làm ở Phần 3
 - [ ] Đo thời gian đơn hiện ở quầy dưới 3 giây trên mạng thật của quán (NFR-02): đo ở tuần chạy thử
 - [ ] Web Push đến điện thoại khi ứng dụng đóng (NFR-17); hiện đã báo trong ứng dụng khi đang mở
@@ -75,7 +76,8 @@ Mã nguồn được quản lý bằng Git trong `D:\QTDA` (nhánh main, chưa c
 - [x] Kết ca: chặn khi còn đơn chưa thanh toán, yêu cầu chờ duyệt, chưa có tiền đầu ca hoặc khoản nộp chưa xác nhận; chuyển đơn sang ca sau kèm lý do; chốt doanh thu theo phương thức (FR-08, BRU-06, AC-16)
 - [x] Báo cáo cuối ca: tiền mặt đếm, chuyển khoản nhận và hoàn theo sao kê, sự cố; gửi xong đối soát ngay (FR-08, AC-17)
 - [x] Đối soát theo công thức BRU-10, lưu mọi chênh lệch khác 0 theo ca, phương thức, Quản lý ca; vượt ngưỡng phải giải trình, Chủ quán Chấp nhận hoặc Không chấp nhận (FR-12, AC-25, AC-26, AC-27)
-- [x] Hoàn tiền khi hủy hóa đơn đã thanh toán ghi theo phương thức khách đã trả, vào ca đang mở, trừ một lần trong đối soát (BRU-05, BRU-10, AC-27)
+- [x] Hoàn tiền khi hủy hóa đơn đã thanh toán: Chủ quán duyệt, thu ngân xác nhận đã hoàn; theo phương thức khách đã trả, gắn thanh toán gốc, tiền ra ghi vào ca thực hoàn, trừ một lần trong đối soát (BRU-05, BRU-10, AC-27, GD-07)
+- [x] Đính chính báo cáo cuối ca có lý do, Chủ quán duyệt, giữ lịch sử; đối soát lại không tính trùng (GD-11)
 - [x] Chênh lệch tích lũy theo Quản lý ca, loại ca, tháng và toàn quán; vượt ngưỡng tạo ngoại lệ gắn các ca (FR-13, BRU-11, AC-28)
 - [x] Tình trạng dữ liệu ca: chưa kết ca, thiếu báo cáo cuối ca quá hạn 2 giờ (FR-09, BRU-07, AC-18)
 - [ ] Tình trạng kiểm kê nhóm trọng yếu trước giờ mở cửa hôm sau (BRU-07, FR-09): chưa làm, làm cùng Phần 4

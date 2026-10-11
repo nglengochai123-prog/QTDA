@@ -1,6 +1,6 @@
 # Đối chiếu Phần 1–3 với báo cáo yêu cầu
 
-Cập nhật 11/10/2026, sau đợt rà soát tích hợp trước Phần 4. Bảng này so mã nguồn trong `D:\QTDA` với báo cáo yêu cầu đã chỉnh sửa (`BAO CAO SPRINT 1.docx`). Số bài kiểm thử không được dùng làm bằng chứng hoàn thành; mỗi dòng ghi rõ đã kiểm tra bằng gì.
+Cập nhật 11/10/2026, sau đợt rà soát tích hợp và sau khi Chủ quán trả lời các quyết định GD-01 đến GD-13. Bảng này so mã nguồn trong `D:\QTDA` với báo cáo yêu cầu đã chỉnh sửa (`BAO CAO SPRINT 1.docx`). Số bài kiểm thử không được dùng làm bằng chứng hoàn thành; mỗi dòng ghi rõ đã kiểm tra bằng gì.
 
 ## 1. Bộ tài liệu chuẩn
 
@@ -24,7 +24,8 @@ Mọi màn hình, lệnh và kiểm thử đều gọi qua các hàm sau, không
 | Nhận đơn | `orders/services.submit_order` | Kiểm đủ, giữ chỗ cả đơn, chụp giá và định mức lúc nhận |
 | Pha xong, phục vụ | `orders/services.complete_line`, `serve_line` | Trừ kho và bỏ giữ chỗ đúng một lần |
 | Điều chỉnh đơn | `orders/adjustments.create_request`, `decide`, `apply_effects` | Cập nhật món, nguyên liệu, tổng tiền, nhật ký trong một giao dịch |
-| Thanh toán, hoàn tiền | `orders/payments.pay_table`, `pay_received_items`; `shifts/services.record_refund` | Gắn ca; hoàn tiền mỗi yêu cầu một khoản |
+| Thanh toán, hoàn tiền | `orders/payments.pay_table`, `pay_received_items`; `shifts/services.approve_refund`, `confirm_refund` | Gắn ca; hoàn tiền mỗi yêu cầu một khoản, tiền ra ghi một lần vào ca thực hoàn |
+| Báo cáo cuối ca, đính chính | `shifts/services.submit_report`, `request_correction`, `decide_correction`, `reconcile` | Đối soát lại theo số có hiệu lực, không tính trùng chênh lệch |
 | Nhập, kiểm kê, hao hụt | `inventory/operations.create_receipt`, `submit_count`, `confirm_count`, `record_waste` | Biến động kho có nguồn nghiệp vụ |
 | Xác minh tổn thất | `control/services.open_case`, `add_evidence`, `verify`, `recover`, `monthly_control` | Mỗi bằng chứng thuộc một vụ việc; khoản thiếu chuyển nhóm khi xác minh, không tính hai lần |
 | Kiểm tra quá hạn | `core/periodic.run_all` qua lệnh `chay_dinh_ky` | Màn hình tự tính đúng khi đọc; lệnh định kỳ chỉ ghi trạng thái và nhật ký |
@@ -45,7 +46,7 @@ Trạng thái: **Đúng** là làm đủ theo BRD và có kiểm thử; **Một 
 | FR-05 | In hóa đơn | Chưa làm | Could, Giai đoạn 3 theo BRD |
 | FR-06 | Bán hàng dự phòng, nhập bù | Chưa làm | Phần 4. Hiện có mã nghiệp vụ hiển thị khi mất phản hồi để ghi lên phiếu |
 | FR-07 | Quỹ tiền mặt ca | Đúng | AC-14, AC-15 |
-| FR-08 | Kết ca, báo cáo cuối ca | Một phần | AC-16, AC-17 đúng; "Chủ quán nhận thông báo" mới là thông báo trong ứng dụng, chưa có Web Push |
+| FR-08 | Kết ca, báo cáo cuối ca | Một phần | AC-16, AC-17 đúng; đính chính báo cáo có lý do và người duyệt (GD-11); "Chủ quán nhận thông báo" mới là thông báo trong ứng dụng, chưa có Web Push |
 | FR-09 | Tình trạng dữ liệu ca | Một phần | Có chưa kết ca, thiếu báo cáo quá hạn (AC-18). Chưa có: kiểm kê nhóm trọng yếu trước giờ mở cửa hôm sau, nhập bù (Phần 4), cảnh báo chuyển Chủ quán khi quá hạn xử lý (cùng FR-51) |
 | FR-10 | Khóa đơn, yêu cầu điều chỉnh | Đúng | AC-19, AC-20; Chủ quán sửa được danh mục lý do trong trang dữ liệu nền |
 | FR-11 | Phê duyệt và chuyển cấp | Đúng | AC-21 đến AC-24; cấp hiện hành tính khi đọc nên không phụ thuộc ai mở màn hình; nhật ký chuyển cấp ghi khi chạy `chay_dinh_ky` |
@@ -66,7 +67,7 @@ Trạng thái: **Đúng** là làm đủ theo BRD và có kiểm thử; **Một 
 | FR-27 | Trường hợp thiếu nguyên liệu | Đúng | AC-61, AC-62, AC-63 |
 | FR-28, FR-29, FR-31 | Ước tính nhu cầu, cần đặt hàng, đề xuất số lượng | Chưa làm | Chờ Hai giải thích logic dự báo; chỉ chuẩn bị dữ liệu đầu vào (mục 7) |
 | FR-30 | Đặt hàng, theo dõi giao | Đúng | AC-68, AC-69; Giao chậm tính khi đọc |
-| FR-59 | Tài khoản, phân quyền | Một phần | AC-111, AC-112 phần đã có màn hình; AC-113 chưa nhắc tự động trước giờ ca |
+| FR-59 | Tài khoản, phân quyền | Một phần | AC-111, AC-112 phần đã có màn hình; AC-113: bắt buộc người duyệt dự phòng khi khai báo ca, nhắc trên trang chủ và trong lệnh định kỳ; chưa có thông báo đẩy |
 | FR-60 | Danh mục món, bảng giá | Đúng | AC-114 |
 | FR-61 | Nhật ký thao tác | Đúng | AC-115; chỉ thêm, chặn sửa xóa cả ở CSDL |
 | NFR-04 | Không ghi trùng | Đúng | Mọi thao tác tạo dữ liệu có mã nghiệp vụ; kiểm thử gửi lại trong `core/tests/test_end_to_end.py` |
@@ -82,7 +83,7 @@ Luồng xuyên suốt nhập hàng → tạo đơn → pha một phần → đi�
 | Ca làm việc | Lịch ca từ đăng ký và lập lịch (FR-38, FR-39, Giai đoạn 2) | Chủ quán khai báo ca tối thiểu: giờ, người duyệt, dự phòng, người ủy quyền | Đơn, thanh toán, đối soát cần gắn ca ngay từ Phần 1 |
 | Trang tham số | Mục công nghệ ghi tham số nằm trong Django admin | Trang Kiểm soát › Tham số | Cần hiện căn cứ, lịch sử, thời điểm hiệu lực và dùng được trên điện thoại |
 | Tự chuyển cấp | "Tự chuyển" khi quá hạn | Cấp đúng ngay khi đọc; ghi nhật ký chuyển cấp khi lệnh `chay_dinh_ky` chạy | Không để việc mở màn hình quyết định dữ liệu. Khi triển khai cần lên lịch lệnh mỗi phút (Task Scheduler hoặc `--lap 60`) |
-| Kiểm thử đồng thời | Hệ thống chạy PostgreSQL | Chỉ kiểm trên SQLite | Máy chưa cài PostgreSQL; xem GD-13 |
+| Kiểm thử đồng thời | Hệ thống chạy PostgreSQL | Chỉ kiểm trên SQLite; chưa kết luận đạt trên PostgreSQL | Chờ Chủ quán cho phép cài PostgreSQL (GD-13) |
 | Cảnh báo theo Bảng 5.4 | Mỗi loại có người xử lý, thời hạn, cấp chuyển | Ngoại lệ giao Chủ quán, báo trong ứng dụng | Làm cùng trung tâm cảnh báo FR-51 ở Phần 4 |
 
 ## 5. Tham số: căn cứ và quy tắc hiệu lực
@@ -101,29 +102,36 @@ Trang Tham số hiện căn cứ của từng giá trị. "Theo ví dụ AC" ngh
 | Ngưỡng kiểm kê từng lần | 5% | Theo ví dụ AC-56 |
 | Giờ đóng cửa | 22 giờ | Theo ví dụ AC-62 |
 | Ngưỡng chênh lệch chuyển khoản | 50.000 đ | Giả định (GD-01) |
-| Ngưỡng tích lũy toàn quán | 300.000 đ/tháng | Giả định (GD-02) |
+| Ngưỡng cảnh báo tích lũy toàn quán | 300.000 đ/tháng | Giả định (GD-02); khác mục tiêu BO-01 dưới 200.000 đ/tháng |
 | Giá trị hủy sau pha chế mỗi ca | 100.000 đ | Giả định (GD-03) |
 | Giờ mở cửa | 6 giờ | Giả định (GD-04) |
 
-Mỗi lần lưu là một giá trị mới có "hiệu lực từ", không sửa, không xóa, không lùi về quá khứ. Quy tắc áp dụng cho việc đang dở được ghi ở GD-10.
+Mỗi lần lưu là một giá trị mới có "hiệu lực từ", không sửa, không xóa, không lùi về quá khứ. Việc đang dở dùng giá trị đã chốt: yêu cầu điều chỉnh giữ thời hạn lúc tạo (đổi 3 → 5 phút thì yêu cầu đang chờ vẫn theo 3 phút); đối soát dùng ngưỡng có hiệu lực lúc kết ca và lưu ngưỡng đó vào khoản chênh lệch; kiểm kê lưu ngưỡng % lúc gửi; thời hạn báo cáo cuối ca theo giá trị lúc ca kết thúc. Số liệu báo cáo vẫn tính lại theo giao dịch và đính chính hợp lệ (GD-10).
 
-## 6. Quyết định nghiệp vụ cần Chủ quán xác nhận
+## 6. Quyết định nghiệp vụ
 
-| Mã | Câu hỏi | Đang làm theo |
+Chủ quán trả lời ngày 11/10/2026. Cột "Đã làm" ghi cách hệ thống thực hiện và kiểm thử tương ứng.
+
+| Mã | Quyết định của Chủ quán | Đã làm |
 |---|---|---|
-| GD-01 | Ngưỡng chênh lệch chuyển khoản mỗi ca là bao nhiêu? | 50.000 đ, bằng ngưỡng tiền mặt |
-| GD-02 | Ngưỡng tích lũy thiếu tiền toàn quán mỗi tháng là bao nhiêu? | 300.000 đ |
-| GD-03 | Tổng giá trị món hủy sau pha chế mỗi ca bao nhiêu thì tạo ngoại lệ? | 100.000 đ |
-| GD-04 | Quán mở cửa lúc mấy giờ? | 6 giờ |
-| GD-05 | Các số lấy từ ví dụ AC (50.000 đ, 100.000 đ, 3 yêu cầu, 5%, 22 giờ) có dùng làm giá trị thật không? | Dùng làm mặc định |
-| GD-06 | Phiếu nhập luôn cần ảnh hóa đơn (AC-55); mức 500.000 đ của BRU-33 chỉ áp dụng cho khoản chi tiền mặt khác trong ca. Đúng ý không? | Như câu hỏi |
-| GD-07 | Hủy hóa đơn đã thanh toán: hoàn theo đúng phương thức khách đã trả; ghi vào ca đang mở lúc Chủ quán duyệt (doanh thu vẫn thuộc ca đã thu); không có ca mở thì chưa duyệt được | Như câu hỏi |
-| GD-08 | Ca chưa có người duyệt dự phòng: quá hạn chuyển thẳng Chủ quán | Như câu hỏi |
-| GD-09 | Phiếu nhập Trả ngay bằng tiền mặt quỹ ca được ghi thành khoản chi danh mục Nguyên vật liệu của ca đang mở và trừ vào tiền mặt phải có | Như câu hỏi |
-| GD-10 | Đổi tham số khi việc đang dở: yêu cầu điều chỉnh giữ thời hạn lúc tạo (đổi 3 → 5 phút thì yêu cầu đang chờ vẫn theo 3 phút); đối soát dùng ngưỡng có hiệu lực lúc kết ca; kiểm kê dùng ngưỡng lúc gửi kết quả; thời hạn báo cáo cuối ca theo giá trị lúc ca kết thúc; các kiểm tra khác dùng giá trị lúc phát sinh; ngoại lệ và báo cáo đã có không tính lại | Như câu hỏi |
-| GD-11 | Báo cáo cuối ca gửi rồi không sửa; số liệu khác phải ghi bằng giải trình chênh lệch | Như câu hỏi |
-| GD-12 | Trước khi có lịch ca (Giai đoạn 2), Chủ quán khai báo ca bằng tay trên ứng dụng | Như câu hỏi |
-| GD-13 | Cho phép cài PostgreSQL trên máy để kiểm tra hai đơn đồng thời trước Go-Live? | Chưa cài; mới kiểm trên SQLite |
+| GD-01 đến GD-05 | Dùng các giá trị hiện tại làm mặc định tạm để phát triển và kiểm thử, ghi rõ là giả định, cho phép cấu hình; mọi chênh lệch vẫn được lưu | Trang Tham số đánh dấu từng giá trị "Giả định chờ Chủ quán xác nhận" hoặc "Theo ví dụ AC"; sửa được, có lịch sử. Chênh lệch khác 0 luôn được lưu, ngưỡng chỉ quyết định mức ưu tiên |
+| GD-02 (bổ sung) | Tách ngưỡng cảnh báo toàn quán 300.000 đ khỏi mục tiêu BO-01 dưới 200.000 đ | Mục tiêu BO-01 là hằng số dự án `BO01_MONTHLY_TARGET` trong `control/services.py`, không phải tham số cảnh báo; trang Tình trạng ca hiện hai con số riêng (`test_corrections.TargetSeparationTests`) |
+| GD-06 | Theo đề xuất: phiếu nhập luôn cần ảnh hóa đơn; 500.000 đ của BRU-33 chỉ áp dụng cho khoản chi tiền mặt khác trong ca | Đã có từ đợt trước |
+| GD-07 | Phân biệt duyệt hoàn với xác nhận đã hoàn tiền; chỉ ghi tiền ra một lần vào ca thực sự hoàn; giữ liên kết với thanh toán gốc | Duyệt hủy hóa đơn tạo khoản hoàn "Đã duyệt, chờ hoàn tiền", gắn thanh toán gốc, chưa gắn ca, không cần ca mở. Thu ngân bấm "Đã hoàn tiền" ở trang Ca của tôi: khoản hoàn gắn ca đang mở lúc đó; bấm lại không ghi thêm. Đối soát chỉ trừ khoản đã hoàn (`test_refunds.py`) |
+| GD-08 | Nhắc và yêu cầu bổ sung người duyệt dự phòng trước khi ca hoạt động; chuyển thẳng Chủ quán chỉ dùng cho ngoại lệ và có nhật ký | Biểu mẫu ca bắt buộc người duyệt dự phòng. Trang chủ Chủ quán hiện các ca chưa có; lệnh định kỳ ghi nhắc một lần mỗi ca. Ca cũ còn thiếu thì yêu cầu quá hạn chuyển thẳng Chủ quán, nhật ký ghi rõ "ngoại lệ GD-08" (`test_corrections.BackupApproverTests`) |
+| GD-09 | Theo đề xuất: phiếu nhập Trả ngay bằng quỹ ca ghi thành khoản chi Nguyên vật liệu của ca đang mở | Đã có từ đợt trước |
+| GD-10 | Giữ lịch sử tham số, nhưng báo cáo vẫn cập nhật theo giao dịch mới và đính chính hợp lệ | Lịch sử chỉ giữ giá trị ngưỡng, thời hạn đã áp dụng. Số liệu báo cáo (đối soát, tích lũy, giá trị kiểm soát tháng) luôn tính lại từ giao dịch và đính chính đang có hiệu lực, không chụp cứng |
+| GD-11 | Đính chính báo cáo cuối ca có lý do, người duyệt và lịch sử; đối soát lại theo số liệu có hiệu lực, không tính trùng chênh lệch | Bản gốc giữ nguyên; mỗi đính chính là một bản ghi có lý do, người đề nghị, Chủ quán duyệt hoặc từ chối. Duyệt xong hệ thống đối soát lại: khoản không đổi giữ nguyên, khoản đổi thì bản cũ hết hiệu lực (giữ lịch sử, giải trình, quyết định) và bản mới thay thế; tích lũy và giá trị kiểm soát chỉ đếm khoản đang có hiệu lực (`test_corrections.CorrectionTests`) |
+| GD-12 | Theo đề xuất: Chủ quán khai báo ca bằng tay trước khi có lịch ca | Đã có |
+| GD-13 | Giữ trạng thái chờ Chủ quán cho phép cài PostgreSQL | Chưa cài. Kiểm thử đồng thời mới đạt trên SQLite; **chưa kết luận đạt trên PostgreSQL** |
+
+### Giả định mới phát sinh, chờ Chủ quán xác nhận
+
+| Mã | Giả định | Lý do |
+|---|---|---|
+| GD-14 | Quản lý ca đề nghị đính chính thì Chủ quán duyệt; nếu chính Chủ quán đề nghị thì được ghi là tự duyệt ngay, có nhật ký | Quán chỉ có một Chủ quán, không có cấp duyệt cao hơn |
+| GD-15 | Không duyệt được đính chính nếu khoản chênh lệch sẽ thay đổi đã là bằng chứng trong vụ việc tổn thất; phải đính chính vụ việc trước | Tránh vụ việc trỏ vào số đã hết hiệu lực và tính trùng tổn thất |
+| GD-16 | Khoản hoàn đã duyệt nhưng chưa trả khách không chặn kết ca; nó hiện ở trang Ca của tôi cho đến khi có người bấm "Đã hoàn tiền" | Tiền chưa rời quỹ thì không thuộc ca nào |
 
 ## 7. Dữ liệu đầu vào cho dự báo (logic dự báo chờ Hai giải thích)
 
@@ -134,6 +142,7 @@ Mỗi lần lưu là một giá trị mới có "hiệu lực từ", không sử
 | Thời điểm mang ra | `OrderLine.served_at`, `served_by` | |
 | Số lượng | `OrderLine.quantity`, `done_quantity`, `cancelled_quantity`, `voided_done_quantity` | Tách hủy trước và sau pha chế |
 | Định mức đã dùng | `OrderLine.recipe_version`, `usage_per_unit` | Chụp lúc nhận đơn |
-| Tiêu hao thực tế | `StockMovement` theo nguyên liệu, loại, nguồn nghiệp vụ | Sổ chỉ thêm mới |
+| Tiêu hao ghi nhận theo sổ kho | `StockMovement` loại Tiêu hao (theo định mức đã chụp của từng ly pha xong), Hao hụt (có lý do), Hủy sau pha chế (`PostPrepCancellation`) | Là lượng hệ thống tính theo định mức và thao tác ghi nhận, chưa phải lượng thật đã dùng |
+| Tiêu hao thực tế tính từ kiểm kê | Tồn kiểm kê đầu kỳ + nhập trong kỳ − tồn kiểm kê cuối kỳ, lấy từ `StockCount` (số đếm được, tồn vật lý lúc đếm) và `StockMovement` loại Nhập | Chỉ tính được giữa hai lần kiểm kê đã áp dụng. Chênh lệch giữa hai dòng này là phần FR-16 đối chiếu (Phần 4) |
 | Thiếu nguyên liệu | `ShortageCase` (nguyên liệu, ngày, nguồn) | Tối đa một trường hợp mỗi nguyên liệu mỗi ngày |
 | Nhân sự có mặt theo vai trò | Chưa có | Cần chấm công theo vai trò (FR-35, Phần 4). Hiện chỉ có người duyệt của ca |
