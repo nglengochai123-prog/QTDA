@@ -21,18 +21,17 @@ def open_orders(table):
 
 def bill(table):
     """Tình trạng thanh toán của một bàn: số tiền, lý do chưa thanh toán được, yêu cầu quá hạn mọi cấp."""
-    adjustments.escalate_due()
     orders = list(open_orders(table))
     blockers, exhausted = [], []
     for order in orders:
         order.refresh_status()
         req = order.pending_request()
         if req is not None:
-            if req.level == AdjustmentRequest.Level.EXHAUSTED:
+            if req.current_level == AdjustmentRequest.Level.EXHAUSTED:
                 exhausted.append(req)
             else:
                 blockers.append(f"Đơn {order.code} có yêu cầu \"{req.summary()}\" đang chờ duyệt ở cấp "
-                                 f"{req.get_level_display()}.")  # AC-09
+                                 f"{req.get_current_level_display()}.")  # AC-09
         elif order.status != Order.Status.SERVED:
             blockers.append(f"Đơn {order.code} đang ở trạng thái {order.get_status_display()}, chưa phục vụ xong.")
     if exhausted:

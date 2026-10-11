@@ -226,10 +226,12 @@ def reconcile(shift):
     """So số phải có với thực tế, lưu mọi chênh lệch khác 0 theo phương thức và Quản lý ca (FR-12)."""
     report = shift.report
     f = figures(shift)
+    at = shift.closed_at or shift.ends_at  # ngưỡng của ca là ngưỡng có hiệu lực lúc kết ca
+    cash_limit, transfer_limit = params.get("cash_threshold", at=at), params.get("transfer_threshold", at=at)
     rows = [
-        (Discrepancy.Method.CASH, f["expected_cash"], report.counted_cash, params.get("cash_threshold")),
-        (Discrepancy.Method.TRANSFER_IN, f["revenue_transfer"], report.transfer_received, params.get("transfer_threshold")),
-        (Discrepancy.Method.TRANSFER_REFUND, f["refunds_transfer"], report.transfer_refunded, params.get("transfer_threshold")),
+        (Discrepancy.Method.CASH, f["expected_cash"], report.counted_cash, cash_limit),
+        (Discrepancy.Method.TRANSFER_IN, f["revenue_transfer"], report.transfer_received, transfer_limit),
+        (Discrepancy.Method.TRANSFER_REFUND, f["refunds_transfer"], report.transfer_refunded, transfer_limit),
     ]
     created = []
     for method, expected, actual, threshold in rows:
@@ -239,10 +241,10 @@ def reconcile(shift):
             continue
         d = Discrepancy.objects.create(store=shift.store, shift=shift, method=method, expected=expected,
                                        actual=actual, difference=diff, manager=shift.approver,
-                                       over_threshold=abs(diff) > threshold)
+                                       over_threshold=abs(diff) > threshold, threshold=threshold)
         record(Action.CREATE, obj=d, object_type="shifts.Discrepancy", actor_label="hệ thống",
                after={"phuong_thuc": d.get_method_display(), "phai_co": expected, "thuc_te": actual,
-                      "chenh_lech": diff, "vuot_nguong": d.over_threshold})
+                      "chenh_lech": diff, "nguong": threshold, "vuot_nguong": d.over_threshold})
         created.append(d)
     check_accumulated(shift)
     return created
@@ -332,7 +334,7 @@ def accumulated_report(year, month):
 
 def data_status(shift, now=None):
     now = now or timezone.now()
-    deadline = shift.ends_at + timedelta(hours=params.get("shift_report_hours"))
+    deadline = shift.ends_at + timedelta(hours=params.get("shift_report_hours", at=shift.ends_at))
     has_report = ShiftReport.objects.filter(shift=shift).exists()
     issues = []
     if shift.status == Shift.Status.OPEN and now > shift.ends_at:

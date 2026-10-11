@@ -140,7 +140,6 @@ def receipt(request):
             messages.success(request, f"Đã lưu phiếu nhập {data['code']}, giá trị {data['total']:,} đ; tồn vật lý đã tăng."
                              .replace(",", "."))
         return redirect("inventory:receipt")
-    ops.refresh_late()
     return render(request, "inventory/receipt.html", {
         "suppliers": Supplier.objects.filter(is_active=True), "ingredients": _ingredients(), "rows": range(4),
         "open_pos": PurchaseOrder.objects.exclude(status=PurchaseOrder.Status.DELIVERED).select_related("ingredient", "supplier"),
@@ -162,7 +161,6 @@ def purchase_orders(request):
                                                             p.get("note", ""), operation_key=p.get("operation_key", "")),
                  "Đã ghi lần đặt hàng.")
         return redirect("inventory:purchase_orders")
-    ops.refresh_late()
     return render(request, "inventory/purchase_orders.html", {
         "orders": PurchaseOrder.objects.select_related("supplier", "ingredient").order_by("status", "expected_date"),
         "suppliers": Supplier.objects.filter(is_active=True), "ingredients": _ingredients(),

@@ -4,11 +4,13 @@
 thay đổi về sau đi qua yêu cầu điều chỉnh có phê duyệt (FR-11, phần sau).
 """
 
+from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.utils import timezone
 
 from apps.catalog.models import ItemSize, MenuItem, Option, Table
 from apps.core.models import StoreScopedModel, TimeStampedModel
@@ -225,6 +227,7 @@ class AdjustmentRequest(StoreScopedModel):
     status = models.CharField("Trạng thái", max_length=20, choices=Status.choices, default=Status.PENDING)
     level = models.PositiveSmallIntegerField("Cấp đang chờ", choices=Level.choices, default=Level.SHIFT)
     level_since = models.DateTimeField("Ở cấp này từ")
+    level_minutes = models.PositiveSmallIntegerField("Thời hạn mỗi cấp lúc tạo (phút)", null=True, blank=True)
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người yêu cầu",
                                      on_delete=models.PROTECT, related_name="+")
     decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người xử lý", on_delete=models.PROTECT,
@@ -247,6 +250,46 @@ class AdjustmentRequest(StoreScopedModel):
 
     def __str__(self):
         return f"{self.get_kind_display()} · đơn {self.order.code}"
+
+    def deadline(self):
+        """Thời hạn mỗi cấp đã chốt khi tạo yêu cầu; đổi tham số sau đó không ảnh hưởng yêu cầu này."""
+        from apps.core import params
+
+        minutes = self.level_minutes
+        if minutes is None:
+            minutes = params.get("approval_level_minutes", at=self.created_at)
+        return timedelta(minutes=minutes)
+
+    def level_steps(self, now=None):
+        """Các lần chuyển cấp đến hạn tính từ trạng thái đã lưu: [(cấp mới, ở cấp này từ), ...] (BRU-09)."""
+        from apps.shifts.models import Shift
+
+        if self.status != self.Status.PENDING:
+            return []
+        now = now or timezone.now()
+        step = self.deadline()
+        shift = self.shift or self.order.shift or Shift.objects.current()
+        has_backup = bool(shift and shift.backup_approver_id)
+        level, since, steps = self.level, self.level_since, []
+        while level < self.Level.EXHAUSTED and now - since >= step:
+            since += step
+            level += 1
+            if level == self.Level.BACKUP and not has_backup:
+                level = self.Level.OWNER  # Ca chưa có người dự phòng: chuyển thẳng Chủ quán.
+            steps.append((level, since))
+        return steps
+
+    def effective_level(self, now=None):
+        """Cấp đang áp dụng lúc đọc, đúng cả khi tác vụ định kỳ chưa kịp ghi chuyển cấp."""
+        steps = self.level_steps(now)
+        return steps[-1][0] if steps else self.level
+
+    @property
+    def current_level(self):
+        return self.effective_level()
+
+    def get_current_level_display(self):
+        return self.Level(self.current_level).label
 
     def summary(self):
         if self.kind == self.Kind.CANCEL_ITEMS:

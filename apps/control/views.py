@@ -1,17 +1,18 @@
 """Màn hình ngoại lệ, vụ việc tổn thất, báo cáo điều chỉnh và tham số (FR-14, FR-17, FR-18, NFR-14)."""
 
 import uuid
+from datetime import datetime
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from apps.accounts.permissions import Cap, capability_required
 from apps.audit.models import Action, AuditLog
 from apps.audit.services import record
 from apps.core import params
-from apps.core.models import Parameter
 from apps.shifts.models import Discrepancy, Shift
 
 from . import reports, services
@@ -130,17 +131,28 @@ def adjustment_report(request, shift_id):
 @require_http_methods(["GET", "POST"])
 def parameters(request):
     if request.method == "POST":
-        key = request.POST.get("key")
-        value = request.POST.get("value", "").replace(".", "").strip()
-        if key in params.DEFAULTS and value.isdigit():
-            before = params.get(key)
-            Parameter.objects.update_or_create(key=key, defaults={"value": value})
-            record(Action.UPDATE, request=request, object_type="core.Parameter", before={key: before},
-                   after={key: int(value)}, reason=params.DEFAULTS[key][2])
-            messages.success(request, f"Đã lưu: {params.DEFAULTS[key][2]}. Có hiệu lực ngay.")
-        else:
-            messages.error(request, "Giá trị phải là số nguyên không âm.")
+        p = request.POST
+        key = p.get("key", "")
+        try:
+            when = None
+            if p.get("effective_from"):
+                when = timezone.make_aware(datetime.fromisoformat(p["effective_from"]))
+            row = params.set_value(key, p.get("value", ""), request.user, when, p.get("reason", "").strip())
+            label = params.DEFAULTS[key][2]
+            if row.effective_from > timezone.now():
+                messages.success(request, f"Đã lưu: {label}. Có hiệu lực từ "
+                                          f"{timezone.localtime(row.effective_from):%H:%M %d/%m/%Y}.")
+            else:
+                messages.success(request, f"Đã lưu: {label}. Có hiệu lực ngay.")
+        except (ValidationError, ValueError) as exc:
+            messages.error(request, exc.messages[0] if hasattr(exc, "messages") else "Thời điểm hiệu lực không hợp lệ.")
         return redirect("control:parameters")
-    rows = [{"key": k, "value": params.get(k), "default": d[0], "unit": d[1], "label": d[2], "source": d[3]}
-            for k, d in params.DEFAULTS.items()]
+    now = timezone.now()
+    rows = []
+    for k, d in params.DEFAULTS.items():
+        log = list(params.history(k)[:6])
+        rows.append({"key": k, "value": params.get(k), "default": d[0], "unit": d[1], "label": d[2], "source": d[3],
+                     "basis": params.BASIS[k][0], "basis_note": params.BASIS[k][1],
+                     "assumption": params.BASIS[k][0] == params.ASSUMPTION,
+                     "upcoming": [x for x in log if x.effective_from > now], "log": [x for x in log if x.effective_from <= now]})
     return render(request, "control/parameters.html", {"rows": rows})

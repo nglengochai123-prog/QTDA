@@ -3,16 +3,26 @@
 {% block title %}Tham số · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <h1>Tham số quản trị</h1>
-<p class="lead-muted">Thay đổi có hiệu lực ngay khi lưu và được ghi nhật ký. Giá trị mặc định là đề xuất tạm của dự án; Chủ quán điều chỉnh theo thực tế.</p>
+<p class="lead-muted">Mỗi lần lưu là một giá trị mới có thời điểm hiệu lực; giá trị cũ được giữ để các ca, yêu cầu và báo cáo đã chốt không bị tính lại. Để trống “Hiệu lực từ” nghĩa là áp dụng ngay.</p>
 <ul class="ruled-list">
   {% for p in rows %}
   <li class="param-row">
-    <div class="exc-text"><strong>{{ p.label }}</strong><span class="muted">{{ p.source }} · mặc định {{ p.default|intcomma }} {{ p.unit }}</span></div>
+    <div class="exc-text"><strong>{{ p.label }}</strong>
+      <span class="muted">{{ p.source }} · mặc định {{ p.default|intcomma }} {{ p.unit }} · {{ p.basis_note }}</span>
+      {% if p.assumption %}<span class="flag-pending">Giả định chờ Chủ quán xác nhận</span>{% else %}<span class="muted">{{ p.basis }}</span>{% endif %}
+      {% for x in p.upcoming %}<span class="flag-pending">Sắp áp dụng {{ x.value|intcomma }} {{ p.unit }} từ {{ x.effective_from|date:"H:i d/m/Y" }}</span>{% endfor %}
+      {% if p.log %}<details><summary class="muted">Lịch sử {{ p.log|length }} lần đặt</summary>
+        <ul class="plain-list">{% for x in p.log %}<li class="muted">{{ x.value|intcomma }} {{ p.unit }} từ {{ x.effective_from|date:"H:i d/m/Y" }} · {{ x.set_by|default:"hệ thống" }}{% if x.reason %} · {{ x.reason }}{% endif %}</li>{% endfor %}</ul>
+      </details>{% endif %}
+    </div>
     <form method="post" class="inline-form" data-once>{% csrf_token %}
       <input type="hidden" name="key" value="{{ p.key }}">
       <label class="visually-hidden" for="p-{{ p.key }}">{{ p.label }}</label>
       <input class="input input-sm" id="p-{{ p.key }}" name="value" value="{{ p.value }}" inputmode="numeric">
       <span class="muted">{{ p.unit }}</span>
+      <label class="visually-hidden" for="e-{{ p.key }}">Hiệu lực từ</label>
+      <input class="input input-sm" id="e-{{ p.key }}" type="datetime-local" name="effective_from" title="Hiệu lực từ (để trống: áp dụng ngay)">
+      <input class="input input-sm" name="reason" placeholder="Lý do thay đổi" aria-label="Lý do thay đổi">
       <button class="btn btn-quiet" type="submit">Lưu</button>
     </form>
   </li>

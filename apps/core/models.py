@@ -74,19 +74,36 @@ class OperationRecord(models.Model):
         return f"{self.kind} {self.key}"
 
 
-class Parameter(models.Model):
-    """Giá trị ghi đè của một tham số quản trị (xem apps.core.params.DEFAULTS)."""
+class ParameterValue(models.Model):
+    """Một lần đặt giá trị tham số kèm thời điểm hiệu lực (NFR-14).
 
-    key = models.CharField("Tham số", max_length=60, unique=True)
-    value = models.CharField("Giá trị", max_length=40)
-    updated_at = models.DateTimeField("Cập nhật lúc", auto_now=True)
+    Không sửa, không xóa: đổi giá trị là thêm một dòng mới, nên luôn biết tại một thời điểm
+    bất kỳ tham số nào đang áp dụng và báo cáo đã khóa không bị tính lại.
+    """
+
+    key = models.CharField("Tham số", max_length=60)
+    value = models.BigIntegerField("Giá trị")
+    effective_from = models.DateTimeField("Hiệu lực từ")
+    set_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người đặt", on_delete=models.PROTECT,
+                               null=True, blank=True, related_name="+")
+    reason = models.CharField("Lý do", max_length=255, blank=True)
+    created_at = models.DateTimeField("Ghi lúc", auto_now_add=True)
 
     class Meta:
-        verbose_name = "Tham số"
-        verbose_name_plural = "Tham số"
-        ordering = ["key"]
+        verbose_name = "Giá trị tham số"
+        verbose_name_plural = "Lịch sử tham số"
+        ordering = ["key", "-effective_from", "-id"]
+        indexes = [models.Index(fields=["key", "effective_from"])]
 
     def __str__(self):
         from .params import DEFAULTS
 
-        return DEFAULTS.get(self.key, (None, "", self.key))[2]
+        return f"{DEFAULTS.get(self.key, (None, '', self.key))[2]} = {self.value}"
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValueError("Giá trị tham số đã ghi không được sửa; hãy thêm giá trị mới.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError("Không xóa lịch sử tham số.")

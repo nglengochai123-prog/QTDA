@@ -366,10 +366,24 @@ class PurchaseOrder(StoreScopedModel):
     def remaining(self):
         return max(self.quantity - self.received_quantity, Decimal(0))
 
+    def effective_status(self, today=None):
+        """Trạng thái tại lúc đọc: quá ngày giao mà chưa đủ là Giao chậm, kể cả khi tác vụ định kỳ chưa ghi."""
+        today = today or timezone.localdate()
+        if self.status in (self.Status.ORDERED, self.Status.PARTIAL) and self.expected_date < today:
+            return self.Status.LATE
+        return self.status
+
+    @property
+    def current_status(self):
+        return self.effective_status()
+
+    def get_current_status_display(self):
+        return self.Status(self.current_status).label
+
     @property
     def counts_as_incoming(self):
         """Lô giao chậm không tính vào tồn dự kiến cho đến khi có ngày giao mới (AC-68)."""
-        return self.status in (self.Status.ORDERED, self.Status.PARTIAL)
+        return self.current_status in (self.Status.ORDERED, self.Status.PARTIAL)
 
     def settle_status(self, today=None):
         today = today or timezone.localdate()
@@ -485,6 +499,7 @@ class StockCount(StoreScopedModel):
     physical_at_count = models.DecimalField("Tồn vật lý lúc đếm", max_digits=12, decimal_places=2)
     difference = models.DecimalField("Chênh lệch (thực tế - vật lý)", max_digits=12, decimal_places=2)
     percent = models.DecimalField("Tỷ lệ chênh lệch (%)", max_digits=7, decimal_places=2)
+    threshold_percent = models.PositiveSmallIntegerField("Ngưỡng đã áp dụng (%)", null=True, blank=True)
     reason = models.CharField("Lý do", max_length=255, blank=True)
     status = models.CharField("Trạng thái", max_length=20, choices=Status.choices)
     counter = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người kiểm kê", on_delete=models.PROTECT,

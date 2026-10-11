@@ -17,7 +17,7 @@
   <tbody>{% for po in orders %}
   <tr><th scope="row">{{ po }}</th><td class="num">{{ po.received_quantity|floatformat:"-2g" }} / {{ po.quantity|floatformat:"-2g" }}</td>
     <td>{{ po.expected_date|date:"d/m/Y" }}</td>
-    <td>{% if po.status == "giao_cham" %}<span class="flag-low">Giao chậm · không tính vào hàng đang về</span>{% else %}{{ po.get_status_display }}{% endif %}</td>
+    <td>{% if po.current_status == "giao_cham" %}<span class="flag-low">Giao chậm · không tính vào hàng đang về</span>{% else %}{{ po.get_current_status_display }}{% endif %}</td>
     <td>{% if po.status != "da_giao_du" %}<form method="post" class="inline-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="reschedule"><input type="hidden" name="po" value="{{ po.pk }}"><input class="input input-sm" type="date" name="expected_date" required aria-label="Ngày giao mới"><button class="btn btn-quiet" type="submit">Lưu</button></form>{% endif %}</td></tr>
   {% empty %}<tr><td colspan="5" class="muted">Chưa có lần đặt nào.</td></tr>{% endfor %}</tbody>
 </table></div>

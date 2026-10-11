@@ -13,6 +13,7 @@ from apps.accounts.models import Role, User
 from apps.audit.models import Action
 from apps.audit.services import record
 from apps.catalog.models import Table
+from apps.core import params
 from apps.core.idempotency import run_once
 from apps.inventory import stock
 from apps.control.models import ExceptionCase
@@ -84,12 +85,6 @@ def _record_shortage_from_request(req):
         record_shortage(ingredient, ShortageCase.Source.ADJUSTMENT, f"Yêu cầu #{req.pk}")
 
 
-def level_deadline():
-    from apps.core import params
-
-    return timedelta(minutes=params.get("approval_level_minutes"))
-
-
 def _shift_for(order):
     return order.shift or Shift.objects.current()
 
@@ -98,8 +93,11 @@ def _owners():
     return {u.pk for u in User.objects.filter(is_active=True) if u.is_owner}
 
 
-def approver_ids(req):
-    """Những người được xử lý yêu cầu ở cấp hiện tại; người tạo yêu cầu luôn bị loại (AC-22)."""
+def approver_ids(req, now=None):
+    """Những người được xử lý yêu cầu ở cấp hiện tại; người tạo yêu cầu luôn bị loại (AC-22).
+
+    Cấp được tính khi đọc (req.effective_level), không phụ thuộc việc ai đó vừa mở màn hình.
+    """
     owners = _owners()
     if req.kind == Kind.CANCEL_PAID:
         allowed = owners  # AC-23: chỉ Chủ quán.
@@ -108,7 +106,7 @@ def approver_ids(req):
         allowed = set(owners)
         if shift is not None:
             allowed.add(shift.approver_id)
-            if req.level >= Level.BACKUP and shift.backup_approver_id:
+            if req.effective_level(now) >= Level.BACKUP and shift.backup_approver_id:
                 allowed.add(shift.backup_approver_id)
         else:
             # Chưa khai báo ca: mọi Quản lý ca đang làm được duyệt.
@@ -117,8 +115,8 @@ def approver_ids(req):
     return allowed
 
 
-def can_decide(user, req):
-    return req.status == Status.PENDING and user.is_active and user.pk in approver_ids(req)
+def can_decide(user, req, now=None):
+    return req.status == Status.PENDING and user.is_active and user.pk in approver_ids(req, now)
 
 
 def _initial_level(user, order, kind):
@@ -193,6 +191,7 @@ def create_request(user, operation_key, payload):
         req = AdjustmentRequest.objects.create(
             store=order.store, order=order, kind=kind, reason=reason, note=clean["note"],
             level=_initial_level(user, order, kind), level_since=timezone.now(),
+            level_minutes=params.get("approval_level_minutes"),
             requested_by=user, operation_key=operation_key, after_prep=after_prep,
             shift=order.shift or Shift.objects.current(), **fields)
         if after_prep:
@@ -205,32 +204,30 @@ def create_request(user, operation_key, payload):
 
 
 def escalate_due(now=None):
-    """Chuyển cấp các yêu cầu quá thời hạn (BRU-09, AC-24). Gọi định kỳ và khi mở danh sách duyệt."""
+    """Ghi các lần chuyển cấp đã đến hạn vào yêu cầu và nhật ký (BRU-09, AC-24).
+
+    Chỉ tác vụ định kỳ (apps.core.periodic) gọi hàm này. Màn hình và thao tác duyệt không cần chờ
+    nó chạy vì cấp hiện hành được tính khi đọc; hàm chỉ để lưu vết đúng thời điểm chuyển cấp.
+    """
     now = now or timezone.now()
     moved = []
     with transaction.atomic():
         for req in (AdjustmentRequest.objects.select_for_update()
-                    .filter(status=Status.PENDING, level__lt=Level.EXHAUSTED).select_related("order")):
-            changed = False
-            while req.level < Level.EXHAUSTED and now - req.level_since >= level_deadline():
+                    .filter(status=Status.PENDING, level__lt=Level.EXHAUSTED).select_related("order", "shift")):
+            steps = req.level_steps(now)
+            for level, since in steps:
                 before = req.get_level_display()
-                req.level_since = req.level_since + level_deadline()
-                req.level += 1
-                shift = _shift_for(req.order)
-                if req.level == Level.BACKUP and (shift is None or not shift.backup_approver_id):
-                    req.level = Level.OWNER  # Ca chưa có người dự phòng: chuyển thẳng Chủ quán.
+                req.level, req.level_since = level, since
                 record(Action.STATUS_CHANGE, obj=req, object_type="orders.AdjustmentRequest",
                        actor_label="hệ thống", before={"cap": before}, after={"cap": req.get_level_display()},
                        reason="Chuyển cấp do quá thời hạn duyệt")
-                changed = True
-            if changed:
+            if steps:
                 req.save(update_fields=["level", "level_since", "updated_at"])
                 moved.append(req.pk)
     return moved
 
 
 def pending_for(user):
-    escalate_due()
     pending = (AdjustmentRequest.objects.filter(status=Status.PENDING)
                .select_related("order", "order__table", "line", "reason", "requested_by", "target_table"))
     return [r for r in pending if user.pk in approver_ids(r)]
@@ -317,7 +314,6 @@ def apply_effects(req, actor, delivered=False):
 def decide(user, operation_key, request_id, approve, note=""):
     """Phê duyệt hoặc từ chối. Người tạo yêu cầu không tự duyệt được (AC-22)."""
     payload = {"request": int(request_id), "approve": bool(approve), "note": str(note or "")[:255]}
-    escalate_due()
 
     def action():
         req = AdjustmentRequest.objects.select_for_update().select_related("order", "reason").get(pk=payload["request"])

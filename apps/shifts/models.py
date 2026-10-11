@@ -178,6 +178,7 @@ class Discrepancy(StoreScopedModel):
     manager = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Quản lý ca phụ trách",
                                 on_delete=models.PROTECT, related_name="+")
     over_threshold = models.BooleanField("Vượt ngưỡng", default=False)
+    threshold = models.BigIntegerField("Ngưỡng đã áp dụng", null=True, blank=True)
     explanation = models.TextField("Giải trình của Quản lý ca", blank=True)
     explained_at = models.DateTimeField("Giải trình lúc", null=True, blank=True)
     decision = models.CharField("Quyết định của Chủ quán", max_length=20, choices=Decision.choices, blank=True,

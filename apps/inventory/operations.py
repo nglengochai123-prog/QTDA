@@ -105,7 +105,7 @@ def create_purchase_order(user, supplier_id, ingredient_id, quantity, expected_d
 
 
 def refresh_late(today=None):
-    """Hết ngày giao dự kiến mà chưa giao đủ thì chuyển Giao chậm (AC-68)."""
+    """Ghi trạng thái Giao chậm và nhật ký cho lần đặt quá ngày giao (AC-68). Chỉ tác vụ định kỳ gọi."""
     today = today or timezone.localdate()
     late = []
     for po in PurchaseOrder.objects.filter(status__in=[PurchaseOrder.Status.ORDERED, PurchaseOrder.Status.PARTIAL],
@@ -268,13 +268,15 @@ def submit_count(user, operation_key, ingredient_id, counted, reason=""):
         row = stock._lock([ingredient.pk])[ingredient.pk]
         diff = value - row.physical
         percent = (abs(diff) / row.physical * 100) if row.physical else (Decimal(100) if diff else Decimal(0))
-        over = percent > params.get("count_threshold_percent")
+        limit = params.get("count_threshold_percent")
+        over = percent > limit
         if over and not reason.strip():
             raise ValidationError(f"Chênh lệch {percent:.1f}% vượt ngưỡng; ghi lý do để gửi Chủ quán xác nhận.")  # AC-56
         count = StockCount.objects.create(
             store=ingredient.store, ingredient=ingredient, counted=value, physical_at_count=row.physical,
             difference=diff, percent=percent.quantize(Decimal("0.01")), reason=reason[:255],
             status=StockCount.Status.PENDING if over else StockCount.Status.APPLIED, counter=user,
+            threshold_percent=limit,
             operation_key=operation_key)
         if not over and diff != 0:
             _apply_count(count, user)  # AC-57
