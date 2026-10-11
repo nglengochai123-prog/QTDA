@@ -15,4 +15,7 @@ urlpatterns = [
     path("ca/chenh-lech/<int:discrepancy_id>/giai-trinh/", views.explain, name="explain"),
     path("ca/chenh-lech/<int:discrepancy_id>/quyet-dinh/", views.decide, name="decide"),
     path("ca/tinh-trang/", views.status, name="status"),
+    path("ca/hoan-tien/<int:refund_id>/", views.refund_paid, name="refund_paid"),
+    path("ca/<int:shift_id>/dinh-chinh/", views.correction, name="correction"),
+    path("ca/dinh-chinh/<int:correction_id>/duyet/", views.decide_correction, name="decide_correction"),
 ]

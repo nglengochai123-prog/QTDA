@@ -23,7 +23,8 @@ DEFAULTS = {
     "cash_threshold": (50000, "đồng", "Ngưỡng cảnh báo chênh lệch tiền mặt mỗi ca", "BRU-10"),
     "transfer_threshold": (50000, "đồng", "Ngưỡng cảnh báo chênh lệch chuyển khoản mỗi ca", "BRU-10"),
     "accumulated_manager_threshold": (100000, "đồng", "Ngưỡng tích lũy thiếu tiền trong tháng của một Quản lý ca", "BRU-11"),
-    "accumulated_store_threshold": (300000, "đồng", "Ngưỡng tích lũy thiếu tiền trong tháng của toàn quán", "BRU-11"),
+    "accumulated_store_threshold": (300000, "đồng", "Ngưỡng cảnh báo thiếu tiền tích lũy trong tháng của toàn quán "
+                                                    "(khác mục tiêu BO-01 dưới 200.000 đ)", "BRU-11"),
     "adjust_count_limit": (3, "yêu cầu", "Số yêu cầu điều chỉnh sau pha chế cho phép của một nhân viên trong ca", "BRU-12"),
     "post_prep_value_limit": (100000, "đồng", "Tổng giá trị món hủy sau pha chế cho phép trong ca", "BRU-12"),
     "review_reminder_days": (3, "ngày", "Nhắc lại ngoại lệ chưa xem xét sau số ngày", "BRU-14"),

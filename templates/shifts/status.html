@@ -9,13 +9,31 @@
   <h2 id="ctrl-title">Giá trị kiểm soát tạm tính tháng {{ month }}</h2>
   <dl class="figure-grid">
     <div class="figure-key"><dt>Giá trị kiểm soát tạm tính</dt><dd>{{ control.control_value|intcomma }} đ</dd></div>
-    <div><dt>Mục tiêu</dt><dd>dưới {{ control.target|intcomma }} đ</dd></div>
+    <div><dt>Mục tiêu BO-01</dt><dd>dưới {{ control.target|intcomma }} đ</dd></div>
     <div><dt>Tổn thất đã xác minh</dt><dd>{{ control.verified|intcomma }} đ</dd></div>
     <div><dt>Thiếu tiền đang xử lý</dt><dd>{{ control.in_process|intcomma }} đ</dd></div>
     <div><dt>Đã thu hồi</dt><dd>{{ control.recovered|intcomma }} đ</dd></div>
     <div><dt>Đã xác minh còn lại</dt><dd>{{ control.verified_remaining|intcomma }} đ</dd></div>
   </dl>
-  <p class="muted">Cập nhật {{ control.updated_at|date:"H:i d/m" }} · {{ control.open_cases }} vụ việc chưa kết luận. Đây là số tổng hợp để theo dõi, không phải kết luận toàn bộ số đã thất thoát.</p>
+  <p class="muted">Cập nhật {{ control.updated_at|date:"H:i d/m" }} · {{ control.open_cases }} vụ việc chưa kết luận. Đây là số tổng hợp để theo dõi, không phải kết luận toàn bộ số đã thất thoát. Mục tiêu BO-01 là chỉ tiêu dự án; ngưỡng cảnh báo thiếu tiền tích lũy toàn quán ({{ store_threshold|intcomma }} đ/tháng) là tham số riêng.</p>
+</section>
+{% endif %}
+
+{% if pending_corrections %}
+<section class="panel panel-warn" aria-labelledby="corr-title">
+  <h2 id="corr-title">Đính chính báo cáo cuối ca chờ duyệt</h2>
+  <ul class="ruled-list compact">
+    {% for c in pending_corrections %}
+    <li class="discrepancy">
+      <div><strong>{{ c.report.shift }}</strong> · {{ c.requested_by }}: tiền mặt {{ c.report.counted_cash|intcomma }} → {{ c.counted_cash|intcomma }}, CK nhận {{ c.report.transfer_received|intcomma }} → {{ c.transfer_received|intcomma }}, CK hoàn {{ c.report.transfer_refunded|intcomma }} → {{ c.transfer_refunded|intcomma }}</div>
+      <p>Lý do: {{ c.reason }}</p>
+      {% if request.user.is_owner %}<div class="approval-actions">
+        <form method="post" action="{% url 'shifts:decide_correction' c.pk %}" data-once>{% csrf_token %}<input type="hidden" name="decision" value="reject"><button class="btn btn-quiet" type="submit">Từ chối</button></form>
+        <form method="post" action="{% url 'shifts:decide_correction' c.pk %}" data-once>{% csrf_token %}<input type="hidden" name="decision" value="approve"><button class="btn btn-primary" type="submit">Duyệt và đối soát lại</button></form>
+      </div>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
 </section>
 {% endif %}
 

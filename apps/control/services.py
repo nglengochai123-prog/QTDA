@@ -151,6 +151,12 @@ def recover(user, case, amount, note="", *, operation_key):
 
 # ---------------- Giá trị kiểm soát tạm tính của tháng (BRU-16) ----------------
 
+# Mục tiêu dự án BO-01 (BRU-16): giá trị kiểm soát tạm tính dưới 200.000 đ mỗi tháng.
+# Đây là chỉ tiêu để đo kết quả, KHÔNG phải ngưỡng cảnh báo; ngưỡng cảnh báo tích lũy toàn quán
+# là tham số accumulated_store_threshold (BRU-11), cấu hình riêng.
+BO01_MONTHLY_TARGET = 200000
+
+
 def monthly_control(year, month):
     from apps.shifts.models import Discrepancy
 
@@ -158,7 +164,8 @@ def monthly_control(year, month):
     verified = sum(c.verified_amount() or 0 for c in cases)
     recovered = sum(c.recovered_amount() for c in cases)
     in_process = 0
-    for d in Discrepancy.objects.filter(shift__starts_at__year=year, shift__starts_at__month=month, difference__lt=0):
+    for d in Discrepancy.objects.current().filter(shift__starts_at__year=year, shift__starts_at__month=month,
+                                                  difference__lt=0):
         if not d.is_unexplained_shortage:
             continue
         try:
@@ -171,4 +178,4 @@ def monthly_control(year, month):
     open_cases = cases.filter(status=LossCase.Status.OPEN).count()
     return {"verified": verified, "in_process": in_process, "recovered": recovered,
             "verified_remaining": verified - recovered, "control_value": verified + in_process,
-            "target": 200000, "open_cases": open_cases, "updated_at": timezone.now()}
+            "target": BO01_MONTHLY_TARGET, "open_cases": open_cases, "updated_at": timezone.now()}

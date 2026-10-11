@@ -14,7 +14,9 @@ from apps.accounts.permissions import Cap, capability_required, user_can
 from apps.core.idempotency import OperationKeyError
 
 from . import services
-from .models import CashEntry, Discrepancy, ExpenseCategory, Shift, ShiftReport
+from apps.core import params
+
+from .models import CashEntry, Discrepancy, ExpenseCategory, Shift, ShiftReport, ShiftReportCorrection
 
 
 def _errors(error):
@@ -49,13 +51,46 @@ def my_shift(request, shift_id=None):
             .select_related("table"),
             next_shifts=Shift.objects.filter(status=Shift.Status.OPEN, starts_at__gt=shift.starts_at).exclude(pk=shift.pk),
             receivers=User.objects.filter(is_active=True).exclude(pk=request.user.pk).order_by("first_name"),
-            discrepancies=shift.discrepancies.all(), status=services.data_status(shift),
+            discrepancies=shift.discrepancies.current(), status=services.data_status(shift),
+            history=shift.discrepancies.exclude(superseded_at=None), op_correction=uuid.uuid4().hex,
             op_open=uuid.uuid4().hex, op_expense=uuid.uuid4().hex, op_handover=uuid.uuid4().hex,
         )
-        context["report"] = ShiftReport.objects.filter(shift=shift).first()
+        context["report"] = report = ShiftReport.objects.filter(shift=shift).first()
+        if report is not None:
+            context["effective"] = report.effective()
+            context["corrections"] = report.corrections.select_related("requested_by", "decided_by")
     context["to_confirm"] = CashEntry.objects.filter(kind=CashEntry.Kind.HANDOVER, receiver=request.user,
                                                      confirmed_at__isnull=True).select_related("shift", "actor")
+    context["pending_refunds"] = [(r, uuid.uuid4().hex) for r in services.pending_refunds()]
     return render(request, "shifts/my_shift.html", context)
+
+
+@capability_required(Cap.PAYMENT)
+@require_POST
+def refund_paid(request, refund_id):
+    p = request.POST
+    _flash(request, lambda: services.confirm_refund(request.user, p.get("operation_key", ""), refund_id,
+                                                    p.get("note", "")), "Đã ghi đã hoàn tiền vào ca hiện tại.")
+    return redirect(p.get("next") or "shifts:my_shift")
+
+
+@capability_required(Cap.SHIFT_CLOSE)
+@require_POST
+def correction(request, shift_id):
+    p = request.POST
+    _flash(request, lambda: services.request_correction(
+        request.user, p.get("operation_key", ""), shift_id, p.get("counted_cash", ""), p.get("transfer_received", ""),
+        p.get("transfer_refunded") or 0, p.get("reason", "")), "Đã gửi đề nghị đính chính báo cáo cuối ca.")
+    return redirect("shifts:my_shift_detail", shift_id=shift_id)
+
+
+@capability_required(Cap.EXCEPTION_REVIEW)
+@require_POST
+def decide_correction(request, correction_id):
+    p = request.POST
+    _flash(request, lambda: services.decide_correction(request.user, correction_id, p.get("decision") == "approve",
+                                                       p.get("note", "")), "Đã ghi quyết định đính chính.")
+    return redirect("shifts:status")
 
 
 @capability_required(Cap.CASH_FUND)
@@ -131,8 +166,11 @@ def status(request):
     for row in rows:
         row["figures"] = services.figures(row["shift"])
     context = {"rows": rows,
-               "pending_decisions": Discrepancy.objects.filter(decision="").select_related("shift", "manager")
+               "pending_decisions": Discrepancy.objects.current().filter(decision="").select_related("shift", "manager")
                .order_by("-created_at"),
+               "pending_corrections": ShiftReportCorrection.objects.filter(status=ShiftReportCorrection.Status.PENDING)
+               .select_related("report__shift", "requested_by"),
+               "store_threshold": params.get("accumulated_store_threshold"),
                "accumulated": services.accumulated_report(now.year, now.month), "month": f"{now:%m/%Y}"}
     if user_can(request.user, Cap.VIEW_FINANCIALS):
         context["control"] = monthly_control(now.year, now.month)

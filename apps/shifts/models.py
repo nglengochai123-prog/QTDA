@@ -58,7 +58,10 @@ class Shift(StoreScopedModel):
     def clean(self):
         if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
             raise ValidationError({"ends_at": "Giờ kết thúc phải sau giờ bắt đầu."})
-        if self.backup_approver_id and self.backup_approver_id == self.approver_id:
+        if not self.backup_approver_id:
+            # GD-08: ca phải có người duyệt dự phòng trước khi hoạt động (BRU-09, AC-113).
+            raise ValidationError({"backup_approver": "Chỉ định người duyệt dự phòng trước khi ca bắt đầu."})
+        if self.backup_approver_id == self.approver_id:
             raise ValidationError({"backup_approver": "Người duyệt dự phòng phải khác người duyệt trong ca."})
 
     @property
@@ -118,20 +121,35 @@ class CashEntry(StoreScopedModel):
 
 
 class Refund(StoreScopedModel):
-    """Hoàn tiền cho khách theo yêu cầu hủy hóa đơn đã được duyệt (BRU-05, BRU-10)."""
+    """Hoàn tiền cho khách theo yêu cầu hủy hóa đơn đã được duyệt (BRU-05, BRU-10, GD-07).
+
+    Hai bước tách riêng: Chủ quán duyệt hoàn (chưa có tiền ra), rồi người thu tiền xác nhận
+    đã hoàn thực tế. Tiền ra chỉ ghi một lần, vào ca đang mở lúc xác nhận đã hoàn.
+    """
 
     class Method(models.TextChoices):
         CASH = "tien_mat", "Tiền mặt"
         TRANSFER = "chuyen_khoan", "Chuyển khoản"
 
-    shift = models.ForeignKey(Shift, verbose_name="Ca", on_delete=models.PROTECT, null=True, blank=True,
+    class Status(models.TextChoices):
+        APPROVED = "cho_hoan", "Đã duyệt, chờ hoàn tiền"
+        PAID = "da_hoan", "Đã hoàn tiền"
+
+    shift = models.ForeignKey(Shift, verbose_name="Ca thực hoàn", on_delete=models.PROTECT, null=True, blank=True,
                               related_name="refunds")
+    payment = models.ForeignKey("orders.Payment", verbose_name="Thanh toán gốc", on_delete=models.PROTECT,
+                                null=True, blank=True, related_name="refunds")
     order_code = models.CharField("Mã đơn", max_length=20)
     method = models.CharField("Phương thức hoàn", max_length=20, choices=Method.choices)
     amount = models.PositiveBigIntegerField("Số tiền (đồng)")
+    status = models.CharField("Trạng thái", max_length=10, choices=Status.choices, default=Status.APPROVED)
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người duyệt", on_delete=models.PROTECT,
                                     related_name="+")
     request_id_ref = models.PositiveBigIntegerField("Mã yêu cầu điều chỉnh", unique=True)
+    paid_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người hoàn tiền", on_delete=models.PROTECT,
+                                null=True, blank=True, related_name="+")
+    paid_at = models.DateTimeField("Hoàn tiền lúc", null=True, blank=True)
+    paid_note = models.CharField("Ghi chú khi hoàn", max_length=255, blank=True)
 
     class Meta:
         verbose_name = "Hoàn tiền"
@@ -155,6 +173,53 @@ class ShiftReport(StoreScopedModel):
     class Meta:
         verbose_name = "Báo cáo cuối ca"
         verbose_name_plural = "Báo cáo cuối ca"
+
+    def effective(self):
+        """Số liệu đang có hiệu lực: bản đính chính đã duyệt mới nhất, nếu không thì bản gửi gốc (GD-11)."""
+        latest = self.corrections.filter(status=ShiftReportCorrection.Status.APPROVED).order_by("-decided_at", "-id").first()
+        source = latest or self
+        return {"counted_cash": source.counted_cash, "transfer_received": source.transfer_received,
+                "transfer_refunded": source.transfer_refunded, "correction": latest}
+
+
+class ShiftReportCorrection(StoreScopedModel):
+    """Đính chính báo cáo cuối ca: có lý do, người duyệt và giữ lịch sử; bản gốc không bị sửa (GD-11)."""
+
+    class Status(models.TextChoices):
+        PENDING = "cho_duyet", "Chờ duyệt"
+        APPROVED = "da_duyet", "Đã duyệt"
+        REJECTED = "tu_choi", "Từ chối"
+
+    report = models.ForeignKey(ShiftReport, verbose_name="Báo cáo cuối ca", on_delete=models.PROTECT,
+                               related_name="corrections")
+    counted_cash = models.PositiveBigIntegerField("Tiền mặt đếm thực tế")
+    transfer_received = models.PositiveBigIntegerField("Tiền chuyển khoản nhận theo sao kê")
+    transfer_refunded = models.PositiveBigIntegerField("Tiền hoàn bằng chuyển khoản theo sao kê", default=0)
+    reason = models.TextField("Lý do đính chính")
+    status = models.CharField("Trạng thái", max_length=10, choices=Status.choices, default=Status.PENDING)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người đề nghị", on_delete=models.PROTECT,
+                                     related_name="+")
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người duyệt", on_delete=models.PROTECT,
+                                   null=True, blank=True, related_name="+")
+    decided_at = models.DateTimeField("Duyệt lúc", null=True, blank=True)
+    decision_note = models.CharField("Ghi chú duyệt", max_length=255, blank=True)
+    operation_key = models.CharField("Mã nghiệp vụ", max_length=64, unique=True)
+
+    class Meta:
+        verbose_name = "Đính chính báo cáo cuối ca"
+        verbose_name_plural = "Đính chính báo cáo cuối ca"
+        ordering = ["-created_at"]
+        constraints = [models.UniqueConstraint(fields=["report"], condition=models.Q(status="cho_duyet"),
+                                               name="one_pending_correction_per_report")]
+
+    def __str__(self):
+        return f"Đính chính báo cáo {self.report.shift} · {self.get_status_display()}"
+
+
+class DiscrepancyQuerySet(models.QuerySet):
+    def current(self):
+        """Chỉ các khoản đang có hiệu lực; khoản bị thay bởi đối soát lại sau đính chính vẫn giữ làm lịch sử."""
+        return self.filter(superseded_at__isnull=True)
 
 
 class Discrepancy(StoreScopedModel):
@@ -186,12 +251,18 @@ class Discrepancy(StoreScopedModel):
     decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người quyết định",
                                    on_delete=models.PROTECT, null=True, blank=True, related_name="+")
     decided_at = models.DateTimeField("Quyết định lúc", null=True, blank=True)
+    superseded_at = models.DateTimeField("Hết hiệu lực lúc", null=True, blank=True)
+    superseded_by = models.ForeignKey("ShiftReportCorrection", verbose_name="Do đính chính", on_delete=models.PROTECT,
+                                      null=True, blank=True, related_name="superseded_discrepancies")
+
+    objects = DiscrepancyQuerySet.as_manager()
 
     class Meta:
         verbose_name = "Chênh lệch ca"
         verbose_name_plural = "Chênh lệch ca"
         ordering = ["-created_at"]
-        constraints = [models.UniqueConstraint(fields=["shift", "method"], name="one_discrepancy_per_method")]
+        constraints = [models.UniqueConstraint(fields=["shift", "method"], condition=models.Q(superseded_at__isnull=True),
+                                               name="one_current_discrepancy_per_method")]
 
     def __str__(self):
         return f"{self.shift} · {self.get_method_display()} {self.difference:+,} đ".replace(",", ".")

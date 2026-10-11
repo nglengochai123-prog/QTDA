@@ -85,6 +85,9 @@ def _record_shortage_from_request(req):
         record_shortage(ingredient, ShortageCase.Source.ADJUSTMENT, f"Yêu cầu #{req.pk}")
 
 
+SKIP_BACKUP_REASON = "Chuyển thẳng Chủ quán (ngoại lệ GD-08): ca chưa có người duyệt dự phòng"
+
+
 def _shift_for(order):
     return order.shift or Shift.objects.current()
 
@@ -196,6 +199,9 @@ def create_request(user, operation_key, payload):
             shift=order.shift or Shift.objects.current(), **fields)
         if after_prep:
             _check_adjust_count(req)
+        if kind != Kind.CANCEL_PAID and req.level == Level.OWNER:
+            record(Action.STATUS_CHANGE, actor=user, obj=req, object_type="orders.AdjustmentRequest",
+                   after={"cap": req.get_level_display()}, reason=SKIP_BACKUP_REASON)
         record(Action.CREATE, actor=user, obj=req, object_type="orders.AdjustmentRequest",
                after={"summary": req.summary(), "level": req.get_level_display()}, reason=reason.name)
         return {"request": req.pk, "summary": req.summary(), "level": req.get_level_display()}
@@ -216,11 +222,14 @@ def escalate_due(now=None):
                     .filter(status=Status.PENDING, level__lt=Level.EXHAUSTED).select_related("order", "shift")):
             steps = req.level_steps(now)
             for level, since in steps:
-                before = req.get_level_display()
+                before_level, before = req.level, req.get_level_display()
                 req.level, req.level_since = level, since
+                reason = "Chuyển cấp do quá thời hạn duyệt"
+                if before_level == Level.SHIFT and level == Level.OWNER:
+                    reason = SKIP_BACKUP_REASON
                 record(Action.STATUS_CHANGE, obj=req, object_type="orders.AdjustmentRequest",
                        actor_label="hệ thống", before={"cap": before}, after={"cap": req.get_level_display()},
-                       reason="Chuyển cấp do quá thời hạn duyệt")
+                       reason=reason)
             if steps:
                 req.save(update_fields=["level", "level_since", "updated_at"])
                 moved.append(req.pk)
@@ -289,11 +298,11 @@ def apply_effects(req, actor, delivered=False):
         order.table = req.target_table
         order.save(update_fields=["table", "updated_at"])
     if req.kind == Kind.CANCEL_PAID:
-        from apps.shifts.services import record_refund
+        from apps.shifts.services import approve_refund
 
         order.status = Order.Status.CANCELLED
         order.save(update_fields=["status", "updated_at"])
-        record_refund(order, actor, req.pk)
+        approve_refund(order, actor, req.pk)
         _exception(ExceptionCase.Kind.PAID_CANCELLED, req, rule="Hóa đơn đã thanh toán bị hủy (BRU-12)",
                    amount=order.total, detail=f"{req.summary()} · duyệt bởi {actor}")
         payment = order.payment

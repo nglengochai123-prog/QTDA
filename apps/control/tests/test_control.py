@@ -50,7 +50,8 @@ class ExceptionRuleTests(Base):
         req = self.request(self.cashier, Order.objects.get(pk=order.pk), "huy_hoa_don")
         adjustments.decide(self.d["owner"], key(), req.pk, True)
         refund = Refund.objects.get()
-        self.assertEqual((refund.method, refund.amount, refund.shift), ("tien_mat", 25000, self.shift))
+        self.assertEqual((refund.method, refund.amount, refund.status, refund.shift), ("tien_mat", 25000, "cho_hoan", None))
+        self.assertEqual(refund.payment, Order.objects.get(pk=order.pk).payment)
         self.assertTrue(ExceptionCase.objects.filter(kind="huy_sau_tt", amount=25000).exists())
 
     def test_adjustment_report_separates_groups(self):

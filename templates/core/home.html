@@ -7,6 +7,12 @@
   </div>
 </section>
 
+{% if missing_backup %}
+<div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
+  <div><strong>Ca chưa có người duyệt dự phòng.</strong> Bổ sung trước giờ ca; nếu không, yêu cầu quá hạn sẽ chuyển thẳng Chủ quán như ngoại lệ.
+    <ul class="notice-list">{% for s in missing_backup %}<li><a href="{% url 'admin:shifts_shift_change' s.pk %}">{{ s }} ({{ s.starts_at|date:"H:i" }}–{{ s.ends_at|date:"H:i" }})</a></li>{% endfor %}</ul></div></div>
+{% endif %}
+
 {% if master_data %}
 <h2>Dữ liệu nền</h2>
 <p>Khai báo đủ món, kích cỡ, nguyên vật liệu và định mức trước khi mở bán. Món thiếu định mức sẽ không mở bán được.</p>

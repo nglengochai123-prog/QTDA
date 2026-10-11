@@ -35,6 +35,10 @@ def home(request):
              f"{RecipeVersion.objects.filter(status='nhap').count()} bản nháp", False),
             ("Nhật ký thao tác", reverse("admin:audit_auditlog_changelist"), "", False),
         ]
+    if request.user.is_owner:
+        from apps.shifts.services import shifts_missing_backup
+
+        context["missing_backup"] = shifts_missing_backup()
     return render(request, "core/home.html", context)
 
 

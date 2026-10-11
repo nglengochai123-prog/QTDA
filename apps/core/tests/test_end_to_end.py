@@ -84,6 +84,10 @@ class EndToEndTests(Base):
         cancel = self.request(self.cashier, Order.objects.get(pk=order_b.pk), "huy_hoa_don")
         self.once(adjustments.decide, owner, cancel.pk, True)
         adjustments.decide(owner, key(), cancel.pk, True)  # bấm lại bằng mã khác
+        refund = Refund.objects.get()
+        self.assertEqual((refund.status, refund.shift), (Refund.Status.APPROVED, None))  # duyệt chưa phải tiền ra
+        self.once(shift_services.confirm_refund, self.cashier, refund.pk)  # thu ngân chuyển trả khách
+        shift_services.confirm_refund(self.cashier, key(), refund.pk)  # bấm lại bằng mã khác: không ghi thêm
 
         # 8. Kết ca, 9. báo cáo cuối ca: thiếu 100.000 đ tiền mặt, chuyển khoản khớp.
         shift_services.close_shift(self.manager, self.shift.pk)

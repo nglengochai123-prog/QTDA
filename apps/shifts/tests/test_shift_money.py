@@ -140,7 +140,7 @@ class CloseAndReconcileTests(ShiftBase):
         Payment.objects.create(store=self.d["store"], table=self.d["table"], method="chuyen_khoan", amount=1900000,
                                cashier=self.cashier, shift=self.shift, operation_key=key())
         Refund.objects.create(store=self.d["store"], shift=self.shift, order_code="X", method="chuyen_khoan",
-                              amount=100000, approved_by=self.d["owner"], request_id_ref=1)
+                              amount=100000, approved_by=self.d["owner"], request_id_ref=1, status="da_hoan")
         shift_services.close_shift(self.manager, self.shift.pk)
         shift_services.submit_report(self.manager, self.shift.pk, 0, 1900000, 100000)
         f = shift_services.figures(self.shift)

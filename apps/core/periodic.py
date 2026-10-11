@@ -16,4 +16,25 @@ def run_all(now=None):
     return {
         "chuyen_cap_yeu_cau": adjustments.escalate_due(now),
         "dat_hang_giao_cham": [po.pk for po in inventory_ops.refresh_late(timezone.localdate(now))],
+        "nhac_ca_thieu_du_phong": remind_missing_backup(now),
     }
+
+
+def remind_missing_backup(now=None):
+    """GD-08: ghi nhắc Chủ quán một lần cho mỗi ca chưa có người duyệt dự phòng (màn hình Trang chủ luôn hiện)."""
+    from apps.audit.models import Action, AuditLog
+    from apps.audit.services import record
+    from apps.shifts.services import shifts_missing_backup
+
+    reminded = []
+    for shift in shifts_missing_backup(now):
+        if AuditLog.objects.filter(object_type="shifts.Shift", object_id=str(shift.pk),
+                                   reason=MISSING_BACKUP_REASON).exists():
+            continue
+        record(Action.STATUS_CHANGE, obj=shift, object_type="shifts.Shift", actor_label="hệ thống",
+               after={"con_thieu": "người duyệt dự phòng"}, reason=MISSING_BACKUP_REASON)
+        reminded.append(shift.pk)
+    return reminded
+
+
+MISSING_BACKUP_REASON = "Nhắc Chủ quán bổ sung người duyệt dự phòng trước giờ ca"

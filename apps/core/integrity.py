@@ -36,6 +36,12 @@ def problems():
     for refund in Refund.objects.all():
         if refund.request_id_ref not in approved:
             out.append(f"{refund}: không gắn với yêu cầu hủy hóa đơn đã duyệt")
+        if refund.status == Refund.Status.PAID and refund.shift_id is None:
+            out.append(f"{refund}: đã hoàn nhưng không gắn ca thực hoàn")
+        if refund.status == Refund.Status.APPROVED and refund.shift_id is not None:
+            out.append(f"{refund}: chưa hoàn nhưng đã gắn ca")
+        if refund.payment_id is None:
+            out.append(f"{refund}: không gắn thanh toán gốc")
 
     for shift in Shift.objects.filter(status=Shift.Status.CLOSED):
         for method, snapshot in (("tien_mat", shift.closed_cash_revenue), ("chuyen_khoan", shift.closed_transfer_revenue)):

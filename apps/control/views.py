@@ -111,11 +111,12 @@ def case_detail(request, pk):
             _run(request, lambda: services.recover(request.user, case, int(p.get("amount") or 0), p.get("note", ""),
                                                    operation_key=p.get("operation_key", "")), "Đã ghi thu hồi.")
         return redirect("control:case_detail", pk=pk)
-    used = Discrepancy.objects.filter(evidence__isnull=False).values("pk")
+    used = Discrepancy.objects.filter(evidence__isnull=False).values("pk")  # kể cả khoản đã hết hiệu lực
     return render(request, "control/case_detail.html", {
         "case": case, "evidence": case.evidence.select_related("exception", "discrepancy", "discrepancy__shift"),
         "verifications": case.verifications.select_related("actor"), "recoveries": case.recoveries.select_related("actor"),
-        "free_discrepancies": Discrepancy.objects.filter(difference__lt=0).exclude(pk__in=used).select_related("shift"),
+        "free_discrepancies": Discrepancy.objects.current().filter(difference__lt=0).exclude(pk__in=used)
+        .select_related("shift"),
         "operation_key": uuid.uuid4().hex,
     })
 

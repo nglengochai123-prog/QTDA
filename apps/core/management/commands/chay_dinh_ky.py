@@ -15,7 +15,8 @@ class Command(BaseCommand):
         while True:
             result = periodic.run_all()
             self.stdout.write(f"Chuyển cấp {len(result['chuyen_cap_yeu_cau'])} yêu cầu; "
-                              f"{len(result['dat_hang_giao_cham'])} lần đặt giao chậm.")
+                              f"{len(result['dat_hang_giao_cham'])} lần đặt giao chậm; "
+                              f"nhắc {len(result['nhac_ca_thieu_du_phong'])} ca thiếu người duyệt dự phòng.")
             if not lap:
                 break
             time.sleep(lap)

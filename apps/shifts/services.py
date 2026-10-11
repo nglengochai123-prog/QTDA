@@ -12,7 +12,7 @@ from apps.audit.services import record
 from apps.core import params
 from apps.core.idempotency import run_once
 
-from .models import CashEntry, Discrepancy, ExpenseCategory, Refund, Shift, ShiftReport
+from .models import CashEntry, Discrepancy, ExpenseCategory, Refund, Shift, ShiftReport, ShiftReportCorrection
 
 
 def _money(value, label):
@@ -87,12 +87,11 @@ def confirm_handover(user, entry_id):
     return entry
 
 
-def record_refund(order, approver, request_id):
-    """Hoàn tiền khi hủy hóa đơn đã thanh toán được duyệt (BRU-05, BRU-08, BRU-10).
+def approve_refund(order, approver, request_id):
+    """Bước 1 khi hủy hóa đơn đã thanh toán được duyệt: ghi khoản hoàn chờ thực hiện (GD-07).
 
-    - Phương thức hoàn: theo phương thức khách đã trả (giả định GD-07, chờ Chủ quán xác nhận).
-    - Ca ghi nhận: ca đang mở lúc duyệt, vì tiền hoàn rời quỹ của ca đó; doanh thu vẫn thuộc ca đã thu.
-    - Mỗi yêu cầu chỉ sinh tối đa một khoản hoàn (ràng buộc duy nhất theo mã yêu cầu).
+    Chưa có tiền ra, chưa gắn ca. Phương thức hoàn theo phương thức khách đã trả; giữ liên kết
+    với thanh toán gốc. Mỗi yêu cầu chỉ sinh tối đa một khoản hoàn.
     """
     payment = order.payment
     if payment is None or order.total == 0:
@@ -100,16 +99,48 @@ def record_refund(order, approver, request_id):
     existing = Refund.objects.filter(request_id_ref=request_id).first()
     if existing is not None:
         return existing
-    shift = Shift.objects.current()
-    if shift is None:
-        raise ValidationError("Không có ca đang mở để ghi khoản hoàn tiền; mở ca rồi duyệt lại.")
     method = Refund.Method.CASH if payment.method == "tien_mat" else Refund.Method.TRANSFER
-    refund = Refund.objects.create(store=order.store, shift=shift, order_code=order.code, method=method,
+    refund = Refund.objects.create(store=order.store, payment=payment, order_code=order.code, method=method,
                                    amount=order.total, approved_by=approver, request_id_ref=request_id)
     record(Action.CREATE, actor=approver, obj=refund, object_type="shifts.Refund",
            after={"don": order.code, "phuong_thuc": refund.get_method_display(), "so_tien": refund.amount,
-                  "ca": str(shift)})
+                  "thanh_toan_goc": payment.pk, "trang_thai": refund.get_status_display()})
     return refund
+
+
+def confirm_refund(user, operation_key, refund_id, note=""):
+    """Bước 2: người thu tiền xác nhận đã hoàn cho khách. Tiền ra ghi vào ca đang mở lúc này, đúng một lần."""
+    payload = {"refund": int(refund_id), "note": str(note or "")[:255]}
+
+    def action():
+        refund = Refund.objects.select_for_update().get(pk=payload["refund"])
+        if refund.status == Refund.Status.PAID:
+            return {"refund": refund.pk, "shift": refund.shift_id, "applied": False,
+                    "message": "Khoản này đã được ghi hoàn trước đó; không ghi thêm."}
+        shift = Shift.objects.current()
+        if shift is None:
+            raise ValidationError("Không có ca đang mở; mở ca rồi mới ghi đã hoàn tiền.")
+        refund.status, refund.shift = Refund.Status.PAID, shift
+        refund.paid_by, refund.paid_at, refund.paid_note = user, timezone.now(), payload["note"]
+        refund.save(update_fields=["status", "shift", "paid_by", "paid_at", "paid_note", "updated_at"])
+        record(Action.STATUS_CHANGE, actor=user, obj=refund, object_type="shifts.Refund",
+               before={"trang_thai": Refund.Status.APPROVED.label},
+               after={"trang_thai": refund.get_status_display(), "ca": str(shift), "so_tien": refund.amount,
+                      "phuong_thuc": refund.get_method_display()}, reason=payload["note"])
+        return {"refund": refund.pk, "shift": shift.pk, "applied": True, "message": ""}
+
+    return run_once(operation_key, "refund_paid", payload, action, actor=user)
+
+
+def pending_refunds():
+    return Refund.objects.filter(status=Refund.Status.APPROVED).select_related("approved_by", "payment")
+
+
+def shifts_missing_backup(now=None):
+    """Ca chưa kết thúc mà chưa có người duyệt dự phòng (GD-08): nhắc Chủ quán bổ sung trước giờ ca."""
+    now = now or timezone.now()
+    return list(Shift.objects.filter(status=Shift.Status.OPEN, ends_at__gt=now, backup_approver__isnull=True)
+                .order_by("starts_at"))
 
 
 # ---------------- Số liệu ca ----------------
@@ -126,8 +157,9 @@ def figures(shift):
     opening = sum(e.amount for e in entries if e.kind == CashEntry.Kind.OPENING)
     expenses = sum(e.amount for e in entries if e.kind == CashEntry.Kind.EXPENSE)
     handovers = sum(e.amount for e in entries if e.kind == CashEntry.Kind.HANDOVER and e.is_effective)
-    refunds_cash = shift.refunds.filter(method=Refund.Method.CASH).aggregate(s=Sum("amount"))["s"] or 0
-    refunds_transfer = shift.refunds.filter(method=Refund.Method.TRANSFER).aggregate(s=Sum("amount"))["s"] or 0
+    paid = shift.refunds.filter(status=Refund.Status.PAID)
+    refunds_cash = paid.filter(method=Refund.Method.CASH).aggregate(s=Sum("amount"))["s"] or 0
+    refunds_transfer = paid.filter(method=Refund.Method.TRANSFER).aggregate(s=Sum("amount"))["s"] or 0
     expected_cash = opening + revenue_cash - refunds_cash - expenses - handovers  # BRU-10
     return {"opening": opening, "revenue_cash": revenue_cash, "revenue_transfer": revenue_transfer,
             "refunds_cash": refunds_cash, "refunds_transfer": refunds_transfer, "expenses": expenses,
@@ -222,37 +254,120 @@ def submit_report(user, shift_id, counted_cash, transfer_received, transfer_refu
     return report
 
 
-def reconcile(shift):
-    """So số phải có với thực tế, lưu mọi chênh lệch khác 0 theo phương thức và Quản lý ca (FR-12)."""
-    report = shift.report
+def reconcile(shift, correction=None):
+    """So số phải có với số thực tế đang có hiệu lực; lưu mọi chênh lệch khác 0 (FR-12, BRU-10).
+
+    Chạy lại được (sau đính chính báo cáo): khoản không đổi được giữ nguyên kèm giải trình và quyết định;
+    khoản thay đổi thì bản cũ hết hiệu lực (giữ lịch sử) và bản mới thay thế, nên mỗi ca và phương thức
+    chỉ có một khoản đang tính vào tích lũy và giá trị kiểm soát.
+    """
+    from apps.control.models import LossEvidence
+
+    actual = shift.report.effective()
     f = figures(shift)
     at = shift.closed_at or shift.ends_at  # ngưỡng của ca là ngưỡng có hiệu lực lúc kết ca
     cash_limit, transfer_limit = params.get("cash_threshold", at=at), params.get("transfer_threshold", at=at)
     rows = [
-        (Discrepancy.Method.CASH, f["expected_cash"], report.counted_cash, cash_limit),
-        (Discrepancy.Method.TRANSFER_IN, f["revenue_transfer"], report.transfer_received, transfer_limit),
-        (Discrepancy.Method.TRANSFER_REFUND, f["refunds_transfer"], report.transfer_refunded, transfer_limit),
+        (Discrepancy.Method.CASH, f["expected_cash"], actual["counted_cash"], cash_limit),
+        (Discrepancy.Method.TRANSFER_IN, f["revenue_transfer"], actual["transfer_received"], transfer_limit),
+        (Discrepancy.Method.TRANSFER_REFUND, f["refunds_transfer"], actual["transfer_refunded"], transfer_limit),
     ]
     created = []
-    for method, expected, actual, threshold in rows:
+    now = timezone.now()
+    for method, expected, real, threshold in rows:
         # Với tiền hoàn, chi ra nhiều hơn mức đã duyệt là thiếu tiền: đổi dấu để "âm" luôn nghĩa là thiếu.
-        diff = (expected - actual) if method == Discrepancy.Method.TRANSFER_REFUND else (actual - expected)
+        diff = (expected - real) if method == Discrepancy.Method.TRANSFER_REFUND else (real - expected)
+        old = Discrepancy.objects.current().filter(shift=shift, method=method).first()
+        if old is not None and (old.expected, old.actual, old.difference) == (expected, real, diff):
+            continue
+        if old is not None:
+            if LossEvidence.objects.filter(discrepancy=old).exists():
+                raise ValidationError(f"Khoản chênh lệch {old.get_method_display().lower()} của ca đã là bằng chứng "
+                                      f"trong vụ việc tổn thất; đính chính vụ việc trước khi đối soát lại.")
+            old.superseded_at, old.superseded_by = now, correction
+            old.save(update_fields=["superseded_at", "superseded_by", "updated_at"])
+            record(Action.STATUS_CHANGE, obj=old, object_type="shifts.Discrepancy", actor_label="hệ thống",
+                   before={"chenh_lech": old.difference}, after={"hieu_luc": "Hết hiệu lực do đối soát lại"},
+                   reason=correction.reason if correction else "Đối soát lại theo số liệu mới")
         if diff == 0:
             continue
         d = Discrepancy.objects.create(store=shift.store, shift=shift, method=method, expected=expected,
-                                       actual=actual, difference=diff, manager=shift.approver,
+                                       actual=real, difference=diff, manager=shift.approver,
                                        over_threshold=abs(diff) > threshold, threshold=threshold)
         record(Action.CREATE, obj=d, object_type="shifts.Discrepancy", actor_label="hệ thống",
-               after={"phuong_thuc": d.get_method_display(), "phai_co": expected, "thuc_te": actual,
-                      "chenh_lech": diff, "nguong": threshold, "vuot_nguong": d.over_threshold})
+               after={"phuong_thuc": d.get_method_display(), "phai_co": expected, "thuc_te": real,
+                      "chenh_lech": diff, "nguong": threshold, "vuot_nguong": d.over_threshold,
+                      "dinh_chinh": correction.pk if correction else None})
         created.append(d)
     check_accumulated(shift)
     return created
 
 
+# ---------------- Đính chính báo cáo cuối ca (GD-11) ----------------
+
+def request_correction(user, operation_key, shift_id, counted_cash, transfer_received, transfer_refunded=0, reason=""):
+    payload = {"shift": int(shift_id), "cash": str(counted_cash), "in": str(transfer_received),
+               "out": str(transfer_refunded or 0), "reason": str(reason or "").strip()}
+
+    def action():
+        report = ShiftReport.objects.select_for_update().select_related("shift").get(shift_id=payload["shift"])
+        if not payload["reason"]:
+            raise ValidationError("Ghi lý do đính chính báo cáo cuối ca.")
+        if report.corrections.filter(status=ShiftReportCorrection.Status.PENDING).exists():
+            raise ValidationError("Báo cáo này đang có một đề nghị đính chính chờ duyệt.")
+        values = (_money(counted_cash, "Tiền mặt đếm"), _money(transfer_received, "Tiền chuyển khoản nhận"),
+                  _money(transfer_refunded or 0, "Tiền hoàn chuyển khoản"))
+        current = report.effective()
+        if values == (current["counted_cash"], current["transfer_received"], current["transfer_refunded"]):
+            raise ValidationError("Số liệu đính chính trùng số đang có hiệu lực.")
+        c = ShiftReportCorrection.objects.create(
+            store=report.store, report=report, counted_cash=values[0], transfer_received=values[1],
+            transfer_refunded=values[2], reason=payload["reason"], requested_by=user, operation_key=operation_key)
+        record(Action.CREATE, actor=user, obj=c, object_type="shifts.ShiftReportCorrection",
+               before={"tien_mat_dem": current["counted_cash"], "ck_nhan": current["transfer_received"],
+                       "ck_hoan": current["transfer_refunded"]},
+               after={"tien_mat_dem": values[0], "ck_nhan": values[1], "ck_hoan": values[2]}, reason=payload["reason"])
+        if user.is_owner:
+            # Chủ quán tự đề nghị thì đồng thời là người duyệt (giả định GD-14).
+            _approve_correction(c, user, "Chủ quán tự đính chính")
+        return {"correction": c.pk}
+
+    return run_once(operation_key, "report_correction", payload, action, actor=user)
+
+
+def _approve_correction(c, user, note):
+    c.status, c.decided_by, c.decided_at, c.decision_note = (ShiftReportCorrection.Status.APPROVED, user,
+                                                             timezone.now(), note[:255])
+    c.save(update_fields=["status", "decided_by", "decided_at", "decision_note", "updated_at"])
+    record(Action.STATUS_CHANGE, actor=user, obj=c, object_type="shifts.ShiftReportCorrection",
+           after={"trang_thai": c.get_status_display()}, reason=note)
+    reconcile(c.report.shift, correction=c)
+
+
 @transaction.atomic
+def decide_correction(user, correction_id, approve, note=""):
+    if not user.is_owner:
+        raise ValidationError("Chỉ Chủ quán duyệt đính chính báo cáo cuối ca.")
+    c = ShiftReportCorrection.objects.select_for_update().select_related("report__shift").get(pk=correction_id)
+    wanted = ShiftReportCorrection.Status.APPROVED if approve else ShiftReportCorrection.Status.REJECTED
+    if c.status == wanted:
+        return c
+    if c.status != ShiftReportCorrection.Status.PENDING:
+        raise ValidationError("Đề nghị đính chính này đã được xử lý.")
+    if approve:
+        _approve_correction(c, user, note)
+    else:
+        c.status, c.decided_by, c.decided_at, c.decision_note = wanted, user, timezone.now(), note[:255]
+        c.save(update_fields=["status", "decided_by", "decided_at", "decision_note", "updated_at"])
+        record(Action.STATUS_CHANGE, actor=user, obj=c, object_type="shifts.ShiftReportCorrection",
+               after={"trang_thai": c.get_status_display()}, reason=note)
+    return c
+
+
 def explain(user, discrepancy_id, text):
     d = Discrepancy.objects.select_for_update().get(pk=discrepancy_id)
+    if d.superseded_at:
+        raise ValidationError("Khoản chênh lệch này đã hết hiệu lực sau đối soát lại.")
     if user.pk != d.manager_id and not user.is_owner:
         raise ValidationError("Chỉ Quản lý ca phụ trách giải trình khoản chênh lệch này.")
     if not text.strip():
@@ -271,6 +386,8 @@ def decide(user, discrepancy_id, accept):
     wanted = Discrepancy.Decision.ACCEPTED if accept else Discrepancy.Decision.REJECTED
     if d.decision == wanted:
         return d  # bấm lại cùng quyết định: không ghi thêm
+    if d.superseded_at:
+        raise ValidationError("Khoản chênh lệch này đã hết hiệu lực sau đối soát lại.")
     if d.decision:
         raise ValidationError("Khoản chênh lệch này đã có quyết định.")
     if d.over_threshold and not d.explanation:
@@ -291,7 +408,7 @@ def check_accumulated(shift):
 
     start = timezone.localtime(shift.starts_at)
     period = f"{start:%Y-%m}"
-    month = Discrepancy.objects.filter(shift__starts_at__year=start.year, shift__starts_at__month=start.month,
+    month = Discrepancy.objects.current().filter(shift__starts_at__year=start.year, shift__starts_at__month=start.month,
                                        difference__lt=0)
     shortages = [d for d in month if d.is_unexplained_shortage]
     by_manager = {}
@@ -321,8 +438,8 @@ def check_accumulated(shift):
 def accumulated_report(year, month):
     """Tích lũy thiếu chưa giải thích theo Quản lý ca, loại ca và tháng (AC-28)."""
     rows = {}
-    for d in Discrepancy.objects.filter(shift__starts_at__year=year, shift__starts_at__month=month,
-                                        difference__lt=0).select_related("manager", "shift"):
+    for d in Discrepancy.objects.current().filter(shift__starts_at__year=year, shift__starts_at__month=month,
+                                                  difference__lt=0).select_related("manager", "shift"):
         if not d.is_unexplained_shortage:
             continue
         key = (str(d.manager), d.shift.name)
