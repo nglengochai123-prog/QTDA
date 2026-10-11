@@ -1,5 +1,5 @@
 {% load static %}// Service worker tối thiểu: cài lên màn hình chính và hiện trang mất kết nối có đủ giao diện.
-// Lưu nháp, đồng bộ lại và Web Push sẽ bổ sung ở các phần sau (NFR-16, NFR-17).
+// Nhận thông báo đẩy (NFR-17): hiện thông báo kể cả khi ứng dụng đóng, chạm vào mở đúng màn hình.
 const CACHE = "lam-shell-v2";
 const OFFLINE_URL = "{% url 'core:offline' %}";
 const SHELL = [OFFLINE_URL, "{% static 'css/app.css' %}", "{% static 'js/app.js' %}"];
@@ -36,4 +36,19 @@ self.addEventListener("fetch", (event) => {
         .catch(() => caches.match(request))
     );
   }
+});
+
+self.addEventListener("push", (event) => {
+  let data = { title: "LAM Coffee", body: "", url: "/canh-bao/" };
+  try { data = Object.assign(data, event.data ? event.data.json() : {}); } catch (e) { /* nội dung không phải JSON */ }
+  event.waitUntil(self.registration.showNotification(data.title, { body: data.body, data: { url: data.url }, tag: data.url }));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/";
+  event.waitUntil(clients.matchAll({ type: "window" }).then((list) => {
+    for (const client of list) { if ("focus" in client) { client.navigate(url); return client.focus(); } }
+    return clients.openWindow(url);
+  }));
 });

@@ -3,7 +3,7 @@ from django.db import connection
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
 
 
 @login_required
@@ -69,3 +69,32 @@ def service_worker(request):
 @require_GET
 def offline(request):
     return render(request, "pwa/offline.html")
+
+
+@login_required
+@require_POST
+def push_subscribe(request):
+    """Lưu đăng ký nhận thông báo đẩy của thiết bị đang dùng."""
+    import json
+
+    from .models import PushSubscription
+
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+        endpoint, keys = body["endpoint"], body["keys"]
+        PushSubscription.objects.update_or_create(
+            endpoint=endpoint, defaults={"user": request.user, "p256dh": keys["p256dh"], "auth": keys["auth"],
+                                         "user_agent": request.headers.get("User-Agent", "")[:200], "is_active": True})
+    except (ValueError, KeyError, TypeError):
+        return JsonResponse({"ok": False, "error": "Đăng ký không hợp lệ."}, status=400)
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_GET
+def push_status(request):
+    from . import push
+
+    ready, reason = push.status()
+    return JsonResponse({"ready": ready, "reason": reason, "public_key": push.public_key(),
+                         "devices": request.user.push_subscriptions.filter(is_active=True).count()})

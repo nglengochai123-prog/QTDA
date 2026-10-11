@@ -175,6 +175,7 @@ def sync(now=None):
                    after={"loai": alert.get_kind_display(), "giao": alert.handler_label(),
                           "han": timezone.localtime(alert.due_at).isoformat()})
             created.append(alert.pk)
+            _push(alert)
             continue
         if alert.level == 0 and (alert.assignee_id != getattr(item["assignee"], "pk", None)
                                  or alert.assignee_role != item["role"]):
@@ -200,6 +201,17 @@ def _escalate(alert, now):
     record(Action.STATUS_CHANGE, obj=alert, object_type="control.Alert", actor_label="hệ thống",
            after={"cap": "Chủ quán" if alert.level else alert.handler_label(), "nhac_lai": alert.reminded_count},
            reason=reason)
+    _push(alert)
+
+
+def _push(alert):
+    """Gửi thông báo đẩy khi giao hoặc chuyển cấp; lỗi gửi không làm hỏng việc ghi cảnh báo."""
+    try:
+        from apps.core.push import notify_alert
+
+        notify_alert(alert)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _close(alert, user, note, auto=False, now=None):

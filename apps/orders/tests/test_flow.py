@@ -173,23 +173,30 @@ class OrderFlowTests(TestCase):
 class ConcurrentOrderTests(TransactionTestCase):
     """Hai đơn gửi cùng lúc cần phần tồn cuối: chỉ một đơn được nhận (NFR-04)."""
 
-    APPEND_ONLY = ("audit_auditlog", "inventory_stockmovement")
+    @staticmethod
+    def _triggers(direction):
+        """Câu lệnh tạo hoặc bỏ trigger chỉ-thêm-mới theo đúng loại CSDL (SQLite hoặc PostgreSQL)."""
+        import importlib
+
+        audit = importlib.import_module("apps.audit.migrations.0002_append_only_triggers")
+        inventory = importlib.import_module("apps.inventory.migrations.0003_stockmovement_append_only")
+        vendor = connection.vendor
+        audit_sql = {"up": {"sqlite": audit.SQLITE_UP, "postgresql": audit.POSTGRES_UP},
+                     "down": {"sqlite": audit.SQLITE_DOWN, "postgresql": audit.POSTGRES_DOWN}}[direction]
+        inventory_sql = (inventory.UP if direction == "up" else inventory.DOWN)
+        return audit_sql.get(vendor, []) + inventory_sql.get(vendor, [])
 
     def tearDown(self):
         # Dọn dữ liệu kiểm thử cần tạm bỏ trigger chỉ-thêm-mới; tạo lại ngay ở lần kiểm thử sau.
         with connection.cursor() as cursor:
-            for table in self.APPEND_ONLY:
-                cursor.execute(f"DROP TRIGGER IF EXISTS {table}_no_update")
-                cursor.execute(f"DROP TRIGGER IF EXISTS {table}_no_delete")
+            for sql in self._triggers("down"):
+                cursor.execute(sql)
         super().tearDown()
 
     def setUp(self):
         with connection.cursor() as cursor:
-            for table in self.APPEND_ONLY:
-                for op in ("update", "delete"):
-                    cursor.execute(
-                        f"CREATE TRIGGER IF NOT EXISTS {table}_no_{op} BEFORE {op.upper()} ON {table} "
-                        f"BEGIN SELECT RAISE(ABORT, 'chi duoc them moi'); END;")
+            for sql in self._triggers("down") + self._triggers("up"):
+                cursor.execute(sql)
         self.d = build_menu(coffee_opening=20, milk_opening=1000)  # vừa đủ một ly
 
     def test_two_orders_compete_for_last_stock(self):

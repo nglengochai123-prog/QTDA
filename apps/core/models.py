@@ -107,3 +107,20 @@ class ParameterValue(models.Model):
 
     def delete(self, *args, **kwargs):
         raise ValueError("Không xóa lịch sử tham số.")
+
+
+class PushSubscription(models.Model):
+    """Một thiết bị đã cho phép nhận thông báo đẩy (NFR-17)."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người dùng", on_delete=models.CASCADE,
+                             related_name="push_subscriptions")
+    endpoint = models.URLField("Địa chỉ đẩy", max_length=500, unique=True)
+    p256dh = models.CharField("Khóa thiết bị", max_length=200)
+    auth = models.CharField("Khóa xác thực", max_length=100)
+    user_agent = models.CharField("Thiết bị", max_length=200, blank=True)
+    is_active = models.BooleanField("Đang dùng", default=True)
+    created_at = models.DateTimeField("Đăng ký lúc", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Thiết bị nhận thông báo"
+        verbose_name_plural = "Thiết bị nhận thông báo"

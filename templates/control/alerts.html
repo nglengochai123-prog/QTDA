@@ -1,8 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Cảnh báo · {{ STORE_NAME }}{% endblock %}
+{% block scripts %}{% load static %}<script src="{% static 'js/push.js' %}" defer></script>{% endblock %}
 {% block content %}
 <h1>Cảnh báo của bạn</h1>
 <p class="lead-muted">Mỗi cảnh báo có người xử lý chính và thời hạn theo Bảng 5.4. Quá hạn thì chuyển Chủ quán hoặc nhắc lại. Cảnh báo tự đóng khi điều kiện không còn; đóng tay phải ghi kết quả.</p>
+<div class="notice notice-info" data-push data-status-url="{% url 'core:push_status' %}" data-subscribe-url="{% url 'core:push_subscribe' %}" data-csrf="{{ csrf_token }}">
+  <svg class="icon" aria-hidden="true"><use href="#i-alerts"/></svg>
+  <div><strong>Thông báo đẩy trên điện thoại.</strong> <span data-push-text>Đang kiểm tra…</span>
+    <button class="btn btn-quiet" type="button" hidden>Bật thông báo trên thiết bị này</button></div>
+</div>
 {% if stats %}<p class="muted">7 ngày qua: {{ stats.total }} cảnh báo, {{ stats.to_owner }} đến Chủ quán, {{ stats.escalated }} bị chuyển cấp{% if stats.avg_minutes is not None %}, xử lý trung bình {{ stats.avg_minutes }} phút{% endif %}.</p>{% endif %}
 {% if open %}
 <ul class="ruled-list">
@@ -24,3 +30,4 @@
 {% if closed %}<h2>Đã đóng gần đây</h2>
 <ul class="ruled-list compact">{% for a in closed %}<li class="row-between"><span>{{ a.title }} · {{ a.close_note }}</span><span class="muted">{{ a.closed_at|date:"H:i d/m" }} · {{ a.handling_minutes|floatformat:"0" }} phút</span></li>{% endfor %}</ul>{% endif %}
 {% endblock %}
+{% block scripts %}{% load static %}<script src="{% static 'js/push.js' %}" defer></script>{% endblock %}

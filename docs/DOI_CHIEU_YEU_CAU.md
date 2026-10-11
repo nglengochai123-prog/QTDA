@@ -44,7 +44,7 @@ Trạng thái: **Đúng** là làm đủ theo BRD và có kiểm thử; **Một 
 | FR-03 | Vòng đời đơn | Đúng | AC-06, AC-07 |
 | FR-04 | Thanh toán theo bàn | Đúng | AC-08, AC-09, AC-10; trạng thái chờ duyệt và quá hạn mọi cấp tính khi đọc |
 | FR-05 | In hóa đơn | Chưa làm | Could, Giai đoạn 3 theo BRD |
-| FR-06 | Bán hàng dự phòng, nhập bù | Đúng | AC-12, AC-13 (`orders/tests/test_backup.py`): cấp dãy theo ca có người nhận; nhập bù có mã nghiệp vụ thì liên kết đơn đã lưu và chỉ bổ sung phần thiếu; phiếu không mã tạo đơn theo định mức lúc bán; gửi lại không ghi thêm; nháp gửi lại trả đơn đã nhập bù; số trùng, ngoài dãy, quá hạn, hủy tạo ngoại lệ; kết ca bị chặn khi còn số chưa xử lý. Màn hình /du-phong/ |
+| FR-06 | Bán hàng dự phòng, nhập bù | Đúng | AC-12, AC-13 (`orders/tests/test_backup.py`): kích cỡ và tùy chọn; giá theo lịch sử giá, định mức theo phiên bản tại thời điểm bán; thiếu lịch sử thì chờ Chủ quán xác nhận có nhật ký; cấp dãy theo ca có người nhận; nhập bù có mã nghiệp vụ thì liên kết đơn đã lưu và chỉ bổ sung phần thiếu; phiếu không mã tạo đơn theo định mức lúc bán; gửi lại không ghi thêm; nháp gửi lại trả đơn đã nhập bù; số trùng, ngoài dãy, quá hạn, hủy tạo ngoại lệ; kết ca bị chặn khi còn số chưa xử lý. Màn hình /du-phong/ |
 | FR-07 | Quỹ tiền mặt ca | Đúng | AC-14, AC-15 |
 | FR-08 | Kết ca, báo cáo cuối ca | Một phần | AC-16, AC-17 đúng; đính chính báo cáo có lý do và người duyệt (GD-11); "Chủ quán nhận thông báo" mới là thông báo trong ứng dụng, chưa có Web Push |
 | FR-09 | Tình trạng dữ liệu ca | Một phần | Có chưa kết ca, thiếu báo cáo quá hạn (AC-18). Chưa có: kiểm kê nhóm trọng yếu trước giờ mở cửa hôm sau, nhập bù (Phần 4), cảnh báo chuyển Chủ quán khi quá hạn xử lý (cùng FR-51) |
@@ -139,8 +139,8 @@ Chủ quán trả lời ngày 11/10/2026. Cột "Đã làm" ghi cách hệ thố
 | GD-14 | Quản lý ca đề nghị đính chính thì Chủ quán duyệt; nếu chính Chủ quán đề nghị thì được ghi là tự duyệt ngay, có nhật ký | Quán chỉ có một Chủ quán, không có cấp duyệt cao hơn |
 | GD-15 | Không duyệt được đính chính nếu khoản chênh lệch sẽ thay đổi đã là bằng chứng trong vụ việc tổn thất; phải đính chính vụ việc trước | Tránh vụ việc trỏ vào số đã hết hiệu lực và tính trùng tổn thất |
 | GD-16 | Khoản hoàn đã duyệt nhưng chưa trả khách không chặn kết ca; nó hiện ở trang Ca của tôi cho đến khi có người bấm "Đã hoàn tiền" | Tiền chưa rời quỹ thì không thuộc ca nào |
-| GD-17 | Đơn nhập bù tính tiền theo bảng giá hiện hành lúc nhập bù | Hệ thống chưa lưu lịch sử giá; định mức thì đã theo phiên bản lúc bán |
-| GD-18 | Biểu mẫu nhập bù chỉ ghi món, kích cỡ, số ly; chưa ghi tùy chọn | Giữ biểu mẫu ngắn để nhập nhanh; nếu quán hay bán tùy chọn có thêm tiền khi mất mạng thì cần bổ sung |
+| GD-17 | ~~Đơn nhập bù tính tiền theo bảng giá hiện hành~~ Đã thay (12/10/2026): giá theo lịch sử giá tại thời điểm bán; thiếu lịch sử thì Chủ quán xác nhận | Theo yêu cầu của Chủ quán |
+| GD-18 | ~~Biểu mẫu nhập bù chưa ghi tùy chọn~~ Đã thay: ghi kích cỡ và tùy chọn | Theo yêu cầu của Chủ quán |
 | GD-20 | Một người được tính có mặt trong khung giờ khi làm ít nhất nửa khung (AC-76: vào 16:55, ra 22:05 được tính 17 đến 22 giờ) | BRD không nêu cách tính khung lẻ |
 | GD-21 | Mức món tồn tại quầy cho phép cuối khung giờ: 15 ly (tham số) | BRD không nêu giá trị |
 | GD-22 | Cảnh báo đã được người xử lý đóng tay thì không tự mở lại cho cùng đối tượng dù điều kiện còn; cảnh báo "Chênh lệch tiền" chuyển từ Quản lý ca sang Chủ quán khi đã có giải trình | Tránh nhắc lặp cùng một việc đã có kết quả |
@@ -161,3 +161,19 @@ Chủ quán trả lời ngày 11/10/2026. Cột "Đã làm" ghi cách hệ thố
 | Thiếu nguyên liệu | `ShortageCase` (nguyên liệu, ngày, nguồn) | Tối đa một trường hợp mỗi nguyên liệu mỗi ngày |
 | Nhân sự có mặt theo vai trò | `staff.Attendance` (vai trò, vào ca, ra ca); `staff.timekeeping.presence` đếm theo khung giờ | Lượt thiếu giờ ra không được tính cho đến khi Quản lý ca bổ sung |
 | Tải và thời gian chờ theo khung giờ | `orders.workload.day_frames` | Đơn nhập bù tính tải theo giờ bán trên phiếu, không tính thời gian chờ |
+
+## 8. Rà soát quyết định còn ảnh hưởng tính đúng (12/10/2026)
+
+| Mã | Đang làm | Ảnh hưởng | Đề xuất | Cần Hai quyết |
+|---|---|---|---|---|
+| GD-17, GD-18 | Đã thay theo yêu cầu: giá và định mức tại thời điểm bán, có kích cỡ và tùy chọn | Doanh thu và tiêu hao của phiếu nhập bù đúng với lúc bán | Giữ | Không |
+| GD-24 (mới) | Lịch sử giá bắt đầu ghi từ 12/10/2026. Phiếu bán trước mốc này, hoặc khi chưa có định mức hiệu lực, chờ **Chủ quán** nhập đơn giá đã bán và chọn phiên bản định mức, kèm căn cứ; chưa ghi đơn, chưa trừ kho, chưa thu tiền và chặn kết ca cho đến khi xác nhận | Không đoán giá; có thêm một bước cho Chủ quán trong những ngày đầu | Giữ; giao quyền xác nhận cho Chủ quán vì chỉ Chủ quán sửa giá (BRU-39) | Không, trừ khi muốn Quản lý ca được xác nhận |
+| GD-19 | Mỗi dãy phiếu phải khai báo số cuối đã dùng trước khi kết ca | Thêm một thao tác mỗi ca có dãy phiếu; bù lại phát hiện được phiếu cuối bị bỏ sót | Giữ | Không |
+| GD-20 | Có mặt trong khung giờ khi làm ít nhất nửa khung | Ảnh hưởng số người có mặt trên trang Tải; khớp ví dụ AC-76 | Giữ | Không |
+| GD-21 | Món tồn quầy cho phép 15 ly cuối khung (tham số, giả định) | Quyết định khung nào bị đánh dấu Quá tải | Giữ làm mặc định, chỉnh sau 2 tuần chạy thử theo NFR-23 | Không gấp |
+| GD-22 | Cảnh báo đã đóng tay không tự mở lại cho cùng đối tượng | Nếu đóng sai, việc còn tồn có thể không được nhắc lại | Giữ; mỗi lần đóng bắt buộc ghi kết quả và có nhật ký để soát | Không |
+| GD-23 | Doanh thu tính theo thời điểm thanh toán; "nhân viên" là người tạo đơn; khung giờ theo giờ gửi pha chế | Quyết định cách đọc báo cáo doanh thu | Giữ | Không |
+| GD-25 (sửa lỗi) | Báo cáo doanh thu trước đây loại đơn đã hủy sau thanh toán **và** trừ thêm khoản hoàn, nên khoản hoàn bị trừ hai lần. Đã sửa: doanh thu là số khách đã trả, hoàn tiền trừ một lần ở doanh thu thuần, khớp BRU-10 và quỹ ca | Số doanh thu thuần trước 12/10 trên báo cáo bị thấp hơn thực tế | Đã sửa, có kiểm thử | Không |
+| GD-26 (sửa lỗi) | Nhật ký từ chối quyền bị mất khi giao dịch của yêu cầu bị hủy; người không đúng cấp bấm duyệt chỉ nhận thông báo lỗi, không bị từ chối và ghi nhật ký | AC-111 không đạt trên trình duyệt thật | Đã sửa, có kiểm thử qua giao diện web | Không |
+| GD-13 | PostgreSQL chưa cài | Chưa kết luận an toàn đồng thời trên CSDL vận hành | Cài theo `docs/VAN_HANH.md` mục 4 | **Có**: cho phép cài |
+| NFR-17 | Thông báo đẩy chưa gửi thật | Cảnh báo chỉ thấy khi mở ứng dụng | Cài `pywebpush`, tạo khóa VAPID, có HTTPS | **Có**: cho phép cài thư viện và chọn cách có HTTPS cho điện thoại |
