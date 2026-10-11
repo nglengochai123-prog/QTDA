@@ -35,6 +35,7 @@ def home(request):
              f"{RecipeVersion.objects.filter(status='nhap').count()} bản nháp", False),
             ("Nhật ký thao tác", reverse("admin:audit_auditlog_changelist"), "", False),
         ]
+    context["can_dashboard"] = user_can(request.user, Cap.VIEW_DASHBOARD)
     if request.user.is_owner:
         from apps.shifts.services import shifts_missing_backup
 

@@ -165,6 +165,32 @@ def materials(start_day, end_day):
 
 # ---------------- FR-50: bảng điều khiển ----------------
 
+def shift_panel(user):
+    """Phần dành cho Quản lý ca (và Chủ quán): tình hình ca đang mở và việc của mình."""
+    from apps.control.alerts import visible_to
+    from apps.inventory.models import QuickReport
+    from apps.orders.adjustments import pending_for
+    from apps.orders.models import Order
+    from apps.shifts.models import Shift
+    from apps.shifts.services import figures
+    from apps.staff.models import Attendance
+    from apps.staff.timekeeping import WORK_ROLES
+    from apps.accounts.models import Role
+
+    shift = Shift.objects.current()
+    present = {Role(r).label: 0 for r in WORK_ROLES}
+    for att in Attendance.objects.filter(clock_out__isnull=True):
+        present[att.get_role_display()] = present.get(att.get_role_display(), 0) + 1
+    return {
+        "shift": shift, "figures": figures(shift) if shift else None,
+        "open_orders": Order.objects.exclude(status__in=["da_thanh_toan", "da_huy"]).count(),
+        "approvals": len(pending_for(user)),
+        "my_alerts": visible_to(user).filter(status__in=["moi", "dang_xu_ly"]).count(),
+        "quick_reports": QuickReport.objects.filter(acknowledged_at__isnull=True).count(),
+        "present": present,
+    }
+
+
 def dashboard(today=None):
     from apps.control.models import Alert, ExceptionCase
     from apps.control.services import BO01_MONTHLY_TARGET, monthly_control

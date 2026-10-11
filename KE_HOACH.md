@@ -36,7 +36,7 @@ Mã nguồn được quản lý bằng Git trong `D:\QTDA` (nhánh main, chưa c
 - [x] Đăng nhập, đăng xuất (chỉ bằng POST), tạm khóa sau 5 lần sai mật khẩu trong 15 phút, Chủ quán khóa và mở tài khoản
 - [x] Ma trận phân quyền Bảng 5.3 kiểm tra tại máy chủ cho cả 5 vai trò; bị từ chối thì ghi nhật ký (AC-111); trang dữ liệu nền chỉ Chủ quán (AC-114)
 - [x] PWA tối thiểu (manifest, service worker, trang mất kết nối), dải cảnh báo mất kết nối trong 10 giây, /healthz/
-- [x] PRODUCT.md, DESIGN.md (định hướng tạm thời: vở ô ly, mực tím, lề đỏ); giao diện đăng nhập, bố cục chung, tạo đơn, quầy pha chế, tồn kho
+- [x] PRODUCT.md, DESIGN.md (từ 12/10/2026: phong cách quản trị vuông vức theo UI UX Pro Max, thay định hướng tạm vở ô ly); giao diện đăng nhập, bố cục chung, tạo đơn, quầy pha chế, tồn kho
 - [x] Lệnh `tao_du_lieu_mau` tạo dữ liệu mẫu để chạy thử (không phải thực đơn thật)
 
 ## Phần 1: Nền tảng và luồng bán hàng cốt lõi (Sprint 1, đã xong trừ các mục còn mở)

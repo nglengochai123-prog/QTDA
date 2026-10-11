@@ -13,6 +13,12 @@
     <ul class="notice-list">{% for s in missing_backup %}<li><a href="{% url 'admin:shifts_shift_change' s.pk %}">{{ s }} ({{ s.starts_at|date:"H:i" }}–{{ s.ends_at|date:"H:i" }})</a></li>{% endfor %}</ul></div></div>
 {% endif %}
 
+{% if can_dashboard %}
+<ul class="ruled-list home-links">
+  <li><a href="{% url 'reports:dashboard' %}"><span><strong>Bảng điều khiển</strong></span><span class="count"><svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></span></a></li>
+</ul>
+{% endif %}
+
 {% if master_data %}
 <h2>Dữ liệu nền</h2>
 <p>Khai báo đủ món, kích cỡ, nguyên vật liệu và định mức trước khi mở bán. Món thiếu định mức sẽ không mở bán được.</p>

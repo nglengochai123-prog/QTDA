@@ -29,7 +29,10 @@ def _period(request):
 @capability_required(Cap.VIEW_DASHBOARD)
 @require_GET
 def dashboard(request):
-    return render(request, "reports/dashboard.html", services.dashboard())
+    context = services.dashboard()
+    context["ops"] = services.shift_panel(request.user)
+    context["is_owner"] = request.user.is_owner
+    return render(request, "reports/dashboard.html", context)
 
 
 @capability_required(Cap.VIEW_DASHBOARD)

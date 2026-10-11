@@ -90,11 +90,12 @@ class ReportTests(Base):
         self.paid()
         self.d["milk"].is_critical = True
         self.d["milk"].save()
-        for user in (self.d["owner"], self.manager):
+        for user, sees_bo in ((self.d["owner"], True), (self.manager, False)):
             self.client.login(username=user.username, password=PASSWORD)
             page = self.client.get(reverse("reports:dashboard"))
-            self.assertContains(page, "BO-01")
+            self.assertContains(page, "Ca đang mở")
             self.assertContains(page, "Sữa đặc")
+            (self.assertContains if sees_bo else self.assertNotContains)(page, "BO-01")
         self.assertEqual(self.client.get(reverse("reports:revenue_control")).status_code, 403)  # Quản lý ca
         for name in ("reports:revenue", "reports:materials"):
             self.assertEqual(self.client.get(reverse(name)).status_code, 200)

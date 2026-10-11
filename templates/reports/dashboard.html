@@ -2,9 +2,23 @@
 {% load humanize %}
 {% block title %}Bảng điều khiển · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<h1>Bảng điều khiển tháng {{ today|date:"m/Y" }}</h1>
+<h1>Bảng điều khiển</h1>
+<section class="panel" aria-labelledby="ops-title">
+  <h2 id="ops-title">Ca đang mở{% if ops.shift %}: {{ ops.shift }} {{ ops.shift.starts_at|date:"H:i" }}–{{ ops.shift.ends_at|date:"H:i" }}{% endif %}</h2>
+  <dl class="figure-grid">
+    {% if ops.figures %}<div class="figure-key"><dt>Doanh thu ca đến giờ</dt><dd>{{ ops.figures.revenue_total|intcomma }} đ</dd></div>
+    <div><dt>Tiền mặt phải có</dt><dd>{{ ops.figures.expected_cash|intcomma }} đ</dd></div>{% else %}<div><dt>Ca</dt><dd class="dd-text">Không có ca đang mở</dd></div>{% endif %}
+    <div><dt>Đơn đang mở</dt><dd><a href="{% url 'orders:open_orders' %}">{{ ops.open_orders }}</a></dd></div>
+    <div><dt>Yêu cầu chờ bạn duyệt</dt><dd><a href="{% url 'orders:approvals' %}">{{ ops.approvals }}</a></dd></div>
+    <div><dt>Cảnh báo của bạn</dt><dd><a href="{% url 'control:alerts' %}">{{ ops.my_alerts }}</a></dd></div>
+    <div><dt>Báo nhanh nguyên liệu chưa xử lý</dt><dd><a href="{% url 'inventory:stock' %}">{{ ops.quick_reports }}</a></dd></div>
+    {% for role, n in ops.present.items %}<div><dt>{{ role }} đang trong ca</dt><dd>{{ n }}</dd></div>{% endfor %}
+  </dl>
+</section>
+
+{% if is_owner %}
 <section class="panel" aria-labelledby="bo-title">
-  <h2 id="bo-title">Chỉ tiêu</h2>
+  <h2 id="bo-title">Chỉ tiêu tháng {{ today|date:"m/Y" }} (Chủ quán)</h2>
   <dl class="figure-grid">
     <div class="figure-key"><dt>BO-01 · Giá trị kiểm soát tạm tính</dt><dd>{{ control.control_value|intcomma }} đ</dd></div>
     <div><dt>Mục tiêu BO-01</dt><dd>dưới {{ bo01_target|intcomma }} đ · {% if bo01_met %}đang đạt{% else %}<span class="text-warn">chưa đạt</span>{% endif %}</dd></div>
@@ -15,8 +29,9 @@
     <div class="figure-key"><dt>BO-02 · Trường hợp thiếu nguyên liệu</dt><dd>{{ shortages }}</dd></div>
     <div><dt>Mục tiêu BO-02</dt><dd>không quá {{ bo02_target }} · {% if bo02_met %}đang đạt{% else %}<span class="text-warn">chưa đạt</span>{% endif %}</dd></div>
   </dl>
-  {% if request.user.is_owner %}<p><a href="{% url 'reports:revenue_control' %}">Xem vụ việc và khoản chênh lệch cấu thành giá trị kiểm soát</a></p>{% endif %}
+  <p><a href="{% url 'reports:revenue_control' %}">Xem vụ việc và khoản chênh lệch cấu thành giá trị kiểm soát</a></p>
 </section>
+{% endif %}
 
 <div class="form-grid">
 <section class="panel" aria-labelledby="al-title">
