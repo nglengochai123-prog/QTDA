@@ -87,11 +87,13 @@ class OperationTests(TestCase):
         self.assertEqual(Receipt.objects.get().total, 640000)
 
     def test_receipt_without_photo_rejected(self):
-        # AC-55
-        lines = [{"ingredient": self.d["coffee"].pk, "quantity": "2000", "unit_price": 320}]
-        with self.assertRaises(ValidationError):
-            ops.create_receipt(self.d["barista"], key(), self.supplier.pk, lines, "tra_sau")
+        # AC-55 và FR-24: mọi phiếu nhập phải có ảnh hóa đơn, kể cả phiếu giá trị nhỏ.
+        for qty, price in (("2000", 320), ("10", 100)):
+            lines = [{"ingredient": self.d["coffee"].pk, "quantity": qty, "unit_price": price}]
+            with self.assertRaises(ValidationError):
+                ops.create_receipt(self.d["barista"], key(), self.supplier.pk, lines, "tra_sau")
         self.assertEqual(levels(self.d["coffee"])[0], D(1000))
+        self.assertFalse(Receipt.objects.exists())
 
     def test_partial_and_late_delivery(self):
         # AC-69, AC-68
@@ -99,7 +101,7 @@ class OperationTests(TestCase):
                                        timezone.localdate())
         ops.create_receipt(self.d["barista"], key(), self.supplier.pk,
                            [{"ingredient": self.d["milk"].pk, "quantity": "6000", "unit_price": 0, "purchase_order": po.pk}],
-                           "tra_ngay")
+                           "tra_ngay", invoice_photo=self.photo())
         po.refresh_from_db()
         self.assertEqual((po.status, po.remaining), (PurchaseOrder.Status.PARTIAL, D(4000)))
         ops.refresh_late(today=timezone.localdate() + timedelta(days=1))

@@ -21,7 +21,7 @@
     <label class="pick"><input type="radio" name="payment_type" value="tra_sau"><span>Trả sau</span></label></div></fieldset>
   <div class="field"><label for="r-src">Nguồn tiền khi trả ngay</label><select class="input" id="r-src" name="source">{% for v, l in sources %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></div>
   <div class="field"><label for="r-due">Hạn trả khi trả sau (ngày)</label><input class="input" id="r-due" name="due_days" inputmode="numeric" value="7"></div>
-  <div class="field"><label for="r-photo">Ảnh hóa đơn</label><input class="input" id="r-photo" type="file" name="invoice_photo" accept="image/*" capture="environment"><span class="hint">Bắt buộc với phiếu từ 500.000 đ.</span></div>
+  <div class="field"><label for="r-photo">Ảnh hóa đơn</label><input class="input" id="r-photo" type="file" name="invoice_photo" accept="image/*" capture="environment" required><span class="hint">Bắt buộc với mọi phiếu nhập.</span></div>
   <button class="btn btn-primary btn-block" type="submit">Lưu phiếu nhập</button>
 </form>
 {% endblock %}

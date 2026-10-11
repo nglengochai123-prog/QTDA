@@ -160,8 +160,9 @@ def create_receipt(user, operation_key, supplier_id, lines, payment_type, *, inv
                 po = PurchaseOrder.objects.select_for_update().get(pk=raw["purchase_order"], ingredient=ingredient)
             parsed.append((ingredient, qty, price, po))
         total = sum(int((q * p).to_integral_value()) for _, q, p, _ in parsed)
-        if total >= params.get("receipt_photo_threshold") and not invoice_photo:
-            raise ValidationError("Phiếu nhập từ 500.000 đồng phải có ảnh hóa đơn.")  # AC-55
+        if not invoice_photo:
+            # FR-24 và AC-55: phiếu nhập phải có ảnh hóa đơn khi lưu, không phụ thuộc giá trị.
+            raise ValidationError("Chụp ảnh hóa đơn hoặc phiếu giao hàng trước khi lưu phiếu nhập.")
         receipt = Receipt.objects.create(store=supplier.store, code=_next_receipt_code(), supplier=supplier,
                                          payment_type=payment_type, total=total, invoice_photo=invoice_photo or "",
                                          created_by=user, operation_key=operation_key)
