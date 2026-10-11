@@ -10,7 +10,22 @@ Mỗi phần là một lát cắt chạy được từ đầu đến cuối, là
 
 ## Tiến độ thực tế (cập nhật 11/10/2026)
 
-Trước ngày 11/10/2026 thư mục D:\QTDA chưa có mã nguồn; các mục Phần 1 từng đánh dấu đã xong là chưa đúng. Kiểm thử hiện tại: 122 bài, OK cả 122 (`.venv\Scripts\python.exe manage.py test`).
+Trước ngày 11/10/2026 thư mục D:\QTDA chưa có mã nguồn; các mục Phần 1 từng đánh dấu đã xong là chưa đúng. Kiểm thử hiện tại: 134 bài, OK cả 134 (`.venv\Scripts\python.exe manage.py test`). Số bài kiểm thử không phải bằng chứng hoàn thành; đối chiếu từng chức năng với báo cáo nằm ở `docs/DOI_CHIEU_YEU_CAU.md`.
+
+Mã nguồn được quản lý bằng Git trong `D:\QTDA` (nhánh main, chưa có kho từ xa).
+
+### Rà soát tích hợp Phần 1–3 (11/10/2026, xong)
+
+- [x] Bộ tài liệu chuẩn: BRD quyết định chức năng và quy tắc; PRODUCT.md bối cảnh; DESIGN.md giao diện; KE_HOACH.md tiến độ; `docs/DOI_CHIEU_YEU_CAU.md` đối chiếu, giả định và quyết định chờ Chủ quán
+- [x] AC-55, FR-24: phiếu nhập luôn cần ảnh hóa đơn; bỏ ngưỡng 500.000 đ tự đặt cho phiếu nhập (500.000 đ của BRU-33 chỉ áp cho khoản chi tiền mặt)
+- [x] Hoàn tiền khi hủy hóa đơn đã thanh toán: theo phương thức khách đã trả, ghi vào ca đang mở, mỗi yêu cầu tối đa một khoản, trừ một lần khi đối soát; không có ca mở thì chưa duyệt được (GD-07)
+- [x] Một nơi xử lý dùng chung: mọi thay đổi tồn kho qua `stock.move`; đơn, điều chỉnh, thanh toán, hoàn tiền, nhập, kiểm kê, hao hụt, vụ việc đều qua hàm nghiệp vụ (bảng ở mục 2 tài liệu đối chiếu)
+- [x] Chống ghi trùng cho cả thanh toán nhà cung cấp, ghi đặt hàng, lập vụ việc, thu hồi, xác minh, báo cáo cuối ca, quyết định chênh lệch
+- [x] Tham số có lịch sử và thời điểm hiệu lực; yêu cầu điều chỉnh giữ thời hạn lúc tạo; chênh lệch ca lưu ngưỡng đã dùng; kiểm kê lưu ngưỡng %; trang Tham số hiện căn cứ và giá trị giả định
+- [x] Kiểm tra quá hạn tách khỏi việc mở màn hình: cấp duyệt, giao chậm tính khi đọc; lệnh `chay_dinh_ky` ghi trạng thái và nhật ký
+- [x] Kiểm thử luồng xuyên suốt nhập hàng → báo cáo cuối ca; lệnh `kiem_tra_toan_ven` đối chiếu chéo sổ kho, đơn, tiền, ca
+- [ ] Kiểm tra hai đơn đồng thời trên PostgreSQL: máy chưa cài, chờ Hai cho phép (GD-13)
+- [ ] Lên lịch chạy `chay_dinh_ky` mỗi phút khi triển khai (Task Scheduler hoặc `--lap 60`)
 
 ### Nền tảng (xong)
 
@@ -46,7 +61,7 @@ Trước ngày 11/10/2026 thư mục D:\QTDA chưa có mã nguồn; các mục P
 - [x] Thanh toán theo bàn bằng tiền mặt hoặc chuyển khoản (chỉ khi đã thấy tiền về); chỉ khi mọi đơn đã phục vụ và không có yêu cầu chờ duyệt, báo rõ đang chờ cấp nào; gửi lại không ghi hai lần (FR-04, BRU-04, AC-07, AC-08, AC-09)
 - [x] Thanh toán theo món thực nhận khi yêu cầu quá hạn mọi cấp: chỉ người được ủy quyền, không phải người tạo yêu cầu; tiền tính theo giá bán; yêu cầu Chờ hậu kiểm và tạo ngoại lệ cho Chủ quán (AC-10)
 - [x] Yêu cầu điều chỉnh có lý do bắt buộc: hủy món, giảm số lượng, đổi món, chuyển bàn hoặc gộp bàn, hủy hóa đơn đã thanh toán (FR-10, BRU-08, AC-19, AC-20)
-- [x] Phê duyệt trên điện thoại; không tự duyệt; hủy hóa đơn chỉ Chủ quán; quá 3 phút chuyển người duyệt dự phòng, rồi Chủ quán, mỗi lần chuyển ghi nhật ký (FR-11, BRU-09, AC-22, AC-23, AC-24)
+- [x] Phê duyệt trên điện thoại; không tự duyệt; hủy hóa đơn chỉ Chủ quán; quá 3 phút chuyển người duyệt dự phòng, rồi Chủ quán; cấp hiện hành tính khi đọc, mỗi lần chuyển ghi nhật ký khi chạy `chay_dinh_ky` (FR-11, BRU-09, AC-22, AC-23, AC-24)
 - [x] Duyệt hủy món chờ pha trả lại tồn có thể dùng; món đã pha ghi Hủy sau pha chế, không trừ kho lần nữa (BRU-19, AC-21, AC-49)
 - [ ] Nhắc Chủ quán trước giờ ca khi ca chưa có người duyệt dự phòng (AC-113): hiện trang Ca làm việc đã báo "Còn thiếu", chưa có nhắc tự động
 - [ ] Kiểm kê nhanh khi thiếu nguyên liệu rồi gửi lại (AC-03 phần kiểm kê): làm ở Phần 3
@@ -55,14 +70,15 @@ Trước ngày 11/10/2026 thư mục D:\QTDA chưa có mã nguồn; các mục P
 
 ## Phần 2: Ca, tiền và kiểm soát doanh thu (Sprint 2, phần ca và tiền đã xong)
 
-- [x] Tham số quản trị sửa được trên ứng dụng, có hiệu lực ngay và ghi nhật ký (NFR-14); giá trị mặc định là đề xuất tạm, Chủ quán chỉnh
+- [x] Tham số quản trị sửa được trên ứng dụng, có hiệu lực ngay hoặc từ thời điểm chọn, giữ lịch sử, ghi nhật ký (NFR-14); giá trị giả định được đánh dấu chờ Chủ quán xác nhận
 - [x] Quỹ tiền mặt ca: tiền đầu ca, chi kèm danh mục, khoản từ 500.000 đ phải có ảnh chứng từ, nộp giữa ca chỉ có hiệu lực khi người nhận xác nhận (FR-07, BRU-05, AC-14, AC-15)
 - [x] Kết ca: chặn khi còn đơn chưa thanh toán, yêu cầu chờ duyệt, chưa có tiền đầu ca hoặc khoản nộp chưa xác nhận; chuyển đơn sang ca sau kèm lý do; chốt doanh thu theo phương thức (FR-08, BRU-06, AC-16)
 - [x] Báo cáo cuối ca: tiền mặt đếm, chuyển khoản nhận và hoàn theo sao kê, sự cố; gửi xong đối soát ngay (FR-08, AC-17)
 - [x] Đối soát theo công thức BRU-10, lưu mọi chênh lệch khác 0 theo ca, phương thức, Quản lý ca; vượt ngưỡng phải giải trình, Chủ quán Chấp nhận hoặc Không chấp nhận (FR-12, AC-25, AC-26, AC-27)
-- [x] Hoàn tiền khi hủy hóa đơn đã thanh toán ghi theo phương thức khách đã trả, trừ một lần trong đối soát (BRU-05, BRU-10)
+- [x] Hoàn tiền khi hủy hóa đơn đã thanh toán ghi theo phương thức khách đã trả, vào ca đang mở, trừ một lần trong đối soát (BRU-05, BRU-10, AC-27)
 - [x] Chênh lệch tích lũy theo Quản lý ca, loại ca, tháng và toàn quán; vượt ngưỡng tạo ngoại lệ gắn các ca (FR-13, BRU-11, AC-28)
 - [x] Tình trạng dữ liệu ca: chưa kết ca, thiếu báo cáo cuối ca quá hạn 2 giờ (FR-09, BRU-07, AC-18)
+- [ ] Tình trạng kiểm kê nhóm trọng yếu trước giờ mở cửa hôm sau (BRU-07, FR-09): chưa làm, làm cùng Phần 4
 - [x] Báo cáo điều chỉnh theo ca: người tạo, người duyệt, lý do, kết quả, giá trị món; tách bị từ chối và hủy sau thanh toán; tổng hủy sau pha chế (FR-14, AC-29)
 - [x] Ngoại lệ tự động theo BRU-12: điều chỉnh sau pha chế bị từ chối, hủy hóa đơn đã thanh toán, vượt số điều chỉnh của nhân viên trong ca (một ngoại lệ mở, yêu cầu sau gắn vào), vượt giá trị hủy sau pha chế của ca, thanh toán theo món thực nhận, chênh lệch tích lũy (FR-15, AC-30, AC-31)
 - [x] Xem xét ngoại lệ chỉ Chủ quán: Hợp lệ, Nhắc nhở, Vi phạm; có tổn thất tiền phải gắn vụ việc trước; kết quả không sửa, chỉ đính chính; nhắc lại sau 3 ngày; xem chuỗi thao tác và lịch sử nhân viên (FR-17, BRU-14, AC-35, AC-36, AC-37)
@@ -74,7 +90,7 @@ Trước ngày 11/10/2026 thư mục D:\QTDA chưa có mã nguồn; các mục P
 ## Phần 3: Nguyên vật liệu vận hành (Sprint 2, đã xong phần không cần dự báo)
 
 - [x] Báo nhanh Sắp hết, Đã hết trên điện thoại kèm lượng còn lại; Quản lý ca và Chủ quán thấy dải báo ngay và ghi đã xử lý (FR-23, AC-51)
-- [x] Phiếu nhập: số lượng thực nhận, đơn giá, ảnh hóa đơn (bắt buộc từ 500.000 đ), Trả ngay hoặc Trả sau, liên kết lần đặt; tăng tồn vật lý; gửi lại không ghi trùng (FR-24, BRU-33, AC-52, AC-53, AC-55)
+- [x] Phiếu nhập: số lượng thực nhận, đơn giá, ảnh hóa đơn bắt buộc với mọi phiếu, Trả ngay hoặc Trả sau, liên kết lần đặt; tăng tồn vật lý; gửi lại không ghi trùng (FR-24, BRU-33, AC-52, AC-53, AC-55)
 - [x] Khoản phải trả và thanh toán từng phần; Trả ngay bằng tiền mặt quỹ ca ghi thành chi tiền mặt của ca (FR-24, BRU-33, AC-54)
 - [x] Kiểm kê: trong ngưỡng 5% điều chỉnh ngay; vượt ngưỡng phải ghi lý do và chờ Chủ quán xác nhận; điều chỉnh theo chênh lệch lúc đếm nên không làm lệch phần đang giữ (FR-25, BRU-25, AC-56, AC-57)
 - [x] Chênh lệch kiểm kê tích lũy tháng theo nguyên liệu vượt ngưỡng tạo ngoại lệ kèm người kiểm kê (BRU-25, AC-58)
@@ -88,6 +104,8 @@ Trước ngày 11/10/2026 thư mục D:\QTDA chưa có mã nguồn; các mục P
 ## Phần 4: Dự phòng, ước tính, nhân sự, báo cáo (Sprint 3)
 
 Bán hàng dự phòng và nhập bù (FR-06); đối chiếu tiêu hao trọng yếu (FR-16); ước tính nhu cầu theo giai đoạn, cảnh báo cần đặt hàng (FR-28, FR-29); hồ sơ nhân viên, chấm công, đo tải và thời gian chờ (FR-34, FR-35, FR-36); bảng điều khiển, trung tâm cảnh báo, báo cáo doanh thu, kiểm soát doanh thu, nguyên vật liệu, xuất Excel (FR-50 đến FR-54).
+
+Sẵn sàng bắt đầu: bán hàng dự phòng và nhập bù (dùng lại mã nghiệp vụ, `submit_order`, `stock` và ca); đối chiếu tiêu hao trọng yếu (dựa trên sổ kho, kiểm kê và định mức đã chụp); chấm công theo vai trò; trung tâm cảnh báo theo Bảng 5.4 (gắn vào `core/periodic.run_all`); báo cáo và bảng điều khiển. Ước tính nhu cầu và cảnh báo cần đặt hàng vẫn chờ Hai giải thích.
 
 ## Chờ Hai giải thích
 

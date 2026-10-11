@@ -20,8 +20,8 @@
       <label class="visually-hidden" for="p-{{ p.key }}">{{ p.label }}</label>
       <input class="input input-sm" id="p-{{ p.key }}" name="value" value="{{ p.value }}" inputmode="numeric">
       <span class="muted">{{ p.unit }}</span>
-      <label class="visually-hidden" for="e-{{ p.key }}">Hiệu lực từ</label>
-      <input class="input input-sm" id="e-{{ p.key }}" type="datetime-local" name="effective_from" title="Hiệu lực từ (để trống: áp dụng ngay)">
+      <label class="muted" for="e-{{ p.key }}">hiệu lực từ</label>
+      <input class="input input-sm" id="e-{{ p.key }}" type="datetime-local" name="effective_from">
       <input class="input input-sm" name="reason" placeholder="Lý do thay đổi" aria-label="Lý do thay đổi">
       <button class="btn btn-quiet" type="submit">Lưu</button>
     </form>
