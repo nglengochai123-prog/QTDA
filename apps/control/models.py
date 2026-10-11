@@ -190,3 +190,81 @@ class LossRecovery(TimeStampedModel):
     class Meta:
         verbose_name = "Thu hồi tổn thất"
         verbose_name_plural = "Thu hồi tổn thất"
+
+
+class Alert(StoreScopedModel):
+    """Một cảnh báo trong trung tâm cảnh báo (FR-51, BRU-36, Bảng 5.4)."""
+
+    class Kind(models.TextChoices):
+        OUT_OF_STOCK = "da_het", "Nguyên liệu Đã hết trong giờ mở cửa"
+        BACKUP_PENDING = "phieu_du_phong", "Phiếu dự phòng chưa nhập bù, thiếu hoặc trùng số"
+        LATE_DATA = "du_lieu_tre", "Dữ liệu ca trễ hạn"
+        DISCREPANCY = "chenh_lech_tien", "Chênh lệch tiền ca vượt ngưỡng"
+        EXCEPTION = "ngoai_le", "Ngoại lệ chờ xem xét"
+        PURCHASE_LATE = "giao_cham", "Giao chậm"
+        COUNT_PENDING = "kiem_ke", "Chênh lệch kiểm kê vượt ngưỡng"
+        PAYABLE_DUE = "phai_tra", "Khoản phải trả đến hạn"
+
+    class Severity(models.TextChoices):
+        URGENT = "khan", "Khẩn"
+        IMPORTANT = "quan_trong", "Quan trọng"
+
+    class Status(models.TextChoices):
+        NEW = "moi", "Mới"
+        IN_PROGRESS = "dang_xu_ly", "Đang xử lý"
+        CLOSED = "da_dong", "Đã đóng"
+
+    OPEN = [Status.NEW, Status.IN_PROGRESS]
+
+    kind = models.CharField("Loại", max_length=20, choices=Kind.choices)
+    subject = models.CharField("Đối tượng", max_length=60)
+    title = models.CharField("Tiêu đề", max_length=200)
+    detail = models.TextField("Chi tiết", blank=True)
+    severity = models.CharField("Mức", max_length=12, choices=Severity.choices)
+    status = models.CharField("Trạng thái", max_length=12, choices=Status.choices, default=Status.NEW)
+    assignee = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người xử lý chính", on_delete=models.PROTECT,
+                                 null=True, blank=True, related_name="+")
+    assignee_role = models.CharField("Vai trò xử lý chính", max_length=20)
+    level = models.PositiveSmallIntegerField("Cấp (0: chính, 1: đã chuyển Chủ quán)", default=0)
+    can_escalate = models.BooleanField("Chuyển cấp khi quá hạn", default=True)
+    due_at = models.DateTimeField("Thời hạn")
+    escalated_at = models.DateTimeField("Chuyển cấp lúc", null=True, blank=True)
+    reminded_count = models.PositiveSmallIntegerField("Số lần nhắc lại", default=0)
+    link = models.CharField("Màn hình xử lý", max_length=120, blank=True)
+    taken_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người nhận xử lý", on_delete=models.PROTECT,
+                                 null=True, blank=True, related_name="+")
+    taken_at = models.DateTimeField("Nhận xử lý lúc", null=True, blank=True)
+    closed_at = models.DateTimeField("Đóng lúc", null=True, blank=True)
+    closed_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người đóng", on_delete=models.PROTECT,
+                                  null=True, blank=True, related_name="+")
+    close_note = models.CharField("Kết quả xử lý", max_length=255, blank=True)
+    auto_closed = models.BooleanField("Tự đóng", default=False)
+
+    class Meta:
+        verbose_name = "Cảnh báo"
+        verbose_name_plural = "Cảnh báo"
+        ordering = ["status", "due_at"]
+        constraints = [models.UniqueConstraint(fields=["kind", "subject"], condition=~models.Q(status="da_dong"),
+                                               name="one_open_alert_per_subject")]
+
+    def __str__(self):
+        return self.title
+
+    def handler_label(self):
+        if self.level:
+            return "Chủ quán (đã chuyển cấp)"
+        if self.assignee_id:
+            return str(self.assignee)
+        return "Chủ quán" if self.assignee_role == "chu_quan" else "Quản lý ca"
+
+    @property
+    def handling_minutes(self):
+        if self.closed_at is None:
+            return None
+        return (self.closed_at - self.created_at).total_seconds() / 60
+
+    @property
+    def is_overdue(self):
+        from django.utils import timezone
+
+        return self.status != self.Status.CLOSED and timezone.now() > self.due_at

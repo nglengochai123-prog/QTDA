@@ -18,7 +18,14 @@ def run_all(now=None):
         "dat_hang_giao_cham": [po.pk for po in inventory_ops.refresh_late(timezone.localdate(now))],
         "nhac_ca_thieu_du_phong": remind_missing_backup(now),
         "nhac_thieu_gio_ra": _remind_missing_out(now),
+        "canh_bao": _sync_alerts(now),
     }
+
+
+def _sync_alerts(now):
+    from apps.control import alerts
+
+    return alerts.sync(now)
 
 
 def _remind_missing_out(now):

@@ -10,7 +10,7 @@ Mỗi phần là một lát cắt chạy được từ đầu đến cuối, là
 
 ## Tiến độ thực tế (cập nhật 11/10/2026)
 
-Trước ngày 11/10/2026 thư mục D:\QTDA chưa có mã nguồn; các mục Phần 1 từng đánh dấu đã xong là chưa đúng. Kiểm thử hiện tại: 155 bài, OK cả 155 (`.venv\Scripts\python.exe manage.py test`). Số bài kiểm thử không phải bằng chứng hoàn thành; đối chiếu từng chức năng với báo cáo nằm ở `docs/DOI_CHIEU_YEU_CAU.md`.
+Trước ngày 11/10/2026 thư mục D:\QTDA chưa có mã nguồn; các mục Phần 1 từng đánh dấu đã xong là chưa đúng. Kiểm thử hiện tại: 158 bài, OK cả 158 (`.venv\Scripts\python.exe manage.py test`). Số bài kiểm thử không phải bằng chứng hoàn thành; đối chiếu từng chức năng với báo cáo nằm ở `docs/DOI_CHIEU_YEU_CAU.md`.
 
 Mã nguồn được quản lý bằng Git trong `D:\QTDA` (nhánh main, chưa có kho từ xa).
 
@@ -87,7 +87,7 @@ Mã nguồn được quản lý bằng Git trong `D:\QTDA` (nhánh main, chưa c
 - [x] Vụ việc tổn thất mã VV-xxx: bằng chứng là ngoại lệ hoặc khoản chênh lệch, mỗi thứ thuộc tối đa một vụ việc, cùng giao dịch chỉ tính một lần; xác minh, đính chính có lý do, thu hồi, còn lại (FR-18, BRU-15, AC-38, AC-39)
 - [x] Giá trị kiểm soát tạm tính của tháng so với mục tiêu 200.000 đ (BRU-16)
 - [ ] Ngoại lệ phiếu dự phòng (BRU-03) và chênh lệch kiểm kê tích lũy (BRU-25): làm cùng Phần 3, Phần 4
-- [ ] Giao cảnh báo theo Bảng 5.4 có thời hạn và chuyển cấp (BRU-36): làm cùng trung tâm cảnh báo FR-51; hiện ngoại lệ giao Chủ quán, thông báo trong ứng dụng
+- [x] Giao cảnh báo theo Bảng 5.4 có thời hạn và chuyển cấp (BRU-36): trung tâm cảnh báo FR-51
 
 ## Phần 3: Nguyên vật liệu vận hành (Sprint 2, đã xong phần không cần dự báo)
 
@@ -111,6 +111,7 @@ Bán hàng dự phòng và nhập bù (FR-06); đối chiếu tiêu hao trọng 
 - [x] Đối chiếu tiêu hao nguyên liệu trọng yếu giữa hai lần kiểm kê, ngoại lệ khi vượt mức cho phép, kết quả trong báo cáo nguyên vật liệu (FR-16, BRU-17, AC-32, AC-33, AC-34)
 - [x] Chấm công vào ca, ra ca theo vai trò; thiếu giờ ra không tính giờ, Quản lý ca bổ sung kèm lý do (FR-35, BRU-31, AC-76 đến AC-78)
 - [x] Tải và thời gian chờ theo khung giờ, đánh dấu quá tải, số người có mặt theo vai trò (FR-36, BRU-27, AC-79)
+- [x] Trung tâm cảnh báo theo Bảng 5.4: giao người xử lý chính, thời hạn tham số, Mới, Đang xử lý, Đã đóng, tự đóng, đóng tay có ghi chú, chuyển cấp hoặc nhắc lại, thống kê tuần (FR-51, BRU-36, AC-102, AC-103); chưa có "Cần đặt hàng" (chờ dự báo) và Web Push
 
 Sẵn sàng bắt đầu: bán hàng dự phòng và nhập bù (dùng lại mã nghiệp vụ, `submit_order`, `stock` và ca); đối chiếu tiêu hao trọng yếu (dựa trên sổ kho, kiểm kê và định mức đã chụp); chấm công theo vai trò; trung tâm cảnh báo theo Bảng 5.4 (gắn vào `core/periodic.run_all`); báo cáo và bảng điều khiển. Ước tính nhu cầu và cảnh báo cần đặt hàng vẫn chờ Hai giải thích.
 

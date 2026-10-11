@@ -53,14 +53,14 @@ Trạng thái: **Đúng** là làm đủ theo BRD và có kiểm thử; **Một 
 | FR-12 | Đối soát doanh thu ca | Đúng | AC-25, AC-26, AC-27; lưu ngưỡng đã áp dụng vào từng khoản chênh lệch |
 | FR-13 | Chênh lệch tích lũy | Đúng | AC-28 |
 | FR-14 | Báo cáo điều chỉnh | Đúng | AC-29 |
-| FR-15 | Ngoại lệ theo quy tắc | Một phần | AC-30, AC-31 đúng; giao cho Chủ quán, chưa có thời hạn và chuyển cấp theo Bảng 5.4 |
+| FR-15 | Ngoại lệ theo quy tắc | Đúng | AC-30, AC-31; ngoại lệ phiếu dự phòng (hủy, trùng, ngoài dãy, quá hạn) và tiêu hao vượt mức; giao Chủ quán qua trung tâm cảnh báo có thời hạn và nhắc lại |
 | FR-16 | Đối chiếu tiêu hao trọng yếu | Đúng | AC-32, AC-33 (`inventory/tests/test_consumption.py`): chạy khi kiểm kê nguyên liệu trọng yếu được áp dụng, so với lần kiểm kê áp dụng trước; vượt mức cho phép tạo ngoại lệ; kết quả hiện ở Báo cáo nguyên vật liệu (AC-34). Mức cho phép 5% là tham số, theo ví dụ AC-32 |
 | FR-17 | Xem xét ngoại lệ | Đúng | AC-35, AC-36, AC-37 |
 | FR-18 | Vụ việc tổn thất | Đúng | AC-38 đến AC-41 |
 | FR-20 | Danh mục nguyên vật liệu | Đúng | AC-44, AC-45 |
 | FR-21 | Định mức có phiên bản | Đúng | AC-46, AC-47 |
 | FR-22 | Tồn kho thời gian thực | Đúng | AC-48, AC-49, AC-50 |
-| FR-23 | Báo nhanh nguyên liệu | Một phần | AC-51 phần ghi nhận đúng; giao người xử lý có thời hạn theo Bảng 5.4 chưa làm |
+| FR-23 | Báo nhanh nguyên liệu | Đúng | AC-51; báo Đã hết trong giờ mở cửa thành cảnh báo Khẩn giao Quản lý ca 15 phút, quá hạn chuyển Chủ quán |
 | FR-24 | Phiếu nhập | Đúng | AC-52 đến AC-55; ảnh hóa đơn bắt buộc cho mọi phiếu (đã bỏ ngưỡng 500.000 đ tự đặt) |
 | FR-25 | Kiểm kê | Đúng | AC-56, AC-57, AC-58; lưu ngưỡng % đã áp dụng |
 | FR-26 | Hao hụt | Đúng | AC-59, AC-60 |
@@ -69,6 +69,7 @@ Trạng thái: **Đúng** là làm đủ theo BRD và có kiểm thử; **Một 
 | FR-35 | Chấm công vào ca, ra ca | Đúng | AC-76, AC-77, AC-78 (`staff/tests/test_timekeeping.py`): vào ca chọn vai trò mình đảm nhận; thiếu giờ ra không tính giờ công, nhắc Quản lý ca qua lệnh định kỳ; bổ sung giờ ra phải có lý do, ghi nhật ký. Chưa có lịch ca nên giờ công tính theo giờ vào, ra (BRU-31 khi chưa có lịch). Màn hình /cham-cong/ |
 | FR-36 | Tải và chất lượng phục vụ | Đúng | AC-79: tải theo hệ số nhóm món, thời gian chờ trung vị từ gửi pha chế đến mang ra, món tồn quầy cuối khung, đánh dấu quá tải, số người có mặt theo vai trò. Màn hình /tai/ |
 | FR-30 | Đặt hàng, theo dõi giao | Đúng | AC-68, AC-69; Giao chậm tính khi đọc |
+| FR-51 | Trung tâm cảnh báo | Một phần | AC-102, AC-103 (`control/tests/test_alerts.py`): các loại ở Bảng 5.4 trừ "Cần đặt hàng" (chờ dự báo) và "Kiểm kê lại sau khi pha chế xác nhận còn hàng"; giao người xử lý chính, thời hạn là tham số, trạng thái Mới, Đang xử lý, Đã đóng; tự đóng khi điều kiện không còn; đóng tay phải có ghi chú; quá hạn chuyển Chủ quán hoặc nhắc lại hằng ngày; thống kê tuần theo NFR-23. Chưa có thông báo đẩy. Màn hình /canh-bao/ |
 | FR-59 | Tài khoản, phân quyền | Một phần | AC-111, AC-112 phần đã có màn hình; AC-113: bắt buộc người duyệt dự phòng khi khai báo ca, nhắc trên trang chủ và trong lệnh định kỳ; chưa có thông báo đẩy |
 | FR-60 | Danh mục món, bảng giá | Đúng | AC-114 |
 | FR-61 | Nhật ký thao tác | Đúng | AC-115; chỉ thêm, chặn sửa xóa cả ở CSDL |
@@ -86,7 +87,7 @@ Luồng xuyên suốt nhập hàng → tạo đơn → pha một phần → đi�
 | Trang tham số | Mục công nghệ ghi tham số nằm trong Django admin | Trang Kiểm soát › Tham số | Cần hiện căn cứ, lịch sử, thời điểm hiệu lực và dùng được trên điện thoại |
 | Tự chuyển cấp | "Tự chuyển" khi quá hạn | Cấp đúng ngay khi đọc; ghi nhật ký chuyển cấp khi lệnh `chay_dinh_ky` chạy | Không để việc mở màn hình quyết định dữ liệu. Khi triển khai cần lên lịch lệnh mỗi phút (Task Scheduler hoặc `--lap 60`) |
 | Kiểm thử đồng thời | Hệ thống chạy PostgreSQL | Chỉ kiểm trên SQLite; chưa kết luận đạt trên PostgreSQL | Chờ Chủ quán cho phép cài PostgreSQL (GD-13) |
-| Cảnh báo theo Bảng 5.4 | Mỗi loại có người xử lý, thời hạn, cấp chuyển | Ngoại lệ giao Chủ quán, báo trong ứng dụng | Làm cùng trung tâm cảnh báo FR-51 ở Phần 4 |
+| Cảnh báo theo Bảng 5.4 | Hệ thống tự giao và tự chuyển cấp | Trung tâm cảnh báo cập nhật khi lệnh `chay_dinh_ky` chạy (nên lên lịch mỗi phút) | Tách kiểm tra quá hạn khỏi việc mở màn hình theo yêu cầu của Chủ quán |
 
 ## 5. Tham số: căn cứ và quy tắc hiệu lực
 
@@ -138,6 +139,7 @@ Chủ quán trả lời ngày 11/10/2026. Cột "Đã làm" ghi cách hệ thố
 | GD-18 | Biểu mẫu nhập bù chỉ ghi món, kích cỡ, số ly; chưa ghi tùy chọn | Giữ biểu mẫu ngắn để nhập nhanh; nếu quán hay bán tùy chọn có thêm tiền khi mất mạng thì cần bổ sung |
 | GD-20 | Một người được tính có mặt trong khung giờ khi làm ít nhất nửa khung (AC-76: vào 16:55, ra 22:05 được tính 17 đến 22 giờ) | BRD không nêu cách tính khung lẻ |
 | GD-21 | Mức món tồn tại quầy cho phép cuối khung giờ: 15 ly (tham số) | BRD không nêu giá trị |
+| GD-22 | Cảnh báo đã được người xử lý đóng tay thì không tự mở lại cho cùng đối tượng dù điều kiện còn; cảnh báo "Chênh lệch tiền" chuyển từ Quản lý ca sang Chủ quán khi đã có giải trình | Tránh nhắc lặp cùng một việc đã có kết quả |
 | GD-19 | Mỗi dãy phiếu đã cấp cho ca phải khai báo số cuối đã dùng (0 nếu không dùng) trước khi kết ca | Nếu không, hệ thống không biết phiếu cuối bị bỏ sót (AC-13 chỉ phát hiện được số thiếu nằm giữa) |
 
 ## 7. Dữ liệu đầu vào cho dự báo (logic dự báo chờ Hai giải thích)
@@ -152,4 +154,5 @@ Chủ quán trả lời ngày 11/10/2026. Cột "Đã làm" ghi cách hệ thố
 | Tiêu hao ghi nhận theo sổ kho | `StockMovement` loại Tiêu hao (theo định mức đã chụp của từng ly pha xong), Hao hụt (có lý do), Hủy sau pha chế (`PostPrepCancellation`) | Là lượng hệ thống tính theo định mức và thao tác ghi nhận, chưa phải lượng thật đã dùng |
 | Tiêu hao thực tế tính từ kiểm kê | Tồn kiểm kê đầu kỳ + nhập trong kỳ − tồn kiểm kê cuối kỳ, lấy từ `StockCount` (số đếm được, tồn vật lý lúc đếm) và `StockMovement` loại Nhập | Chỉ tính được giữa hai lần kiểm kê đã áp dụng. Chênh lệch giữa hai dòng này là phần FR-16 đối chiếu (Phần 4) |
 | Thiếu nguyên liệu | `ShortageCase` (nguyên liệu, ngày, nguồn) | Tối đa một trường hợp mỗi nguyên liệu mỗi ngày |
-| Nhân sự có mặt theo vai trò | Chưa có | Cần chấm công theo vai trò (FR-35, Phần 4). Hiện chỉ có người duyệt của ca |
+| Nhân sự có mặt theo vai trò | `staff.Attendance` (vai trò, vào ca, ra ca); `staff.timekeeping.presence` đếm theo khung giờ | Lượt thiếu giờ ra không được tính cho đến khi Quản lý ca bổ sung |
+| Tải và thời gian chờ theo khung giờ | `orders.workload.day_frames` | Đơn nhập bù tính tải theo giờ bán trên phiếu, không tính thời gian chờ |

@@ -17,7 +17,9 @@ class Command(BaseCommand):
             self.stdout.write(f"Chuyển cấp {len(result['chuyen_cap_yeu_cau'])} yêu cầu; "
                               f"{len(result['dat_hang_giao_cham'])} lần đặt giao chậm; "
                               f"nhắc {len(result['nhac_ca_thieu_du_phong'])} ca thiếu người duyệt dự phòng; "
-                              f"nhắc {len(result['nhac_thieu_gio_ra'])} lượt thiếu giờ ra.")
+                              f"nhắc {len(result['nhac_thieu_gio_ra'])} lượt thiếu giờ ra; cảnh báo: tạo "
+                              f"{len(result['canh_bao']['tao'])}, đóng {len(result['canh_bao']['dong'])}, "
+                              f"chuyển cấp hoặc nhắc {len(result['canh_bao']['chuyen_cap'])}.")
             if not lap:
                 break
             time.sleep(lap)

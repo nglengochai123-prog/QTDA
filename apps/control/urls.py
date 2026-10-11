@@ -11,4 +11,5 @@ urlpatterns = [
     path("kiem-soat/vu-viec/<int:pk>/", views.case_detail, name="case_detail"),
     path("kiem-soat/dieu-chinh/<int:shift_id>/", views.adjustment_report, name="adjustment_report"),
     path("tham-so/", views.parameters, name="parameters"),
+    path("canh-bao/", views.alert_center, name="alerts"),
 ]

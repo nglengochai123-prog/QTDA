@@ -28,6 +28,7 @@ def navigation(request):
         ("attendance", "Chấm công", reverse("staff:attendance"),
          Cap.TIMEKEEPING if user_can(user, Cap.TIMEKEEPING) else Cap.TIMEKEEPING_ADJUST),
         ("workload", "Tải và thời gian chờ", reverse("staff:workload"), Cap.VIEW_WORKLOAD),
+        ("alerts", "Cảnh báo", reverse("control:alerts"), Cap.HANDLE_ALERTS),
         ("exceptions", "Ngoại lệ", reverse("control:exceptions"), Cap.EXCEPTION_REVIEW),
         ("cases", "Vụ việc tổn thất", reverse("control:cases"), Cap.EXCEPTION_REVIEW),
         ("params", "Tham số", reverse("control:parameters"), Cap.MASTER_DATA),

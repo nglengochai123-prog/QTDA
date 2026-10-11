@@ -157,3 +157,24 @@ def parameters(request):
                      "assumption": params.BASIS[k][0] == params.ASSUMPTION,
                      "upcoming": [x for x in log if x.effective_from > now], "log": [x for x in log if x.effective_from <= now]})
     return render(request, "control/parameters.html", {"rows": rows})
+
+
+@capability_required(Cap.HANDLE_ALERTS)
+@require_http_methods(["GET", "POST"])
+def alert_center(request):
+    """Trung tâm cảnh báo: chỉ các mục người dùng là người xử lý chính hoặc đã được chuyển cấp (AC-103)."""
+    from . import alerts
+
+    if request.method == "POST":
+        p = request.POST
+        if p.get("action") == "take":
+            _run(request, lambda: alerts.take(request.user, p.get("alert")), "Đã nhận xử lý.")
+        else:
+            _run(request, lambda: alerts.close(request.user, p.get("alert"), p.get("note", "")), "Đã đóng cảnh báo.")
+        return redirect("control:alerts")
+    mine = alerts.visible_to(request.user).select_related("assignee")
+    context = {"open": mine.filter(status__in=["moi", "dang_xu_ly"]).order_by("due_at"),
+               "closed": mine.filter(status="da_dong").order_by("-closed_at")[:20]}
+    if request.user.is_owner:
+        context["stats"] = alerts.weekly_stats()
+    return render(request, "control/alerts.html", context)

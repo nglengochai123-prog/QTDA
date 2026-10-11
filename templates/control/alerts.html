@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Cảnh báo · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<h1>Cảnh báo của bạn</h1>
+<p class="lead-muted">Mỗi cảnh báo có người xử lý chính và thời hạn theo Bảng 5.4. Quá hạn thì chuyển Chủ quán hoặc nhắc lại. Cảnh báo tự đóng khi điều kiện không còn; đóng tay phải ghi kết quả.</p>
+{% if stats %}<p class="muted">7 ngày qua: {{ stats.total }} cảnh báo, {{ stats.to_owner }} đến Chủ quán, {{ stats.escalated }} bị chuyển cấp{% if stats.avg_minutes is not None %}, xử lý trung bình {{ stats.avg_minutes }} phút{% endif %}.</p>{% endif %}
+{% if open %}
+<ul class="ruled-list">
+  {% for a in open %}
+  <li class="param-row">
+    <div class="exc-text"><strong>{% if a.severity == "khan" %}<span class="flag-low">Khẩn</span> {% endif %}{{ a.title }}</strong>
+      <span class="muted">{{ a.get_status_display }} · xử lý: {{ a.handler_label }} · hạn {{ a.due_at|date:"H:i d/m" }}{% if a.is_overdue %} · <strong class="text-warn">quá hạn</strong>{% endif %}{% if a.reminded_count %} · đã nhắc {{ a.reminded_count }} lần{% endif %}</span>
+      {% if a.detail %}<span class="muted">{{ a.detail }}</span>{% endif %}
+      {% if a.link %}<a href="{{ a.link }}">Mở màn hình xử lý</a>{% endif %}</div>
+    <div class="approval-actions">
+      {% if a.status == "moi" %}<form method="post" data-once>{% csrf_token %}<input type="hidden" name="action" value="take"><input type="hidden" name="alert" value="{{ a.pk }}"><button class="btn btn-quiet" type="submit">Nhận xử lý</button></form>{% endif %}
+      <form method="post" class="inline-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="close"><input type="hidden" name="alert" value="{{ a.pk }}">
+        <input class="input input-sm" name="note" placeholder="Kết quả xử lý" required aria-label="Kết quả xử lý"><button class="btn btn-primary" type="submit">Đóng</button></form>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}<div class="empty"><p><strong>Không có cảnh báo nào cần bạn xử lý.</strong></p></div>{% endif %}
+{% if closed %}<h2>Đã đóng gần đây</h2>
+<ul class="ruled-list compact">{% for a in closed %}<li class="row-between"><span>{{ a.title }} · {{ a.close_note }}</span><span class="muted">{{ a.closed_at|date:"H:i d/m" }} · {{ a.handling_minutes|floatformat:"0" }} phút</span></li>{% endfor %}</ul>{% endif %}
+{% endblock %}
