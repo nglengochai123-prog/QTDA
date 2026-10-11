@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Báo cáo doanh thu · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<h1>Báo cáo doanh thu</h1>
+<form method="get" class="inline-form" aria-label="Chọn kỳ">
+  <label for="p-from">Từ</label><input class="input input-sm" id="p-from" type="date" name="tu" value="{{ start|date:'Y-m-d' }}">
+  <label for="p-to">đến</label><input class="input input-sm" id="p-to" type="date" name="den" value="{{ end|date:'Y-m-d' }}">
+  <label for="p-dim">Theo</label><select class="input input-sm" id="p-dim" name="theo">{% for v, l in dims %}<option value="{{ v }}"{% if v == dim %} selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+  <button class="btn btn-quiet" type="submit">Xem</button>
+</form>
+<p><a class="btn btn-quiet" href="?tu={{ start|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}&amp;xuat=excel">Xuất file Excel</a></p>
+<dl class="figure-grid">
+  <div class="figure-key"><dt>Doanh thu</dt><dd>{{ total|intcomma }} đ</dd></div>
+  <div><dt>Số đơn đã thanh toán</dt><dd>{{ orders }}</dd></div>
+  <div><dt>Hoàn tiền đã trả trong kỳ</dt><dd>{{ refunds|intcomma }} đ</dd></div>
+  <div><dt>Doanh thu thuần</dt><dd>{{ net|intcomma }} đ</dd></div>
+  <div><dt>Kỳ trước ({{ previous_period.0|date:"d/m" }}–{{ previous_period.1|date:"d/m" }})</dt><dd>{{ previous|intcomma }} đ</dd></div>
+</dl>
+{% if rows %}
+<div class="table-wrap"><table class="data-table">
+  <thead><tr><th scope="col">{{ dim_label }}</th><th scope="col" class="num">Số đơn</th><th scope="col" class="num">Số ly</th><th scope="col" class="num">Doanh thu</th></tr></thead>
+  <tbody>{% for r in rows %}<tr><th scope="row">{{ r.key }}</th><td class="num">{{ r.orders }}</td><td class="num">{{ r.cups }}</td><td class="num">{{ r.revenue|intcomma }} đ</td></tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<div class="empty"><p><strong>Chưa có đơn đã thanh toán trong kỳ.</strong></p></div>{% endif %}
+<p class="muted">Doanh thu là giá trị món tính tiền của các đơn đã thanh toán trong kỳ, theo thời điểm thanh toán. Hoàn tiền tính theo thời điểm thực hoàn và chỉ trừ một lần ở doanh thu thuần.</p>
+{% endblock %}

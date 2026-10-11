@@ -26,12 +26,13 @@ config/            cấu hình Django (đọc biến môi trường, xem .env.ex
 apps/core/         nền chung: cửa hàng (mã cửa hàng NFR-18), lớp model nền, trang chủ, PWA, /healthz/, trang quản trị chỉ Chủ quán
 apps/accounts/     tài khoản 5 vai trò, tạm khóa khi sai mật khẩu, ma trận phân quyền Bảng 5.3 (permissions.py)
 apps/audit/        nhật ký thao tác chỉ thêm mới (model, QuerySet và trigger CSDL chặn sửa xóa)
-apps/staff/        hồ sơ nhân viên, nghỉ việc thì khóa tài khoản
+apps/staff/        hồ sơ nhân viên, nghỉ việc thì khóa tài khoản; chấm công theo vai trò (timekeeping.py)
 apps/catalog/      bàn, nhóm món, món, kích cỡ và giá, nhóm tùy chọn và tùy chọn
 apps/inventory/    nhà cung cấp, nguyên vật liệu, định mức có phiên bản, sổ biến động kho và tồn (stock.py)
 apps/shifts/       ca làm việc, quỹ tiền ca, hoàn tiền, kết ca, báo cáo cuối ca, đối soát (services.py)
-apps/orders/       tạo đơn, giữ nguyên liệu, quầy pha chế (services.py), điều chỉnh và chuyển cấp (adjustments.py), thanh toán (payments.py)
-apps/control/      ngoại lệ, xem xét, vụ việc tổn thất, báo cáo điều chỉnh, trang tham số
+apps/orders/       tạo đơn, giữ nguyên liệu, quầy pha chế (services.py), điều chỉnh và chuyển cấp (adjustments.py), thanh toán (payments.py), phiếu dự phòng và nhập bù (backup.py), tải theo khung giờ (workload.py)
+apps/control/      ngoại lệ, xem xét, vụ việc tổn thất, báo cáo điều chỉnh, trang tham số, trung tâm cảnh báo (alerts.py)
+apps/reports/      bảng điều khiển, báo cáo doanh thu (xuất Excel), kiểm soát doanh thu, nguyên vật liệu theo kỳ
 apps/core/         thêm: tham số có lịch sử (params.py), mã nghiệp vụ chống ghi trùng (idempotency.py), tác vụ định kỳ (periodic.py), kiểm tra toàn vẹn (integrity.py)
 templates/, static/ giao diện theo DESIGN.md
 ```

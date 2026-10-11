@@ -14,7 +14,7 @@ def navigation(request):
     if user is None or not user.is_authenticated:
         return {}
     # Mục đánh dấu desktop chỉ hiện trên máy tính (thanh dưới điện thoại giữ tối đa 4 mục).
-    desktop_only = {"bar", "data", "log", "cashier", "status", "exceptions", "cases", "params", "backup", "workload"}
+    desktop_only = {"bar", "data", "log", "cashier", "status", "exceptions", "cases", "params", "backup", "workload", "revenue", "control_report", "materials"}
     items = [("home", "Trang chủ", reverse("core:home"), None)]
     items += [
         ("order", "Tạo đơn", reverse("orders:create"), Cap.ORDER_CREATE),
@@ -23,6 +23,10 @@ def navigation(request):
         ("approve", "Duyệt", reverse("orders:approvals"), Cap.ORDER_ADJUST_APPROVE),
         ("cashier", "Thu ngân", reverse("orders:cashier"), Cap.PAYMENT),
         ("shift", "Ca của tôi", reverse("shifts:my_shift"), Cap.CASH_FUND),
+        ("dashboard", "Bảng điều khiển", reverse("reports:dashboard"), Cap.VIEW_DASHBOARD),
+        ("revenue", "Báo cáo doanh thu", reverse("reports:revenue"), Cap.VIEW_DASHBOARD),
+        ("control_report", "Báo cáo kiểm soát", reverse("reports:revenue_control"), Cap.EXCEPTION_REVIEW),
+        ("materials", "Báo cáo nguyên liệu", reverse("reports:materials"), Cap.VIEW_DASHBOARD),
         ("status", "Tình trạng ca", reverse("shifts:status"), Cap.VIEW_DASHBOARD),
         ("backup", "Phiếu dự phòng", reverse("orders:backup_slips"), Cap.BACKUP_TICKETS),
         ("attendance", "Chấm công", reverse("staff:attendance"),

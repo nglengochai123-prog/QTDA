@@ -10,7 +10,7 @@ Mỗi phần là một lát cắt chạy được từ đầu đến cuối, là
 
 ## Tiến độ thực tế (cập nhật 11/10/2026)
 
-Trước ngày 11/10/2026 thư mục D:\QTDA chưa có mã nguồn; các mục Phần 1 từng đánh dấu đã xong là chưa đúng. Kiểm thử hiện tại: 158 bài, OK cả 158 (`.venv\Scripts\python.exe manage.py test`). Số bài kiểm thử không phải bằng chứng hoàn thành; đối chiếu từng chức năng với báo cáo nằm ở `docs/DOI_CHIEU_YEU_CAU.md`.
+Trước ngày 11/10/2026 thư mục D:\QTDA chưa có mã nguồn; các mục Phần 1 từng đánh dấu đã xong là chưa đúng. Kiểm thử hiện tại: 162 bài, OK cả 162 (`.venv\Scripts\python.exe manage.py test`). Số bài kiểm thử không phải bằng chứng hoàn thành; đối chiếu từng chức năng với báo cáo nằm ở `docs/DOI_CHIEU_YEU_CAU.md`.
 
 Mã nguồn được quản lý bằng Git trong `D:\QTDA` (nhánh main, chưa có kho từ xa).
 
@@ -103,7 +103,7 @@ Mã nguồn được quản lý bằng Git trong `D:\QTDA` (nhánh main, chưa c
 - [ ] Đề xuất số lượng đặt hàng (FR-31, BRU-24) và cảnh báo cần đặt hàng (FR-29, BRU-22): chờ Hai giải thích logic dự báo
 - [ ] Cảnh báo khoản phải trả quá hạn và giao chậm có thời hạn, chuyển cấp theo Bảng 5.4: hiện hiển thị trong trang, làm tiếp cùng trung tâm cảnh báo (FR-51)
 
-## Phần 4: Dự phòng, ước tính, nhân sự, báo cáo (Sprint 3)
+## Phần 4: Dự phòng, ước tính, nhân sự, báo cáo (Sprint 3, đã xong phần không cần dự báo)
 
 Bán hàng dự phòng và nhập bù (FR-06); đối chiếu tiêu hao trọng yếu (FR-16); ước tính nhu cầu theo giai đoạn, cảnh báo cần đặt hàng (FR-28, FR-29); hồ sơ nhân viên, chấm công, đo tải và thời gian chờ (FR-34, FR-35, FR-36); bảng điều khiển, trung tâm cảnh báo, báo cáo doanh thu, kiểm soát doanh thu, nguyên vật liệu, xuất Excel (FR-50 đến FR-54).
 
@@ -112,8 +112,9 @@ Bán hàng dự phòng và nhập bù (FR-06); đối chiếu tiêu hao trọng 
 - [x] Chấm công vào ca, ra ca theo vai trò; thiếu giờ ra không tính giờ, Quản lý ca bổ sung kèm lý do (FR-35, BRU-31, AC-76 đến AC-78)
 - [x] Tải và thời gian chờ theo khung giờ, đánh dấu quá tải, số người có mặt theo vai trò (FR-36, BRU-27, AC-79)
 - [x] Trung tâm cảnh báo theo Bảng 5.4: giao người xử lý chính, thời hạn tham số, Mới, Đang xử lý, Đã đóng, tự đóng, đóng tay có ghi chú, chuyển cấp hoặc nhắc lại, thống kê tuần (FR-51, BRU-36, AC-102, AC-103); chưa có "Cần đặt hàng" (chờ dự báo) và Web Push
+- [x] Bảng điều khiển (FR-50, AC-100, AC-101), báo cáo kiểm soát doanh thu (FR-52, AC-104), báo cáo doanh thu có xuất Excel (FR-53, AC-105), báo cáo nguyên vật liệu theo kỳ (FR-54, AC-106; cột nhu cầu ước tính chờ dự báo)
+- [ ] Còn lại của Phần 4: ước tính nhu cầu và cảnh báo Cần đặt hàng (FR-28, FR-29, chờ Hai giải thích); Web Push (NFR-17); đo NFR-02, NFR-16 trong tuần chạy thử; kiểm thử đồng thời trên PostgreSQL (GD-13)
 
-Sẵn sàng bắt đầu: bán hàng dự phòng và nhập bù (dùng lại mã nghiệp vụ, `submit_order`, `stock` và ca); đối chiếu tiêu hao trọng yếu (dựa trên sổ kho, kiểm kê và định mức đã chụp); chấm công theo vai trò; trung tâm cảnh báo theo Bảng 5.4 (gắn vào `core/periodic.run_all`); báo cáo và bảng điều khiển. Ước tính nhu cầu và cảnh báo cần đặt hàng vẫn chờ Hai giải thích.
 
 ## Chờ Hai giải thích
 

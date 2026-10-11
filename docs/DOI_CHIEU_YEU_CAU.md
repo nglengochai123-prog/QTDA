@@ -70,6 +70,10 @@ Trạng thái: **Đúng** là làm đủ theo BRD và có kiểm thử; **Một 
 | FR-36 | Tải và chất lượng phục vụ | Đúng | AC-79: tải theo hệ số nhóm món, thời gian chờ trung vị từ gửi pha chế đến mang ra, món tồn quầy cuối khung, đánh dấu quá tải, số người có mặt theo vai trò. Màn hình /tai/ |
 | FR-30 | Đặt hàng, theo dõi giao | Đúng | AC-68, AC-69; Giao chậm tính khi đọc |
 | FR-51 | Trung tâm cảnh báo | Một phần | AC-102, AC-103 (`control/tests/test_alerts.py`): các loại ở Bảng 5.4 trừ "Cần đặt hàng" (chờ dự báo) và "Kiểm kê lại sau khi pha chế xác nhận còn hàng"; giao người xử lý chính, thời hạn là tham số, trạng thái Mới, Đang xử lý, Đã đóng; tự đóng khi điều kiện không còn; đóng tay phải có ghi chú; quá hạn chuyển Chủ quán hoặc nhắc lại hằng ngày; thống kê tuần theo NFR-23. Chưa có thông báo đẩy. Màn hình /canh-bao/ |
+| FR-50 | Bảng điều khiển | Đúng | AC-100, AC-101: BO-01 với từng khoản cấu thành và liên kết sang báo cáo kiểm soát, BO-02, doanh thu và số đơn theo ngày, chênh lệch tích lũy, tồn nguyên liệu trọng yếu, cảnh báo và ngoại lệ đang mở theo mức. Chưa có BO-03 và lợi nhuận (Giai đoạn 2). Màn hình /bang-dieu-khien/ |
+| FR-52 | Báo cáo kiểm soát doanh thu | Đúng | AC-104 (`reports/tests/test_reports.py`): điều chỉnh theo lý do và kết quả, ngoại lệ theo nguồn và kết quả xem xét, chênh lệch theo ca và tích lũy, vụ việc, giá trị kiểm soát tách nhóm không tính trùng. Chỉ Chủ quán. /bao-cao/kiem-soat/ |
+| FR-53 | Báo cáo doanh thu | Đúng | AC-105: theo ngày, khung giờ, ca, nhóm món, món, nhân viên, phương thức; so với kỳ trước; xuất Excel (.xlsx, mỗi chiều một trang). /bao-cao/doanh-thu/ |
+| FR-54 | Báo cáo nguyên vật liệu | Một phần | AC-106: tồn đầu, nhập, tiêu hao theo món (gồm hủy sau pha chế, không trừ lần hai), hao hụt, kiểm kê, tồn cuối khớp sổ kho, trường hợp thiếu. Cột nhu cầu ước tính chờ logic dự báo. /bao-cao/nguyen-lieu/ |
 | FR-59 | Tài khoản, phân quyền | Một phần | AC-111, AC-112 phần đã có màn hình; AC-113: bắt buộc người duyệt dự phòng khi khai báo ca, nhắc trên trang chủ và trong lệnh định kỳ; chưa có thông báo đẩy |
 | FR-60 | Danh mục món, bảng giá | Đúng | AC-114 |
 | FR-61 | Nhật ký thao tác | Đúng | AC-115; chỉ thêm, chặn sửa xóa cả ở CSDL |
@@ -140,6 +144,7 @@ Chủ quán trả lời ngày 11/10/2026. Cột "Đã làm" ghi cách hệ thố
 | GD-20 | Một người được tính có mặt trong khung giờ khi làm ít nhất nửa khung (AC-76: vào 16:55, ra 22:05 được tính 17 đến 22 giờ) | BRD không nêu cách tính khung lẻ |
 | GD-21 | Mức món tồn tại quầy cho phép cuối khung giờ: 15 ly (tham số) | BRD không nêu giá trị |
 | GD-22 | Cảnh báo đã được người xử lý đóng tay thì không tự mở lại cho cùng đối tượng dù điều kiện còn; cảnh báo "Chênh lệch tiền" chuyển từ Quản lý ca sang Chủ quán khi đã có giải trình | Tránh nhắc lặp cùng một việc đã có kết quả |
+| GD-23 | Báo cáo doanh thu tính theo thời điểm thanh toán; "nhân viên" là người tạo đơn; khung giờ theo giờ gửi pha chế | BRD không nói rõ mốc thời gian và người được ghi doanh thu |
 | GD-19 | Mỗi dãy phiếu đã cấp cho ca phải khai báo số cuối đã dùng (0 nếu không dùng) trước khi kết ca | Nếu không, hệ thống không biết phiếu cuối bị bỏ sót (AC-13 chỉ phát hiện được số thiếu nằm giữa) |
 
 ## 7. Dữ liệu đầu vào cho dự báo (logic dự báo chờ Hai giải thích)

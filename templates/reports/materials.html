@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Báo cáo nguyên vật liệu · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<h1>Báo cáo nguyên vật liệu theo kỳ</h1>
+<form method="get" class="inline-form" aria-label="Chọn kỳ">
+  <label for="p-from">Từ</label><input class="input input-sm" id="p-from" type="date" name="tu" value="{{ start|date:'Y-m-d' }}">
+  <label for="p-to">đến</label><input class="input input-sm" id="p-to" type="date" name="den" value="{{ end|date:'Y-m-d' }}">
+  <button class="btn btn-quiet" type="submit">Xem</button>
+</form>
+<p class="muted">Tồn đầu + nhập − tiêu hao theo món − hao hụt ± điều chỉnh kiểm kê = tồn cuối. Hủy sau pha chế là một phần của tiêu hao theo món, không trừ lần hai. Trường hợp thiếu nguyên liệu trong kỳ: <strong>{{ shortages }}</strong> (mục tiêu BO-02 không quá {{ bo02_target }} mỗi tháng). Cột nhu cầu ước tính chờ logic dự báo.</p>
+<div class="table-wrap"><table class="data-table">
+  <thead><tr><th scope="col">Nguyên liệu</th><th scope="col" class="num">Tồn đầu</th><th scope="col" class="num">Nhập</th><th scope="col" class="num">Tiêu hao theo món</th><th scope="col" class="num">Trong đó hủy sau pha chế</th><th scope="col" class="num">Hao hụt</th><th scope="col" class="num">Kiểm kê ±</th><th scope="col" class="num">Tồn cuối</th><th scope="col" class="num">Thiếu</th><th scope="col">Nhu cầu ước tính</th></tr></thead>
+  <tbody>{% for r in rows %}<tr><th scope="row">{{ r.ingredient.name }} <span class="muted">({{ r.ingredient.get_unit_display }})</span></th>
+    <td class="num">{{ r.opening|floatformat:"-2g" }}</td><td class="num">{{ r.receipts|floatformat:"-2g" }}</td><td class="num">{{ r.consumed|floatformat:"-2g" }}</td><td class="num">{{ r.post_prep|floatformat:"-2g" }}</td><td class="num">{{ r.waste|floatformat:"-2g" }}</td><td class="num">{{ r.count_adjust|floatformat:"-2g" }}</td><td class="num">{{ r.closing|floatformat:"-2g" }}</td><td class="num">{{ r.shortages }}</td><td class="muted">Chờ dự báo</td></tr>{% endfor %}</tbody>
+</table></div>
+<p><a href="{% url 'inventory:report' %}">Hao hụt theo lý do, kiểm kê và đối chiếu tiêu hao trọng yếu</a></p>
+{% endblock %}
