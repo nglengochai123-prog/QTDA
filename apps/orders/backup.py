@@ -7,6 +7,8 @@
     phục vụ, thanh toán còn thiếu; không trừ kho lần nữa.
   * Chưa có đơn: tạo một đơn đã pha, đã phục vụ, đã thanh toán; định mức theo phiên bản có hiệu lực
     tại thời điểm bán ghi trên phiếu (BRU-39).
+- Giá theo lịch sử giá và định mức theo phiên bản tại thời điểm bán; thiếu dữ liệu lịch sử thì phiếu
+  chờ Chủ quán xác nhận (có nhật ký), chưa ghi đơn, chưa trừ kho, chưa thu tiền.
 - Mỗi số phiếu chỉ liên kết một đơn. Số trùng, số ngoài dãy, nhập bù quá hạn, phiếu khai báo hủy
   đều tạo ngoại lệ. Kết ca bị chặn khi chưa khai báo số phiếu cuối đã dùng hoặc còn số chưa xử lý.
 """
@@ -25,6 +27,8 @@ from apps.core.idempotency import run_once
 from apps.core.models import OperationRecord
 from apps.inventory import stock
 from apps.inventory.models import StockMovement
+
+from apps.catalog.models import Table
 
 from .models import BackupSlip, BackupSlipRange, Order, OrderLine, OrderLineOption, Payment
 from .services import build_lines
@@ -141,8 +145,12 @@ def enter_slip(user, operation_key, payload):
             filled = _complete_existing(order, user, clean, shift, operation_key)
             linked = True
         else:
+            missing = []
+            lines = _lines_at(clean, sold_at, missing)
+            if missing:
+                return _hold(user, rng, number, code, sold_at, restored_at, clean, missing, operation_key)
             order = _create_from_slip(user, code or f"pdp-{number}-{operation_key[:40]}", clean, shift, sold_at,
-                                      number, operation_key)
+                                      number, operation_key, lines)
             filled = ["tạo đơn mới"]
             linked = False
         deadline = restored_at + timedelta(hours=params.get("backup_entry_hours", at=restored_at))
@@ -161,7 +169,7 @@ def enter_slip(user, operation_key, payload):
                        detail=f"Có mạng lại {timezone.localtime(restored_at):%H:%M}, nhập bù "
                               f"{timezone.localtime():%H:%M %d/%m}")
         return {"ok": True, "slip": slip.pk, "order_id": order.pk, "code": order.code, "linked": linked,
-                "filled": filled, "late": late,
+                "filled": filled, "late": late, "pending": False,
                 "message": (f"Phiếu {fmt(number)} liên kết đơn {order.code}; bổ sung: {', '.join(filled) or 'không'}."
                             if linked else f"Phiếu {fmt(number)} đã tạo đơn {order.code}.")}
 
@@ -207,10 +215,68 @@ def _complete_existing(order, user, clean, shift, operation_key):
     return filled
 
 
-def _create_from_slip(user, order_key, clean, shift, sold_at, number, operation_key):
+def _lines_at(clean, sold_at, missing, overrides=None):
+    """Giá theo lịch sử giá và định mức theo phiên bản có hiệu lực tại thời điểm bán (BRU-39)."""
+    return build_lines(clean, at=sold_at, allow_unsellable=True, missing=missing, overrides=overrides)[1]
+
+
+def _hold(user, rng, number, code, sold_at, restored_at, clean, missing, operation_key):
+    """Thiếu lịch sử giá hoặc định mức: không đoán, giữ phiếu chờ Chủ quán xác nhận (có nhật ký)."""
+    slip = BackupSlip.objects.create(
+        store=rng.store, range=rng, number=number, status=BackupSlip.Status.PENDING, operation_code=code,
+        sold_at=sold_at, restored_at=restored_at, payload=clean, missing=missing, entered_by=user,
+        operation_key=operation_key)
+    record(Action.CREATE, actor=user, obj=slip, object_type="orders.BackupSlip",
+           after={"so_phieu": fmt(number), "trang_thai": slip.get_status_display(),
+                  "thieu": [m["text"] for m in missing]})
+    return {"ok": True, "slip": slip.pk, "pending": True, "late": False,
+            "message": f"Phiếu {fmt(number)} chờ Chủ quán xác nhận: " + "; ".join(m["text"] for m in missing) + "."}
+
+
+def confirm_slip(user, operation_key, slip_id, prices=None, versions=None, note=""):
+    """Chủ quán xác nhận giá hoặc phiên bản định mức còn thiếu rồi mới ghi đơn, trừ kho, thanh toán."""
+    if not user.is_owner:
+        raise ValidationError("Chỉ Chủ quán xác nhận giá và định mức cho phiếu nhập bù.")
+    payload = {"slip": int(slip_id), "prices": {str(k): v for k, v in (prices or {}).items() if v not in ("", None)},
+               "versions": {str(k): v for k, v in (versions or {}).items() if v not in ("", None)},
+               "note": str(note or "")[:255]}
+
+    def action():
+        slip = BackupSlip.objects.select_for_update().select_related("range__shift").get(pk=payload["slip"])
+        if slip.status != BackupSlip.Status.PENDING:
+            return {"slip": slip.pk, "order_id": slip.order_id, "message": f"{slip} đã được xử lý trước đó."}
+        shift = slip.range.shift
+        if shift.status != shift.Status.OPEN:
+            raise ValidationError(f"{shift} đã kết; không ghi thêm doanh thu vào ca đã kết.")
+        overrides = {}
+        for key, value in payload["prices"].items():
+            overrides.setdefault(int(key), {})["price"] = int(str(value).replace(".", ""))
+        for key, value in payload["versions"].items():
+            overrides.setdefault(int(key), {})["version"] = int(value)
+        missing = []
+        lines = _lines_at(slip.payload, slip.sold_at, missing, overrides)
+        if missing:
+            raise ValidationError("Còn thiếu: " + "; ".join(m["text"] for m in missing) + ".")
+        clean = slip.payload
+        order = _create_from_slip(user, clean.get("operation_code") or f"pdp-{slip.number}-{slip.operation_key[:40]}",
+                                  clean, shift, slip.sold_at, slip.number, slip.operation_key, lines)
+        slip.status, slip.order, slip.confirmed_by, slip.confirmed_at = (BackupSlip.Status.ENTERED, order, user,
+                                                                         timezone.now())
+        slip.confirmation = {"gia": payload["prices"], "dinh_muc": payload["versions"], "ghi_chu": payload["note"]}
+        slip.save(update_fields=["status", "order", "confirmed_by", "confirmed_at", "confirmation", "updated_at"])
+        record(Action.STATUS_CHANGE, actor=user, obj=slip, object_type="orders.BackupSlip",
+               before={"trang_thai": BackupSlip.Status.PENDING.label},
+               after={"trang_thai": slip.get_status_display(), "don": order.code, "gia_xac_nhan": payload["prices"],
+                      "dinh_muc_xac_nhan": payload["versions"]}, reason=payload["note"] or "Xác nhận dữ liệu lịch sử")
+        return {"slip": slip.pk, "order_id": order.pk, "message": f"Đã ghi {slip} thành đơn {order.code}."}
+
+    return run_once(operation_key, "backup_confirm", payload, action, actor=user)
+
+
+def _create_from_slip(user, order_key, clean, shift, sold_at, number, operation_key, lines):
     from .services import _next_code
 
-    table, lines = build_lines(clean, at=sold_at, allow_unsellable=True)
+    table = Table.objects.get(pk=clean["table"])
     order = Order.objects.create(
         store=table.store, code=_next_code(table.store), table=table, created_by=user, operation_key=order_key,
         shift=shift, note=f"Nhập bù phiếu dự phòng {fmt(number)}", status=Order.Status.SERVED,
@@ -283,6 +349,8 @@ def unprocessed_numbers(rng):
 
 def close_blockers(shift):
     blockers = []
+    for slip in BackupSlip.objects.filter(range__shift=shift, status=BackupSlip.Status.PENDING):
+        blockers.append(f"{slip} chờ Chủ quán xác nhận giá hoặc định mức trước khi kết ca.")
     for rng in shift.backup_ranges.all():
         if rng.last_used_number is None:
             blockers.append(f"Khai báo số phiếu dự phòng cuối cùng đã dùng của dãy {rng} (ghi 0 nếu không dùng).")

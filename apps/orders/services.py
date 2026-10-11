@@ -25,11 +25,14 @@ def _int(value, field):
         raise ValidationError(f"{field} không hợp lệ.")
 
 
-def build_lines(payload, at=None, allow_unsellable=False):
+def build_lines(payload, at=None, allow_unsellable=False, missing=None, overrides=None):
     """Kiểm tra giỏ món từ màn hình tạo đơn và tính giá, định mức theo dữ liệu hiện hành.
 
-    Nhập bù phiếu dự phòng truyền `at` = thời điểm bán để lấy phiên bản định mức lúc đó (BRU-39).
+    Nhập bù phiếu dự phòng truyền `at` = thời điểm bán: giá theo lịch sử giá và phiên bản định mức
+    có hiệu lực lúc đó (BRU-39). Thiếu dữ liệu lịch sử thì ghi vào `missing` thay vì đoán; `overrides`
+    là giá hoặc phiên bản định mức đã được Chủ quán xác nhận cho từng dòng.
     """
+    overrides = overrides or {}
     table = Table.objects.filter(pk=_int(payload.get("table"), "Bàn"), is_active=True).first()
     if table is None:
         raise ValidationError("Chọn bàn trước khi gửi đơn.")
@@ -49,7 +52,9 @@ def build_lines(payload, at=None, allow_unsellable=False):
         if not 1 <= quantity <= MAX_CUPS_PER_LINE:
             raise ValidationError(f"Dòng {index}: số ly phải từ 1 đến {MAX_CUPS_PER_LINE}.")
         option_ids = sorted({_int(o, "Tùy chọn") for o in raw.get("options") or []})
-        options = list(item.active_options().filter(pk__in=option_ids).select_related("group"))
+        option_pool = (Option.objects.filter(group__in=item.option_groups.all()) if allow_unsellable
+                       else item.active_options())
+        options = list(option_pool.filter(pk__in=option_ids).select_related("group"))
         if len(options) != len(option_ids):
             raise ValidationError(f"Dòng {index}: có tùy chọn không áp dụng cho {item.name}.")
         for group in item.option_groups.all():
@@ -60,15 +65,37 @@ def build_lines(payload, at=None, allow_unsellable=False):
                 raise ValidationError(f"Dòng {index}: chưa chọn {group.name}.")
         version = None
         usage = {}
+        fixed = overrides.get(index, {})
         if not item.no_ingredients:
-            version = RecipeVersion.objects.current_for(item, at=at)
+            if fixed.get("version"):
+                version = RecipeVersion.objects.published().get(pk=fixed["version"], item=item)
+            else:
+                version = RecipeVersion.objects.current_for(item, at=at)
             if version is None:
-                raise ValidationError(f"Dòng {index}: {item.name} chưa có định mức áp dụng.")
-            usage = {str(k): str(v) for k, v in ingredient_usage(version, size, options).items()}
+                if missing is None:
+                    raise ValidationError(f"Dòng {index}: {item.name} chưa có định mức áp dụng.")
+                missing.append({"line": index, "kind": "dinh_muc",
+                                "text": f"Dòng {index}: {item.name} chưa có phiên bản định mức hiệu lực tại thời điểm bán"})
+            else:
+                usage = {str(k): str(v) for k, v in ingredient_usage(version, size, options).items()}
+        unit_price = size.price + sum(o.extra_price for o in options)
+        if fixed.get("price") is not None:
+            unit_price = int(fixed["price"])
+        elif at is not None:
+            from apps.catalog.models import price_at
+
+            historical = price_at(size, options, at)
+            if historical is None:
+                if missing is None:
+                    raise ValidationError(f"Dòng {index}: thiếu lịch sử giá tại thời điểm bán.")
+                missing.append({"line": index, "kind": "gia",
+                                "text": f"Dòng {index}: {item.name} {size.name} chưa có lịch sử giá tại thời điểm bán"})
+            else:
+                unit_price = historical
         lines.append({
             "item": item, "size": size, "options": options, "quantity": quantity,
             "note": str(raw.get("note") or "")[:255], "version": version, "usage": usage,
-            "unit_price": size.price + sum(o.extra_price for o in options),
+            "unit_price": unit_price,
         })
     return table, lines
 

@@ -382,6 +382,7 @@ class BackupSlip(StoreScopedModel):
 
     class Status(models.TextChoices):
         ENTERED = "da_nhap_bu", "Đã nhập bù"
+        PENDING = "cho_xac_nhan", "Chờ Chủ quán xác nhận giá hoặc định mức"
         VOIDED = "da_huy", "Khai báo hủy"
 
     range = models.ForeignKey(BackupSlipRange, verbose_name="Dãy", on_delete=models.PROTECT, related_name="slips")
@@ -395,6 +396,12 @@ class BackupSlip(StoreScopedModel):
     late = models.BooleanField("Nhập bù quá hạn", default=False)
     linked_existing = models.BooleanField("Liên kết đơn đã lưu trực tuyến", default=False)
     void_reason = models.CharField("Lý do hủy", max_length=255, blank=True)
+    payload = models.JSONField("Nội dung phiếu", default=dict, blank=True)
+    missing = models.JSONField("Dữ liệu lịch sử còn thiếu", default=list, blank=True)
+    confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người xác nhận", on_delete=models.PROTECT,
+                                     null=True, blank=True, related_name="+")
+    confirmed_at = models.DateTimeField("Xác nhận lúc", null=True, blank=True)
+    confirmation = models.JSONField("Giá và định mức đã xác nhận", default=dict, blank=True)
     entered_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người nhập", on_delete=models.PROTECT,
                                    related_name="+")
     operation_key = models.CharField("Mã nghiệp vụ", max_length=64, unique=True)

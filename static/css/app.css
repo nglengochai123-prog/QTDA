@@ -522,3 +522,9 @@ select.input { appearance: auto; }
 .bar-list li { gap: 0.75rem; }
 .bar-track { flex: 1; height: 0.625rem; background: var(--accent-soft); border-radius: var(--radius); overflow: hidden; min-width: 4rem; }
 .bar-fill { display: block; height: 100%; background: var(--primary); }
+
+/* Nhập bù phiếu dự phòng: món và kích cỡ, số ly, tùy chọn trên một dòng */
+.slip-line { display: grid; grid-template-columns: minmax(12rem, 2fr) 5rem minmax(12rem, 2fr); gap: 0.5rem; margin: 0.5rem 0; align-items: start; }
+.slip-line .input-sm { width: 100%; min-width: 0; }
+.slip-opts { min-height: 6rem; }
+@media (max-width: 699px) { .slip-line { grid-template-columns: 1fr 5rem; } .slip-opts { grid-column: 1 / -1; } }

@@ -51,7 +51,13 @@ def _out_of_stock(now):
 
 def _backup_pending(now):
     from apps.orders import backup
-    from apps.orders.models import BackupSlipRange
+    from apps.orders.models import BackupSlip, BackupSlipRange
+
+    for slip in BackupSlip.objects.filter(status=BackupSlip.Status.PENDING):
+        yield {"subject": f"pdp-xn-{slip.pk}", "title": f"{slip} chờ Chủ quán xác nhận giá hoặc định mức",
+               "detail": "; ".join(m["text"] for m in slip.missing), "assignee": None, "role": OWNER,
+               "severity": Alert.Severity.IMPORTANT, "due": slip.created_at + timedelta(hours=params.get("backup_entry_hours")),
+               "link": "/du-phong/", "escalate": False}
 
     for rng in BackupSlipRange.objects.select_related("shift"):
         missing = backup.unprocessed_numbers(rng)

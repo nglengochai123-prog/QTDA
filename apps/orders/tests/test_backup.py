@@ -15,7 +15,7 @@ from apps.orders.tests.test_adjust_pay import Base, key
 from apps.shifts import services as shift_services
 
 
-class BackupSlipTests(Base):
+class BackupBase(Base):
     def setUp(self):
         super().setUp()
         self.sold_at = timezone.now()
@@ -35,6 +35,8 @@ class BackupSlipTests(Base):
         result, _ = backup.enter_slip(self.manager, op or key(), payload)
         return result
 
+
+class BackupSlipTests(BackupBase):
     def test_ac12_link_existing_and_create_new_orders_once(self):
         self.issue()
         online_key = key()
@@ -127,3 +129,98 @@ class BackupScreenTests(Base):
         self.assertContains(page, "Đơn chưa có món nào")
         self.assertContains(page, "Phiếu 0151")
         self.assertEqual(BackupSlip.objects.get().order.total, 50000)
+
+
+class HistoricalSlipTests(BackupBase):
+    """Kích cỡ, tùy chọn, giá và định mức theo thời điểm bán; thiếu lịch sử thì chờ xác nhận."""
+
+    def slip(self, number, sold_at, lines, code="", op=None):
+        payload = {"number": number, "operation_code": code, "sold_at": sold_at.isoformat(),
+                   "restored_at": self.sold_at.isoformat(), "method": "tien_mat",
+                   "table": self.d["table"].pk, "lines": lines}
+        result, _ = backup.enter_slip(self.manager, op or key(), payload)
+        return result
+
+    def test_size_option_and_price_at_sale_time(self):
+        self.issue()
+        size = self.d["size_m"]
+        size.price = 30000  # tăng giá sau thời điểm bán
+        size.save()
+        cream = self.d["cream"]
+        result = self.slip(151, self.sold_at, cart(self.d, options=[cream])["lines"])
+        line = Order.objects.get(pk=result["order_id"]).lines.get()
+        self.assertEqual(line.unit_price, 25000 + 8000)  # giá lúc bán, không phải giá hiện tại
+        self.assertEqual(list(line.options.values_list("name", flat=True)), ["Kem muối"])
+        self.assertEqual(levels(self.d["milk"])[0], D(1000 - 30 - 15))  # định mức có tùy chọn
+        self.assertEqual(Payment.objects.get().amount, 33000)
+
+    def test_missing_history_waits_for_owner_confirmation(self):
+        self.issue()
+        shift_services.add_cash_entry(self.manager, key(), self.shift.pk, "dau_ca", 0)
+        before = self.sold_at - timedelta(days=3)  # trước khi có lịch sử giá và định mức
+        op = key()
+        held = self.slip(151, before, cart(self.d)["lines"], op=op)
+        self.assertTrue(held["pending"])
+        self.assertEqual(self.slip(151, before, cart(self.d)["lines"], op=op), held)  # gửi lại
+        self.assertFalse(Order.objects.exists())
+        self.assertFalse(Payment.objects.exists())
+        self.assertEqual(levels(self.d["coffee"])[0], D(2000))
+        backup.declare_last_used(self.manager, self.shift.backup_ranges.get().pk, 151)
+        with self.assertRaises(ValidationError):
+            shift_services.close_shift(self.manager, self.shift.pk)  # phiếu chờ xác nhận chặn kết ca
+        slip = BackupSlip.objects.get()
+        with self.assertRaises(ValidationError):
+            backup.confirm_slip(self.manager, key(), slip.pk, {1: 25000}, {1: self.d["v1"].pk})  # không phải Chủ quán
+        with self.assertRaises(ValidationError):
+            backup.confirm_slip(self.d["owner"], key(), slip.pk, {1: 25000})  # còn thiếu định mức
+        op = key()
+        backup.confirm_slip(self.d["owner"], op, slip.pk, {1: 24000}, {1: self.d["v1"].pk}, "Theo bảng giá in tháng trước")
+        backup.confirm_slip(self.d["owner"], op, slip.pk, {1: 24000}, {1: self.d["v1"].pk}, "Theo bảng giá in tháng trước")
+        backup.confirm_slip(self.d["owner"], key(), slip.pk, {1: 24000}, {1: self.d["v1"].pk})  # bấm lại
+        self.assertEqual(Order.objects.get().total, 24000)
+        self.assertEqual(Payment.objects.count(), 1)
+        self.assertEqual(levels(self.d["coffee"])[0], D(1980))
+        dup = self.slip(151, before, cart(self.d)["lines"])  # nhập lại số đã xử lý
+        self.assertFalse(dup["ok"])
+        self.assertEqual((Order.objects.count(), Payment.objects.count()), (1, 1))
+        shift_services.close_shift(self.manager, self.shift.pk)
+        self.assertEqual(stock.ledger_problems(), [])
+
+    def test_linked_order_keeps_its_price_and_recipe(self):
+        self.issue()
+        code = key()
+        result, _ = services.submit_order(self.d["waiter"], code, cart(self.d))
+        size = self.d["size_m"]
+        size.price = 40000
+        size.save()
+        linked = self.slip(151, self.sold_at, cart(self.d, quantity=3)["lines"], code=code)
+        order = Order.objects.get(pk=linked["order_id"])
+        self.assertEqual((order.total, order.lines.get().quantity, order.lines.get().recipe_version),
+                         (25000, 1, self.d["v1"]))
+        self.assertEqual(Payment.objects.get().amount, 25000)
+
+
+class HistoricalScreenTests(BackupBase):
+    def test_options_on_form_and_owner_confirms_on_screen(self):
+        from django.urls import reverse
+
+        from apps.orders.tests.helpers import PASSWORD
+
+        self.issue()
+        url = reverse("orders:backup_slips")
+        self.client.login(username=self.manager.username, password=PASSWORD)
+        old = (timezone.localtime() - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M")
+        now = (timezone.localtime() + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M")
+        line = {"item_0": f"{self.d['item'].pk}:{self.d['size_m'].pk}", "qty_0": "1", "opt_0": [self.d["cream"].pk]}
+        self.client.post(url, {"action": "enter", "operation_key": key(), "number": "151", "sold_at": now,
+                               "restored_at": now, "table": self.d["table"].pk, "method": "tien_mat", **line})
+        self.assertEqual(BackupSlip.objects.get(number=151).order.total, 33000)
+        self.client.post(url, {"action": "enter", "operation_key": key(), "number": "152", "sold_at": old,
+                               "restored_at": now, "table": self.d["table"].pk, "method": "tien_mat", **line})
+        self.assertContains(self.client.get(url), "Chờ Chủ quán xác nhận")
+        slip = BackupSlip.objects.get(number=152)
+        self.client.login(username=self.d["owner"].username, password=PASSWORD)
+        self.client.post(url, {"action": "confirm", "operation_key": key(), "slip": slip.pk, "price_1": "30000",
+                               "version_1": self.d["v1"].pk, "note": "Bảng giá in"})
+        slip.refresh_from_db()
+        self.assertEqual((slip.status, slip.order.total), ("da_nhap_bu", 30000))

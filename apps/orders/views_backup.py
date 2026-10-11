@@ -10,11 +10,12 @@ from django.views.decorators.http import require_http_methods
 
 from apps.accounts.models import User
 from apps.accounts.permissions import Cap, capability_required
-from apps.catalog.models import ItemSize, Table
+from apps.catalog.models import ItemSize, Option, Table
+from apps.inventory.models import RecipeVersion
 from apps.core.idempotency import OperationKeyError
 
 from . import backup
-from .models import BackupSlipRange, Payment
+from .models import BackupSlip, BackupSlipRange, Payment
 
 LINE_ROWS = 4
 
@@ -26,7 +27,8 @@ def _lines(post):
         if not pair:
             continue
         item_id, size_id = pair.split(":")
-        lines.append({"item": item_id, "size": size_id, "quantity": qty or 1, "options": []})
+        lines.append({"item": item_id, "size": size_id, "quantity": qty or 1,
+                      "options": [int(o) for o in post.getlist(f"opt_{i}") if o]})
     return lines
 
 
@@ -45,6 +47,12 @@ def backup_slips(request):
             elif action == "declare":
                 rng = backup.declare_last_used(request.user, p.get("range"), p.get("last_used") or 0)
                 messages.success(request, f"Đã khai báo số cuối đã dùng của dãy {rng}.")
+            elif action == "confirm":
+                prices = {k[6:]: v for k, v in p.items() if k.startswith("price_")}
+                versions = {k[8:]: v for k, v in p.items() if k.startswith("version_")}
+                result, _ = backup.confirm_slip(request.user, p.get("operation_key", ""), p.get("slip"), prices,
+                                                versions, p.get("note", ""))
+                messages.success(request, result["message"])
             elif action == "void":
                 slip = backup.void_slip(request.user, p.get("number"), p.get("reason", ""))
                 messages.success(request, f"Đã khai báo hủy {slip}; đã tạo ngoại lệ cho Chủ quán xem xét.")
@@ -54,7 +62,7 @@ def backup_slips(request):
                     "sold_at": p.get("sold_at"), "restored_at": p.get("restored_at"), "method": p.get("method"),
                     "transfer_confirmed": p.get("transfer_confirmed") == "1", "table": p.get("table"),
                     "lines": _lines(p)})
-                (messages.success if result["ok"] else messages.error)(
+                (messages.warning if result.get("pending") else messages.success if result["ok"] else messages.error)(
                     request, result["message"] + (" (Gửi lại: đã ghi từ trước.)" if repeated else "")
                     + (" Nhập bù quá hạn: đã tạo ngoại lệ." if result.get("late") else ""))
         except (ValidationError, OperationKeyError, ValueError) as error:
@@ -67,10 +75,24 @@ def backup_slips(request):
     for rng in ranges:
         rng.missing = [backup.fmt(n) for n in backup.unprocessed_numbers(rng)]
     now = timezone.localtime().strftime("%Y-%m-%dT%H:%M")
+    pending = []
+    for slip in BackupSlip.objects.filter(status=BackupSlip.Status.PENDING).select_related("range__shift", "entered_by"):
+        need = {(m["line"], m["kind"]) for m in slip.missing}
+        rows = []
+        for index, raw in enumerate(slip.payload.get("lines", []), start=1):
+            size = ItemSize.objects.select_related("item").filter(pk=raw.get("size")).first()
+            opts = list(Option.objects.filter(pk__in=raw.get("options") or []))
+            rows.append({"index": index, "size": size, "quantity": raw.get("quantity"), "options": opts,
+                         "need_price": (index, "gia") in need, "need_version": (index, "dinh_muc") in need,
+                         "current_price": (size.price + sum(o.extra_price for o in opts)) if size else None,
+                         "versions": RecipeVersion.objects.published().filter(item_id=raw.get("item"))})
+        pending.append({"slip": slip, "rows": rows, "op": uuid.uuid4().hex})
     return render(request, "orders/backup_slips.html", {
         "ranges": ranges, "shifts": Shift.objects.filter(status=Shift.Status.OPEN).order_by("starts_at"),
         "users": User.objects.filter(is_active=True).order_by("first_name"),
         "tables": Table.objects.filter(is_active=True), "methods": Payment.Method.choices,
         "sizes": ItemSize.objects.select_related("item").filter(item__status="dang_ban").order_by("item__name", "price"),
-        "rows": range(LINE_ROWS), "now": now, "operation_key": uuid.uuid4().hex,
+        "rows": range(LINE_ROWS), "now": now, "operation_key": uuid.uuid4().hex, "pending": pending,
+        "options": Option.objects.filter(is_active=True).select_related("group").order_by("group__name", "sort_order"),
+        "is_owner": request.user.is_owner,
     })

@@ -9,6 +9,7 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.utils import timezone
 
 from apps.core.models import StoreScopedModel, TimeStampedModel
 
@@ -89,6 +90,12 @@ class Option(TimeStampedModel):
     def __str__(self):
         return f"{self.group.name}: {self.name}"
 
+    def save(self, *args, **kwargs):
+        changed = self.pk is None or Option.objects.filter(pk=self.pk).exclude(extra_price=self.extra_price).exists()
+        super().save(*args, **kwargs)
+        if changed:
+            PriceRecord.objects.create(option=self, price=self.extra_price)
+
 
 class MenuItemQuerySet(models.QuerySet):
     def sellable(self):
@@ -164,3 +171,50 @@ class ItemSize(TimeStampedModel):
 
     def __str__(self):
         return f"{self.item.name} {self.name}"
+
+    def save(self, *args, **kwargs):
+        changed = self.pk is None or ItemSize.objects.filter(pk=self.pk).exclude(price=self.price).exists()
+        super().save(*args, **kwargs)
+        if changed:
+            PriceRecord.objects.create(size=self, price=self.price)
+
+
+class PriceRecord(models.Model):
+    """Lịch sử giá bán của kích cỡ và giá cộng thêm của tùy chọn (BRU-39).
+
+    Mỗi lần tạo hoặc đổi giá thêm một dòng có "hiệu lực từ"; không sửa, không xóa. Dùng để tính
+    đúng giá khi nhập bù phiếu dự phòng theo thời điểm bán thực tế.
+    """
+
+    size = models.ForeignKey(ItemSize, verbose_name="Kích cỡ", on_delete=models.CASCADE, null=True, blank=True,
+                             related_name="price_records")
+    option = models.ForeignKey(Option, verbose_name="Tùy chọn", on_delete=models.CASCADE, null=True, blank=True,
+                               related_name="price_records")
+    price = models.PositiveIntegerField("Giá (đồng)")
+    effective_from = models.DateTimeField("Hiệu lực từ", default=timezone.now)
+
+    class Meta:
+        verbose_name = "Lịch sử giá"
+        verbose_name_plural = "Lịch sử giá"
+        ordering = ["-effective_from", "-id"]
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            raise ValueError("Lịch sử giá không sửa được.")
+        super().save(*args, **kwargs)
+
+
+def price_at(size, options, at):
+    """Đơn giá (kích cỡ + tùy chọn) có hiệu lực tại `at`; None nếu thiếu lịch sử cho bất kỳ phần nào."""
+    def one(qs):
+        return qs.filter(effective_from__lte=at).order_by("-effective_from", "-id").values_list("price", flat=True).first()
+
+    total = one(PriceRecord.objects.filter(size=size))
+    if total is None:
+        return None
+    for option in options:
+        extra = one(PriceRecord.objects.filter(option=option))
+        if extra is None:
+            return None
+        total += extra
+    return total

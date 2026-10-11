@@ -18,16 +18,41 @@
       <div class="field"><label for="b-method">Khách trả bằng</label><select class="input" id="b-method" name="method" required>{% for v, l in methods %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
         <label class="check"><input type="checkbox" name="transfer_confirmed" value="1"> Đã thấy tiền chuyển khoản về</label></div>
     </div>
-    <h3>Món trên phiếu <span class="muted">(bỏ trống nếu phiếu có mã nghiệp vụ của đơn đã lưu)</span></h3>
+    <h3>Món trên phiếu <span class="muted">(bỏ trống nếu phiếu có mã nghiệp vụ của đơn đã lưu: đơn đó giữ giá và định mức của nó)</span></h3>
+    <p class="hint">Giá và định mức lấy theo thời điểm bán ghi trên phiếu. Nếu hệ thống chưa có lịch sử giá hoặc định mức của thời điểm đó, phiếu chờ Chủ quán xác nhận, chưa ghi đơn.</p>
     {% for i in rows %}
-    <div class="inline-form">
-      <select class="input input-sm" name="item_{{ i }}" aria-label="Món dòng {{ forloop.counter }}"><option value="">Món</option>{% for s in sizes %}<option value="{{ s.item_id }}:{{ s.pk }}">{{ s.item.name }} {{ s.name }}</option>{% endfor %}</select>
-      <input class="input input-sm" name="qty_{{ i }}" inputmode="numeric" value="1" aria-label="Số ly dòng {{ forloop.counter }}">
+    <div class="slip-line">
+      <select class="input input-sm" name="item_{{ i }}" aria-label="Món và kích cỡ dòng {{ forloop.counter }}"><option value="">Món, kích cỡ</option>{% for s in sizes %}<option value="{{ s.item_id }}:{{ s.pk }}">{{ s.item.name }} {{ s.name }}</option>{% endfor %}</select>
+      <input class="input input-sm slip-qty" name="qty_{{ i }}" inputmode="numeric" value="1" aria-label="Số ly dòng {{ forloop.counter }}">
+      <select class="input input-sm slip-opts" name="opt_{{ i }}" multiple size="3" aria-label="Tùy chọn dòng {{ forloop.counter }} (giữ Ctrl để chọn nhiều)">{% for o in options %}<option value="{{ o.pk }}">{{ o.group.name }}: {{ o.name }}{% if o.extra_price %} (+{{ o.extra_price }} đ){% endif %}</option>{% endfor %}</select>
     </div>
     {% endfor %}
+    <p class="hint">Tùy chọn: giữ phím Ctrl để chọn nhiều tùy chọn trong một dòng.</p>
     <button class="btn btn-primary" type="submit">Lưu phiếu nhập bù</button>
   </form>
 </section>
+
+{% if pending %}
+<section class="panel panel-warn" aria-labelledby="pend-title">
+  <h2 id="pend-title">Phiếu chờ Chủ quán xác nhận giá hoặc định mức</h2>
+  <p class="muted">Hệ thống không đoán giá hay định mức của thời điểm chưa có lịch sử. Phiếu chưa tạo đơn, chưa trừ kho, chưa thu tiền và chặn kết ca cho đến khi được xác nhận.</p>
+  {% for p in pending %}
+  <form method="post" class="mini-form" data-once>{% csrf_token %}
+    <input type="hidden" name="action" value="confirm"><input type="hidden" name="slip" value="{{ p.slip.pk }}"><input type="hidden" name="operation_key" value="{{ p.op }}">
+    <h3>{{ p.slip }} · bán lúc {{ p.slip.sold_at|date:"H:i d/m/Y" }} · {{ p.slip.range.shift }} · nhập bởi {{ p.slip.entered_by }}</h3>
+    {% for r in p.rows %}
+    <div class="inline-form">
+      <span><strong>{{ r.quantity }} × {{ r.size.item.name }} {{ r.size.name }}</strong>{% for o in r.options %} · {{ o.name }}{% endfor %}</span>
+      {% if r.need_price %}<label class="visually-hidden" for="pr-{{ p.slip.pk }}-{{ r.index }}">Đơn giá đã bán dòng {{ r.index }}</label><input class="input input-sm" id="pr-{{ p.slip.pk }}-{{ r.index }}" name="price_{{ r.index }}" inputmode="numeric" placeholder="Đơn giá đã bán (giá hiện tại {{ r.current_price }} đ)" {% if is_owner %}required{% else %}disabled{% endif %}>{% endif %}
+      {% if r.need_version %}<label class="visually-hidden" for="ve-{{ p.slip.pk }}-{{ r.index }}">Phiên bản định mức dòng {{ r.index }}</label><select class="input input-sm" id="ve-{{ p.slip.pk }}-{{ r.index }}" name="version_{{ r.index }}" {% if is_owner %}required{% else %}disabled{% endif %}><option value="">Chọn phiên bản định mức</option>{% for v in r.versions %}<option value="{{ v.pk }}">Bản {{ v.number }} từ {{ v.effective_from|date:"d/m/Y" }}</option>{% endfor %}</select>{% endif %}
+    </div>
+    {% endfor %}
+    {% if is_owner %}<div class="inline-form"><input class="input input-sm" name="note" placeholder="Căn cứ xác nhận (ví dụ: bảng giá in, ảnh phiếu)" required aria-label="Căn cứ xác nhận"><button class="btn btn-primary" type="submit">Xác nhận và ghi đơn</button></div>
+    {% else %}<p class="muted">Chờ Chủ quán xác nhận.</p>{% endif %}
+  </form>
+  {% endfor %}
+</section>
+{% endif %}
 
 <section class="panel" aria-labelledby="ranges-title">
   <h2 id="ranges-title">Dãy phiếu đã cấp</h2>
