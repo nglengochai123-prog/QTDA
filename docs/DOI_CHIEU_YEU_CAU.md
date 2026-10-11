@@ -44,7 +44,7 @@ Trạng thái: **Đúng** là làm đủ theo BRD và có kiểm thử; **Một 
 | FR-03 | Vòng đời đơn | Đúng | AC-06, AC-07 |
 | FR-04 | Thanh toán theo bàn | Đúng | AC-08, AC-09, AC-10; trạng thái chờ duyệt và quá hạn mọi cấp tính khi đọc |
 | FR-05 | In hóa đơn | Chưa làm | Could, Giai đoạn 3 theo BRD |
-| FR-06 | Bán hàng dự phòng, nhập bù | Chưa làm | Phần 4. Hiện có mã nghiệp vụ hiển thị khi mất phản hồi để ghi lên phiếu |
+| FR-06 | Bán hàng dự phòng, nhập bù | Đúng | AC-12, AC-13 (`orders/tests/test_backup.py`): cấp dãy theo ca có người nhận; nhập bù có mã nghiệp vụ thì liên kết đơn đã lưu và chỉ bổ sung phần thiếu; phiếu không mã tạo đơn theo định mức lúc bán; gửi lại không ghi thêm; nháp gửi lại trả đơn đã nhập bù; số trùng, ngoài dãy, quá hạn, hủy tạo ngoại lệ; kết ca bị chặn khi còn số chưa xử lý. Màn hình /du-phong/ |
 | FR-07 | Quỹ tiền mặt ca | Đúng | AC-14, AC-15 |
 | FR-08 | Kết ca, báo cáo cuối ca | Một phần | AC-16, AC-17 đúng; đính chính báo cáo có lý do và người duyệt (GD-11); "Chủ quán nhận thông báo" mới là thông báo trong ứng dụng, chưa có Web Push |
 | FR-09 | Tình trạng dữ liệu ca | Một phần | Có chưa kết ca, thiếu báo cáo quá hạn (AC-18). Chưa có: kiểm kê nhóm trọng yếu trước giờ mở cửa hôm sau, nhập bù (Phần 4), cảnh báo chuyển Chủ quán khi quá hạn xử lý (cùng FR-51) |
@@ -132,6 +132,9 @@ Chủ quán trả lời ngày 11/10/2026. Cột "Đã làm" ghi cách hệ thố
 | GD-14 | Quản lý ca đề nghị đính chính thì Chủ quán duyệt; nếu chính Chủ quán đề nghị thì được ghi là tự duyệt ngay, có nhật ký | Quán chỉ có một Chủ quán, không có cấp duyệt cao hơn |
 | GD-15 | Không duyệt được đính chính nếu khoản chênh lệch sẽ thay đổi đã là bằng chứng trong vụ việc tổn thất; phải đính chính vụ việc trước | Tránh vụ việc trỏ vào số đã hết hiệu lực và tính trùng tổn thất |
 | GD-16 | Khoản hoàn đã duyệt nhưng chưa trả khách không chặn kết ca; nó hiện ở trang Ca của tôi cho đến khi có người bấm "Đã hoàn tiền" | Tiền chưa rời quỹ thì không thuộc ca nào |
+| GD-17 | Đơn nhập bù tính tiền theo bảng giá hiện hành lúc nhập bù | Hệ thống chưa lưu lịch sử giá; định mức thì đã theo phiên bản lúc bán |
+| GD-18 | Biểu mẫu nhập bù chỉ ghi món, kích cỡ, số ly; chưa ghi tùy chọn | Giữ biểu mẫu ngắn để nhập nhanh; nếu quán hay bán tùy chọn có thêm tiền khi mất mạng thì cần bổ sung |
+| GD-19 | Mỗi dãy phiếu đã cấp cho ca phải khai báo số cuối đã dùng (0 nếu không dùng) trước khi kết ca | Nếu không, hệ thống không biết phiếu cuối bị bỏ sót (AC-13 chỉ phát hiện được số thiếu nằm giữa) |
 
 ## 7. Dữ liệu đầu vào cho dự báo (logic dự báo chờ Hai giải thích)
 

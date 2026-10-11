@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Phiếu dự phòng · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<h1>Phiếu dự phòng và nhập bù</h1>
+<p class="lead-muted">Khi mất kết nối, quán bán bằng phiếu đánh số. Có mạng lại thì nhập bù từng phiếu trong thời hạn ở trang Tham số (mặc định 1 giờ), ghi mã nghiệp vụ nếu phiếu có. Số phiếu thiếu, trùng, quá hạn hoặc khai báo hủy đều tạo ngoại lệ.</p>
+
+<section class="panel" aria-labelledby="enter-title">
+  <h2 id="enter-title">Nhập bù một phiếu</h2>
+  <form method="post" class="mini-form" data-once>{% csrf_token %}
+    <input type="hidden" name="action" value="enter"><input type="hidden" name="operation_key" value="{{ operation_key }}">
+    <div class="form-grid">
+      <div class="field"><label for="b-no">Số phiếu</label><input class="input" id="b-no" name="number" inputmode="numeric" required></div>
+      <div class="field"><label for="b-code">Mã nghiệp vụ trên phiếu</label><input class="input" id="b-code" name="operation_code" autocomplete="off">
+        <span class="hint">Có mã thì hệ thống tìm đơn đã lưu và chỉ bổ sung phần còn thiếu.</span></div>
+      <div class="field"><label for="b-sold">Thời điểm bán ghi trên phiếu</label><input class="input" id="b-sold" type="datetime-local" name="sold_at" value="{{ now }}" required></div>
+      <div class="field"><label for="b-rest">Có mạng lại lúc</label><input class="input" id="b-rest" type="datetime-local" name="restored_at" value="{{ now }}" required></div>
+      <div class="field"><label for="b-table">Bàn</label><select class="input" id="b-table" name="table">{% for t in tables %}<option value="{{ t.pk }}">Bàn {{ t.code }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="b-method">Khách trả bằng</label><select class="input" id="b-method" name="method" required>{% for v, l in methods %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
+        <label class="check"><input type="checkbox" name="transfer_confirmed" value="1"> Đã thấy tiền chuyển khoản về</label></div>
+    </div>
+    <h3>Món trên phiếu <span class="muted">(bỏ trống nếu phiếu có mã nghiệp vụ của đơn đã lưu)</span></h3>
+    {% for i in rows %}
+    <div class="inline-form">
+      <select class="input input-sm" name="item_{{ i }}" aria-label="Món dòng {{ forloop.counter }}"><option value="">Món</option>{% for s in sizes %}<option value="{{ s.item_id }}:{{ s.pk }}">{{ s.item.name }} {{ s.name }}</option>{% endfor %}</select>
+      <input class="input input-sm" name="qty_{{ i }}" inputmode="numeric" value="1" aria-label="Số ly dòng {{ forloop.counter }}">
+    </div>
+    {% endfor %}
+    <button class="btn btn-primary" type="submit">Lưu phiếu nhập bù</button>
+  </form>
+</section>
+
+<section class="panel" aria-labelledby="ranges-title">
+  <h2 id="ranges-title">Dãy phiếu đã cấp</h2>
+  {% if ranges %}
+  <ul class="ruled-list">
+    {% for r in ranges %}
+    <li class="param-row">
+      <div class="exc-text"><strong>{{ r }} · {{ r.shift }}</strong>
+        <span class="muted">Người nhận {{ r.receiver }} · đã xử lý {{ r.slips.all|length }} phiếu{% if r.last_used_number is not None %} · số cuối đã dùng {% if r.last_used_number %}{{ r.last_used_number|stringformat:"04d" }}{% else %}không dùng{% endif %}{% endif %}</span>
+        {% if r.missing %}<span class="flag-low">Chưa xử lý: {{ r.missing|join:", " }}</span>{% endif %}
+        {% for s in r.slips.all %}<span class="muted">{{ s }} · {{ s.get_status_display }}{% if s.order %} · đơn {{ s.order.code }}{% if s.linked_existing %} (đơn đã lưu){% endif %}{% endif %}{% if s.late %} · quá hạn{% endif %}{% if s.void_reason %} · {{ s.void_reason }}{% endif %}</span>{% endfor %}
+      </div>
+      {% if r.shift.status == "dang_mo" %}
+      <form method="post" class="inline-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="declare"><input type="hidden" name="range" value="{{ r.pk }}">
+        <input class="input input-sm" name="last_used" inputmode="numeric" placeholder="Số cuối đã dùng, 0 nếu không dùng" aria-label="Số cuối đã dùng">
+        <button class="btn btn-quiet" type="submit">Khai báo</button></form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">Chưa cấp dãy phiếu nào.</p>{% endif %}
+</section>
+
+<div class="form-grid">
+  <section class="panel" aria-labelledby="void-title">
+    <h2 id="void-title">Khai báo phiếu hủy</h2>
+    <form method="post" class="mini-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="void">
+      <div class="field"><label for="v-no">Số phiếu</label><input class="input" id="v-no" name="number" inputmode="numeric" required></div>
+      <div class="field"><label for="v-reason">Lý do</label><input class="input" id="v-reason" name="reason" required placeholder="Ví dụ: viết hỏng"></div>
+      <button class="btn btn-quiet" type="submit">Khai báo hủy</button></form>
+  </section>
+  <section class="panel" aria-labelledby="issue-title">
+    <h2 id="issue-title">Cấp dãy phiếu cho ca</h2>
+    <form method="post" class="mini-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="issue">
+      <div class="field"><label for="i-shift">Ca</label><select class="input" id="i-shift" name="shift" required>{% for s in shifts %}<option value="{{ s.pk }}">{{ s }} {{ s.starts_at|date:"H:i" }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="i-first">Từ số</label><input class="input" id="i-first" name="first" inputmode="numeric" required></div>
+      <div class="field"><label for="i-last">Đến số</label><input class="input" id="i-last" name="last" inputmode="numeric" required></div>
+      <div class="field"><label for="i-recv">Người nhận</label><select class="input" id="i-recv" name="receiver" required>{% for u in users %}<option value="{{ u.pk }}">{{ u }}</option>{% endfor %}</select></div>
+      <button class="btn btn-primary" type="submit">Cấp dãy</button></form>
+  </section>
+</div>
+{% endblock %}

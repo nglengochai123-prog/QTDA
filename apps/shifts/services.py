@@ -181,6 +181,9 @@ def close_blockers(shift):
     pending = AdjustmentRequest.objects.filter(status=AdjustmentRequest.Status.PENDING, order__shift=shift)
     for req in pending:
         blockers.append(f"Yêu cầu \"{req.summary()}\" của đơn {req.order.code} đang chờ duyệt.")
+    from apps.orders import backup
+
+    blockers += backup.close_blockers(shift)  # AC-13
     if not shift.cash_entries.filter(kind=CashEntry.Kind.OPENING).exists():
         blockers.append("Chưa xác nhận tiền đầu ca.")
     unconfirmed = shift.cash_entries.filter(kind=CashEntry.Kind.HANDOVER, confirmed_at__isnull=True)
@@ -458,5 +461,9 @@ def data_status(shift, now=None):
         issues.append("Chưa kết ca")
     if not has_report and now > deadline:
         issues.append("Thiếu báo cáo cuối ca")  # AC-18
+    from apps.orders import backup
+
+    if any(backup.unprocessed_numbers(r) for r in shift.backup_ranges.all()):
+        issues.append("Còn phiếu dự phòng chưa nhập bù")  # FR-09
     return {"shift": shift, "closed": shift.status == Shift.Status.CLOSED, "has_report": has_report,
             "deadline": deadline, "issues": issues, "overdue": bool(issues)}

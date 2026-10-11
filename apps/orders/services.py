@@ -13,7 +13,7 @@ from apps.inventory import stock
 from apps.inventory.models import RecipeVersion
 from apps.inventory.services import ingredient_usage
 
-from .models import Order, OrderLine, OrderLineOption
+from .models import BackupSlip, Order, OrderLine, OrderLineOption
 
 MAX_CUPS_PER_LINE = 50
 
@@ -25,8 +25,11 @@ def _int(value, field):
         raise ValidationError(f"{field} không hợp lệ.")
 
 
-def build_lines(payload):
-    """Kiểm tra giỏ món từ màn hình tạo đơn và tính giá, định mức theo dữ liệu hiện hành."""
+def build_lines(payload, at=None, allow_unsellable=False):
+    """Kiểm tra giỏ món từ màn hình tạo đơn và tính giá, định mức theo dữ liệu hiện hành.
+
+    Nhập bù phiếu dự phòng truyền `at` = thời điểm bán để lấy phiên bản định mức lúc đó (BRU-39).
+    """
     table = Table.objects.filter(pk=_int(payload.get("table"), "Bàn"), is_active=True).first()
     if table is None:
         raise ValidationError("Chọn bàn trước khi gửi đơn.")
@@ -35,7 +38,8 @@ def build_lines(payload):
         raise ValidationError("Đơn chưa có món nào.")
     lines = []
     for index, raw in enumerate(raw_lines, start=1):
-        item = MenuItem.objects.sellable().filter(pk=_int(raw.get("item"), "Món")).first()
+        items = MenuItem.objects.all() if allow_unsellable else MenuItem.objects.sellable()
+        item = items.filter(pk=_int(raw.get("item"), "Món")).first()
         if item is None:
             raise ValidationError(f"Dòng {index}: món không còn mở bán.")
         size = item.active_sizes().filter(pk=_int(raw.get("size"), "Kích cỡ")).first()
@@ -57,7 +61,7 @@ def build_lines(payload):
         version = None
         usage = {}
         if not item.no_ingredients:
-            version = RecipeVersion.objects.current_for(item)
+            version = RecipeVersion.objects.current_for(item, at=at)
             if version is None:
                 raise ValidationError(f"Dòng {index}: {item.name} chưa có định mức áp dụng.")
             usage = {str(k): str(v) for k, v in ingredient_usage(version, size, options).items()}
@@ -97,6 +101,12 @@ def submit_order(user, operation_key, payload):
         "lines": [{"item": l.get("item"), "size": l.get("size"), "options": sorted(l.get("options") or []),
                    "quantity": l.get("quantity", 1), "note": l.get("note") or ""} for l in payload.get("lines") or []],
     }
+
+    existing = Order.objects.filter(operation_key=operation_key).select_related("table").first()
+    if existing is not None and BackupSlip.objects.filter(order=existing).exists():
+        # NFR-16: nháp đã chuyển sang phiếu dự phòng và đã nhập bù thì gửi lại không tạo đơn mới.
+        return ({"order_id": existing.pk, "code": existing.code, "table": existing.table.code, "total": existing.total,
+                 "message": f"Đơn {existing.code} đã được nhập bù từ phiếu dự phòng."}, True)
 
     def action():
         table, lines = build_lines(clean_payload)

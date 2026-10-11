@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views, views_control
+from . import views, views_backup, views_control
 
 app_name = "orders"
 
@@ -24,4 +24,5 @@ urlpatterns = [
     path("duyet/<int:request_id>/", views_control.decide, name="decide"),
     path("thu-ngan/", views_control.cashier, name="cashier"),
     path("thu-ngan/ban/<int:table_id>/", views_control.pay, name="pay"),
+    path("du-phong/", views_backup.backup_slips, name="backup_slips"),
 ]

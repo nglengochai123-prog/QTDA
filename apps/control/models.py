@@ -17,6 +17,10 @@ class ExceptionCase(StoreScopedModel):
         ACCUMULATED_MANAGER = "tich_luy_qlc", "Chênh lệch tích lũy của Quản lý ca"
         ACCUMULATED_STORE = "tich_luy_quan", "Chênh lệch tích lũy của toàn quán"
         COUNT_ACCUMULATED = "kiem_ke_tich_luy", "Chênh lệch kiểm kê tích lũy"
+        BACKUP_VOIDED = "pdp_huy", "Phiếu dự phòng bị hủy"
+        BACKUP_LATE = "pdp_qua_han", "Nhập bù phiếu dự phòng quá hạn"
+        BACKUP_DUPLICATE = "pdp_trung", "Số phiếu dự phòng trùng"
+        BACKUP_OUT_OF_RANGE = "pdp_ngoai_day", "Số phiếu dự phòng ngoài dãy đã cấp"
 
     class Severity(models.TextChoices):
         IMPORTANT = "quan_trong", "Quan trọng"

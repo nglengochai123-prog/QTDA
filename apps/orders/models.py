@@ -351,3 +351,58 @@ class Payment(StoreScopedModel):
     def __str__(self):
         return f"{self.get_method_display()} {self.amount:,} đ · {self.table}".replace(",", ".")
 
+
+
+class BackupSlipRange(StoreScopedModel):
+    """Dãy số phiếu dự phòng in sẵn cấp cho một ca, có người nhận (BRU-03)."""
+
+    shift = models.ForeignKey("shifts.Shift", verbose_name="Ca", on_delete=models.PROTECT, related_name="backup_ranges")
+    first_number = models.PositiveIntegerField("Số đầu")
+    last_number = models.PositiveIntegerField("Số cuối")
+    receiver = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người nhận", on_delete=models.PROTECT,
+                                 related_name="+")
+    issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người cấp", on_delete=models.PROTECT,
+                                  related_name="+")
+    last_used_number = models.PositiveIntegerField("Số cuối đã dùng (0: không dùng)", null=True, blank=True)
+    declared_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người khai báo", on_delete=models.PROTECT,
+                                    null=True, blank=True, related_name="+")
+    declared_at = models.DateTimeField("Khai báo lúc", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Dãy phiếu dự phòng"
+        verbose_name_plural = "Dãy phiếu dự phòng"
+        ordering = ["first_number"]
+
+    def __str__(self):
+        return f"{self.first_number:04d}–{self.last_number:04d}"
+
+
+class BackupSlip(StoreScopedModel):
+    """Một phiếu dự phòng đã xử lý: nhập bù thành một đơn, hoặc khai báo hủy (BRU-03)."""
+
+    class Status(models.TextChoices):
+        ENTERED = "da_nhap_bu", "Đã nhập bù"
+        VOIDED = "da_huy", "Khai báo hủy"
+
+    range = models.ForeignKey(BackupSlipRange, verbose_name="Dãy", on_delete=models.PROTECT, related_name="slips")
+    number = models.PositiveIntegerField("Số phiếu", unique=True)
+    status = models.CharField("Trạng thái", max_length=12, choices=Status.choices)
+    order = models.OneToOneField(Order, verbose_name="Đơn", on_delete=models.PROTECT, null=True, blank=True,
+                                 related_name="backup_slip")
+    operation_code = models.CharField("Mã nghiệp vụ ghi trên phiếu", max_length=64, blank=True)
+    sold_at = models.DateTimeField("Thời điểm bán ghi trên phiếu", null=True, blank=True)
+    restored_at = models.DateTimeField("Có kết nối lại lúc", null=True, blank=True)
+    late = models.BooleanField("Nhập bù quá hạn", default=False)
+    linked_existing = models.BooleanField("Liên kết đơn đã lưu trực tuyến", default=False)
+    void_reason = models.CharField("Lý do hủy", max_length=255, blank=True)
+    entered_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người nhập", on_delete=models.PROTECT,
+                                   related_name="+")
+    operation_key = models.CharField("Mã nghiệp vụ", max_length=64, unique=True)
+
+    class Meta:
+        verbose_name = "Phiếu dự phòng"
+        verbose_name_plural = "Phiếu dự phòng"
+        ordering = ["number"]
+
+    def __str__(self):
+        return f"Phiếu {self.number:04d}"
