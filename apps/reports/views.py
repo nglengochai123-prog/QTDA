@@ -29,7 +29,12 @@ def _period(request):
 @capability_required(Cap.VIEW_DASHBOARD)
 @require_GET
 def dashboard(request):
-    context = services.dashboard()
+    month = None
+    try:
+        month = date.fromisoformat(request.GET.get("thang", "") + "-01")
+    except ValueError:
+        pass
+    context = services.dashboard(month=month)
     context["ops"] = services.shift_panel(request.user)
     context["is_owner"] = request.user.is_owner
     return render(request, "reports/dashboard.html", context)

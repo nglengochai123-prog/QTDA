@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Không có quyền · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<h1>Bạn không có quyền mở trang này</h1>
+<div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
+  <div>Trang hoặc thao tác này dành cho vai trò khác. Lần truy cập đã được ghi vào nhật ký. Nếu bạn cần quyền này, báo Chủ quán.</div></div>
+<p><a class="btn btn-primary" href="{% url 'core:home' %}">Về trang chủ</a></p>
+{% endblock %}

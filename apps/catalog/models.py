@@ -179,6 +179,10 @@ class ItemSize(TimeStampedModel):
             PriceRecord.objects.create(size=self, price=self.price)
 
 
+def _now():
+    return timezone.now()
+
+
 class PriceRecord(models.Model):
     """Lịch sử giá bán của kích cỡ và giá cộng thêm của tùy chọn (BRU-39).
 
@@ -191,7 +195,7 @@ class PriceRecord(models.Model):
     option = models.ForeignKey(Option, verbose_name="Tùy chọn", on_delete=models.CASCADE, null=True, blank=True,
                                related_name="price_records")
     price = models.PositiveIntegerField("Giá (đồng)")
-    effective_from = models.DateTimeField("Hiệu lực từ", default=timezone.now)
+    effective_from = models.DateTimeField("Hiệu lực từ", default=_now)
 
     class Meta:
         verbose_name = "Lịch sử giá"

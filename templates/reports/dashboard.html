@@ -1,8 +1,16 @@
 {% extends "base.html" %}
-{% load humanize %}
+{% load humanize static l10n %}
 {% block title %}Bảng điều khiển · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<h1>Bảng điều khiển</h1>
+<header class="page-head">
+  <h1>Bảng điều khiển</h1>
+  <form method="get" class="inline-form filter-row" aria-label="Bộ lọc">
+    <label for="f-month">Tháng</label>
+    <input class="input input-sm" id="f-month" type="month" name="thang" value="{{ month|date:'Y-m' }}">
+    <button class="btn btn-quiet" type="submit">Xem</button>
+  </form>
+</header>
+
 <section class="panel" aria-labelledby="ops-title">
   <h2 id="ops-title">Ca đang mở{% if ops.shift %}: {{ ops.shift }} {{ ops.shift.starts_at|date:"H:i" }}–{{ ops.shift.ends_at|date:"H:i" }}{% endif %}</h2>
   <dl class="figure-grid">
@@ -18,54 +26,77 @@
 
 {% if is_owner %}
 <section class="panel" aria-labelledby="bo-title">
-  <h2 id="bo-title">Chỉ tiêu tháng {{ today|date:"m/Y" }} (Chủ quán)</h2>
-  <dl class="figure-grid">
-    <div class="figure-key"><dt>BO-01 · Giá trị kiểm soát tạm tính</dt><dd>{{ control.control_value|intcomma }} đ</dd></div>
-    <div><dt>Mục tiêu BO-01</dt><dd class="dd-text">dưới {{ bo01_target|intcomma }} đ · {% if bo01_met %}đang đạt{% else %}<span class="text-warn">chưa đạt</span>{% endif %}</dd></div>
-    <div><dt>Tổn thất đã xác minh</dt><dd>{{ control.verified|intcomma }} đ</dd></div>
-    <div><dt>Thiếu tiền đang xử lý</dt><dd>{{ control.in_process|intcomma }} đ</dd></div>
-    <div><dt>Đã thu hồi</dt><dd>{{ control.recovered|intcomma }} đ</dd></div>
-    <div><dt>Đã xác minh còn lại</dt><dd>{{ control.verified_remaining|intcomma }} đ</dd></div>
-    <div class="figure-key"><dt>BO-02 · Trường hợp thiếu nguyên liệu</dt><dd>{{ shortages }}</dd></div>
-    <div><dt>Mục tiêu BO-02</dt><dd class="dd-text">không quá {{ bo02_target }} · {% if bo02_met %}đang đạt{% else %}<span class="text-warn">chưa đạt</span>{% endif %}</dd></div>
-  </dl>
-  <p><a href="{% url 'reports:revenue_control' %}">Xem vụ việc và khoản chênh lệch cấu thành giá trị kiểm soát</a></p>
+  <h2 id="bo-title">Chỉ tiêu tháng {{ month|date:"m/Y" }}</h2>
+  <div class="kpi-row">
+    <div class="kpi"><span class="kpi-label">BO-01 · Giá trị kiểm soát tạm tính</span>
+      <span class="kpi-value">{{ control.control_value|intcomma }} đ</span>
+      <span class="kpi-note">Mục tiêu dưới {{ bo01_target|intcomma }} đ · {% if bo01_met %}<span class="status-ok">Đang đạt</span>{% else %}<span class="status-warn">Chưa đạt</span>{% endif %}</span></div>
+    <div class="kpi"><span class="kpi-label">BO-02 · Trường hợp thiếu nguyên liệu</span>
+      <span class="kpi-value">{{ shortages }}</span>
+      <span class="kpi-note">Mục tiêu không quá {{ bo02_target }} · {% if bo02_met %}<span class="status-ok">Đang đạt</span>{% else %}<span class="status-warn">Chưa đạt</span>{% endif %}</span></div>
+  </div>
+  <figure class="chart" aria-labelledby="bo01-cap">
+    <figcaption id="bo01-cap" class="chart-title">Cấu thành giá trị kiểm soát so với mục tiêu BO-01</figcaption>
+    {% if bo01_chart.total %}
+    <ul class="chart-legend"><li><span class="key key-1"></span>Tổn thất đã xác minh</li><li><span class="key key-2"></span>Thiếu tiền đang xử lý</li><li><span class="key key-target"></span>Mục tiêu {{ bo01_target|intcomma }} đ</li></ul>
+    {% localize off %}<svg class="chart-svg" viewBox="0 0 {{ bo01_chart.w }} {{ bo01_chart.h }}" role="img" aria-label="Đã xác minh {{ control.verified }} đồng, đang xử lý {{ control.in_process }} đồng, mục tiêu {{ bo01_target }} đồng">
+      <rect class="track" x="8" y="12" width="{{ bo01_chart.w|add:'-16' }}" height="22"/>
+      {% for s in bo01_chart.segs %}<rect class="series-{{ s.slot }}" x="{{ s.x }}" y="12" width="{{ s.w }}" height="22" rx="2" tabindex="0" data-tip="{{ s.tip }}"><title>{{ s.tip }}</title></rect>{% endfor %}
+      <line class="target" x1="{{ bo01_chart.target_x }}" x2="{{ bo01_chart.target_x }}" y1="4" y2="42"/>
+      <text class="axis-text" x="{{ bo01_chart.target_x }}" y="54" text-anchor="middle">mục tiêu</text>
+    </svg>{% endlocalize %}
+    {% else %}<p class="chart-empty">Chưa có tổn thất hay khoản thiếu nào trong tháng này.</p>{% endif %}
+    <p class="muted">Đã thu hồi {{ control.recovered|intcomma }} đ · đã xác minh còn lại {{ control.verified_remaining|intcomma }} đ. <a href="{% url 'reports:revenue_control' %}?tu={{ first|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}">Xem vụ việc và khoản chênh lệch cấu thành</a></p>
+  </figure>
 </section>
 {% endif %}
 
-<div class="form-grid">
+<section class="panel" aria-labelledby="rev-title">
+  <h2 id="rev-title">Doanh thu và số đơn theo ngày, tháng {{ month|date:"m/Y" }}</h2>
+  {% if revenue_chart %}
+  <figure class="chart" aria-labelledby="rev-cap">
+    <figcaption id="rev-cap" class="chart-title">Doanh thu (đồng) · tổng {{ by_day.total|intcomma }} đ</figcaption>
+    {% include "reports/_columns.html" with c=revenue_chart label="Doanh thu theo ngày" %}
+  </figure>
+  <figure class="chart" aria-labelledby="ord-cap">
+    <figcaption id="ord-cap" class="chart-title">Số đơn đã thanh toán · tổng {{ by_day.orders }} đơn</figcaption>
+    {% include "reports/_columns.html" with c=orders_chart label="Số đơn theo ngày" %}
+  </figure>
+  <details class="chart-table"><summary>Xem bảng số liệu</summary>
+    <div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">Ngày</th><th scope="col" class="num">Doanh thu</th><th scope="col" class="num">Số đơn</th></tr></thead>
+    <tbody>{% for d in days %}<tr><th scope="row">{{ d.day|date:"d/m/Y" }}</th><td class="num">{{ d.revenue|intcomma }} đ</td><td class="num">{{ d.orders }}</td></tr>{% endfor %}</tbody></table></div>
+  </details>
+  <p class="muted">Cùng số liệu với <a href="{% url 'reports:revenue' %}?tu={{ first|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}">báo cáo doanh thu</a> của kỳ này.</p>
+  {% else %}<p class="chart-empty">Chưa có đơn đã thanh toán trong tháng này.</p>{% endif %}
+</section>
+
+<section class="panel" aria-labelledby="crit-title">
+  <h2 id="crit-title">Tồn có thể dùng của nguyên liệu trọng yếu</h2>
+  {% if stock_chart %}
+  <ul class="chart-legend"><li><span class="key key-1"></span>Có thể dùng</li><li><span class="key key-target"></span>Tồn an toàn</li></ul>
+  {% include "reports/_hbars.html" with c=stock_chart warn_label="Dưới tồn an toàn" %}
+  {% else %}<p class="chart-empty">Chưa đánh dấu nguyên liệu nào thuộc nhóm trọng yếu.</p>{% endif %}
+</section>
+<section class="panel" aria-labelledby="acc-title">
+  <h2 id="acc-title">Thiếu tiền chưa giải thích theo Quản lý ca</h2>
+  <p><strong>{{ accumulated|intcomma }} đ</strong> trong tháng.</p>
+  {% if acc_chart %}
+  <ul class="chart-legend"><li><span class="key key-1"></span>Tích lũy</li><li><span class="key key-target"></span>Ngưỡng {{ acc_limit|intcomma }} đ</li></ul>
+  {% include "reports/_hbars.html" with c=acc_chart warn_label="Vượt ngưỡng" %}
+  {% else %}<p class="chart-empty">Chưa có khoản thiếu nào trong tháng.</p>{% endif %}
+  <p><a href="{% url 'shifts:status' %}">Xem theo ca</a></p>
+</section>
+
 <section class="panel" aria-labelledby="al-title">
   <h2 id="al-title">Cảnh báo và ngoại lệ đang mở</h2>
   <dl class="figure-grid">
     <div><dt>Cảnh báo khẩn</dt><dd>{{ alerts.khan }}</dd></div>
     <div><dt>Cảnh báo quan trọng</dt><dd>{{ alerts.quan_trong }}</dd></div>
-    <div><dt>Quá hạn</dt><dd>{{ alerts.overdue }}</dd></div>
+    <div><dt>Cảnh báo quá hạn</dt><dd>{{ alerts.overdue }}</dd></div>
     {% for label, n in exceptions.items %}<div><dt>Ngoại lệ {{ label|lower }}</dt><dd>{{ n }}</dd></div>{% endfor %}
   </dl>
   <p><a href="{% url 'control:alerts' %}">Mở trung tâm cảnh báo</a></p>
 </section>
-<section class="panel" aria-labelledby="acc-title">
-  <h2 id="acc-title">Chênh lệch tiền tích lũy tháng</h2>
-  <p class="figure-key"><strong>{{ accumulated|intcomma }} đ</strong> thiếu chưa giải thích</p>
-  <p><a href="{% url 'shifts:status' %}">Xem theo Quản lý ca và ca</a></p>
-</section>
-</div>
-
-<section class="panel" aria-labelledby="crit-title">
-  <h2 id="crit-title">Nguyên liệu trọng yếu</h2>
-  {% if critical %}<div class="table-wrap"><table class="data-table">
-    <thead><tr><th scope="col">Nguyên liệu</th><th scope="col" class="num">Tồn vật lý</th><th scope="col" class="num">Có thể dùng</th><th scope="col" class="num">Tồn an toàn</th><th scope="col">Tình trạng</th></tr></thead>
-    <tbody>{% for c in critical %}<tr><th scope="row">{{ c.ingredient.name }}</th><td class="num">{{ c.physical|floatformat:"-2g" }}</td><td class="num">{{ c.available|floatformat:"-2g" }}</td><td class="num">{{ c.ingredient.safety_stock|floatformat:"-2g" }}</td><td>{% if c.below %}<span class="flag-low">Dưới tồn an toàn</span>{% else %}Đủ{% endif %}</td></tr>{% endfor %}</tbody></table></div>
-  {% else %}<p class="muted">Chưa đánh dấu nguyên liệu nào thuộc nhóm trọng yếu.</p>{% endif %}
-</section>
-
-<section class="panel" aria-labelledby="rev-title">
-  <h2 id="rev-title">Doanh thu và số đơn theo ngày</h2>
-  {% if by_day.rows %}
-  <ul class="plain-list bar-list">{% for r in by_day.rows %}
-    <li class="row-between"><span>{{ r.key }}</span><span class="bar-track" aria-hidden="true"><span class="bar-fill" style="width: {{ r.width }}%"></span></span><span>{{ r.revenue|intcomma }} đ · {{ r.orders }} đơn</span></li>
-  {% endfor %}</ul>
-  <p class="muted">Tổng {{ by_day.total|intcomma }} đ · {{ by_day.orders }} đơn. <a href="{% url 'reports:revenue' %}">Báo cáo doanh thu chi tiết</a></p>
-  {% else %}<p class="muted">Chưa có đơn đã thanh toán trong tháng.</p>{% endif %}
-</section>
+<div class="chart-tip" role="status" hidden></div>
 {% endblock %}
+{% block scripts %}<script src="{% static 'js/charts.js' %}" defer></script>{% endblock %}

@@ -6,6 +6,13 @@
       "runtimeExecutable": ".venv/Scripts/python.exe",
       "runtimeArgs": ["manage.py", "runserver", "127.0.0.1:8765", "--noreload"],
       "port": 8765
+    },
+    {
+      "name": "lam-nghiem-thu",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["manage.py", "runserver", "127.0.0.1:8766", "--noreload"],
+      "env": {"SQLITE_NAME": "nghiem_thu.sqlite3"},
+      "port": 8766
     }
   ]
 }

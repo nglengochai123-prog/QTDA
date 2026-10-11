@@ -191,33 +191,68 @@ def shift_panel(user):
     }
 
 
-def dashboard(today=None):
+def dashboard(today=None, month=None):
+    """Bảng điều khiển theo tháng (bộ lọc `month` = ngày bất kỳ trong tháng cần xem)."""
     from apps.control.models import Alert, ExceptionCase
     from apps.control.services import BO01_MONTHLY_TARGET, monthly_control
+    from apps.core import params
     from apps.inventory.models import Ingredient, ShortageCase
     from apps.shifts.services import accumulated_report
 
+    from . import charts
+
     today = today or timezone.localdate()
-    first, last = month_bounds(today)
-    control = monthly_control(today.year, today.month)
+    month = month or today
+    first, last = month_bounds(month)
+    end = min(last, today) if first <= today else last
+    control = monthly_control(month.year, month.month)
     shortages = ShortageCase.objects.filter(day__gte=first, day__lte=last).count()
-    by_day = revenue(first, min(last, today), "ngay")
-    peak = max([r["revenue"] for r in by_day["rows"]] or [0])
-    for r in by_day["rows"]:
-        r["width"] = round(r["revenue"] * 100 / peak) if peak else 0
+    by_day = revenue(first, end, "ngay")
+    found = {r["key"]: r for r in by_day["rows"]}
+    days = []
+    d = first
+    while d <= end:
+        r = found.get(f"{d:%d/%m/%Y}", {"revenue": 0, "orders": 0, "cups": 0})
+        days.append({"day": d, "revenue": r["revenue"], "orders": r["orders"]})
+        d += timedelta(days=1)
+    has_sales = any(x["revenue"] for x in days)
+    revenue_chart = charts.columns([(f"{x['day']:%d}", x["revenue"],
+                                     f"{x['day']:%d/%m}: {x['revenue']:,} đ · {x['orders']} đơn".replace(",", "."))
+                                    for x in days]) if has_sales else None
+    orders_chart = charts.columns([(f"{x['day']:%d}", x["orders"], f"{x['day']:%d/%m}: {x['orders']} đơn")
+                                   for x in days]) if has_sales else None
     critical = []
     for ing in Ingredient.objects.filter(is_critical=True, is_active=True).select_related("stock"):
         stock = getattr(ing, "stock", None)
         available = stock.available if stock else Decimal(0)
         critical.append({"ingredient": ing, "physical": stock.physical if stock else Decimal(0), "available": available,
                          "below": available < ing.safety_stock})
+    stock_chart = charts.hbars([{"label": c["ingredient"].name, "value": float(c["available"]),
+                                 "marker": float(c["ingredient"].safety_stock), "below": c["below"],
+                                 "text": f"{c['available']:,.0f} {c['ingredient'].get_unit_display()}".replace(",", "."),
+                                 "tip": f"{c['ingredient'].name}: có thể dùng {c['available']:,.0f}, tồn an toàn "
+                                        f"{c['ingredient'].safety_stock:,.0f} {c['ingredient'].get_unit_display()}".replace(",", ".")}
+                                for c in critical], "marker")
+    acc_rows = accumulated_report(month.year, month.month)
+    limit = params.get("accumulated_manager_threshold")
+    by_manager = {}
+    for r in acc_rows:
+        by_manager[r["manager"]] = by_manager.get(r["manager"], 0) + r["total"]
+    acc_chart = charts.hbars([{"label": m, "value": v, "marker": limit, "below": v > limit,
+                               "text": f"{v:,} đ".replace(",", "."),
+                               "tip": f"{m}: thiếu chưa giải thích {v:,} đ, ngưỡng {limit:,} đ".replace(",", ".")}
+                              for m, v in sorted(by_manager.items())], "marker")
+    bo01_chart = charts.stacked([("Tổn thất đã xác minh", control["verified"], 1),
+                                 ("Thiếu tiền đang xử lý", control["in_process"], 2)], BO01_MONTHLY_TARGET)
     open_alerts = Alert.objects.filter(status__in=Alert.OPEN)
     return {
-        "today": today, "control": control, "bo01_target": BO01_MONTHLY_TARGET,
-        "bo01_met": control["control_value"] < BO01_MONTHLY_TARGET,
+        "today": today, "month": first, "first": first, "end": end, "control": control,
+        "bo01_target": BO01_MONTHLY_TARGET, "bo01_met": control["control_value"] < BO01_MONTHLY_TARGET,
+        "bo01_chart": bo01_chart,
         "shortages": shortages, "bo02_target": BO02_MONTHLY_TARGET, "bo02_met": shortages <= BO02_MONTHLY_TARGET,
-        "by_day": by_day, "accumulated": sum(r["total"] for r in accumulated_report(today.year, today.month)),
-        "critical": critical,
+        "by_day": by_day, "days": days, "revenue_chart": revenue_chart, "orders_chart": orders_chart,
+        "accumulated": sum(r["total"] for r in acc_rows), "acc_chart": acc_chart, "acc_limit": limit,
+        "critical": critical, "stock_chart": stock_chart,
         "alerts": {"khan": open_alerts.filter(severity="khan").count(),
                    "quan_trong": open_alerts.filter(severity="quan_trong").count(),
                    "overdue": open_alerts.filter(due_at__lt=timezone.now()).count()},

@@ -1,0 +1,9 @@
+{% load l10n %}{% localize off %}<svg class="chart-svg" viewBox="0 0 {{ c.w }} {{ c.h }}" role="img" aria-label="Biểu đồ thanh ngang">
+  {% for r in c.rows %}
+  <text class="axis-text" x="{{ c.x0|add:'-8' }}" y="{{ r.y|add:'11' }}" text-anchor="end">{{ r.label|truncatechars:22 }}</text>
+  <rect class="series-1" x="{{ c.x0 }}" y="{{ r.y }}" width="{{ r.w }}" height="18" rx="2" tabindex="0" data-tip="{{ r.tip }}"><title>{{ r.tip }}</title></rect>
+  {% if r.mx %}<line class="target" x1="{{ r.mx }}" x2="{{ r.mx }}" y1="{{ r.y|add:'-3' }}" y2="{{ r.y|add:'21' }}"/>{% endif %}
+  <text class="value-text" x="{{ c.value_x }}" y="{{ r.y|add:'13' }}">{{ r.text }}</text>
+  {% endfor %}
+</svg>
+<ul class="plain-list chart-flags">{% for r in c.rows %}{% if r.below %}<li><span class="flag-low">{{ warn_label }}: {{ r.label }}</span></li>{% endif %}{% endfor %}</ul>{% endlocalize %}

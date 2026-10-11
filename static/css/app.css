@@ -528,3 +528,37 @@ select.input { appearance: auto; }
 .slip-line .input-sm { width: 100%; min-width: 0; }
 .slip-opts { min-height: 6rem; }
 @media (max-width: 699px) { .slip-line { grid-template-columns: 1fr 5rem; } .slip-opts { grid-column: 1 / -1; } }
+
+/* ---------- Biểu đồ (dataviz: một trục, lưới mờ, màu chuỗi theo bảng đã kiểm định) ---------- */
+:root { --series-1: #2a78d6; --series-2: #eb6834; }
+.filter-row { margin: 0; }
+.chart { margin: 0 0 1rem; }
+.chart-title { font-weight: 600; font-size: var(--text-sm); color: var(--fg-2); margin-bottom: 0.25rem; }
+.chart-svg { display: block; width: 100%; height: auto; max-height: 260px; overflow: visible; }
+.chart-svg .series-1 { fill: var(--series-1); }
+.chart-svg .series-2 { fill: var(--series-2); }
+.chart-svg [data-tip] { cursor: default; }
+.chart-svg [data-tip]:hover, .chart-svg [data-tip]:focus { outline: none; stroke: var(--fg); stroke-width: 1.5; }
+.chart-svg .grid { stroke: var(--border); stroke-width: 1; }
+.chart-svg .baseline { stroke: var(--border-input); stroke-width: 1; }
+.chart-svg .track { fill: var(--surface-2); }
+.chart-svg .target { stroke: var(--fg); stroke-width: 2; stroke-dasharray: 4 3; }
+.chart-svg .axis-text { fill: var(--fg-3); font-size: 12px; }
+.chart-svg .value-text { fill: var(--fg); font-size: 12px; font-weight: 600; }
+.chart-legend { list-style: none; display: flex; flex-wrap: wrap; gap: 1rem; margin: 0 0 0.5rem; padding: 0; font-size: var(--text-sm); color: var(--fg-2); }
+.chart-legend li { display: inline-flex; align-items: center; gap: 0.375rem; }
+.chart-legend .key { width: 14px; height: 10px; display: inline-block; border-radius: var(--radius); }
+.chart-legend .key-1 { background: var(--series-1); }
+.chart-legend .key-2 { background: var(--series-2); }
+.chart-legend .key-target { height: 0; border-top: 2px dashed var(--fg); border-radius: 0; }
+.chart-empty { padding: 1.25rem; border: 1px dashed var(--border-strong); color: var(--fg-2); background: var(--surface); margin: 0 0 0.75rem; }
+.chart-table summary { cursor: pointer; color: var(--accent); margin: 0.5rem 0; min-height: var(--tap); display: flex; align-items: center; }
+.chart-flags { margin: 0.25rem 0 0; }
+.chart-tip { position: fixed; z-index: 40; pointer-events: none; padding: 0.375rem 0.625rem; background: var(--fg); color: #fff; font-size: var(--text-sm); border-radius: var(--radius); max-width: 18rem; }
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+.kpi { display: grid; gap: 0.125rem; padding: 0.75rem 1rem; border: 1px solid var(--border); background: var(--surface); }
+.kpi-label { font-size: var(--text-sm); color: var(--fg-2); }
+.kpi-value { font-size: var(--text-2xl); font-weight: 700; }
+.kpi-note { font-size: var(--text-sm); color: var(--fg-2); }
+.status-ok { color: var(--ok); font-weight: 650; }
+.status-warn { color: var(--warn); font-weight: 650; }

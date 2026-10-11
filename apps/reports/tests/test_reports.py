@@ -100,3 +100,24 @@ class ReportTests(Base):
         for name in ("reports:revenue", "reports:materials"):
             self.assertEqual(self.client.get(reverse(name)).status_code, 200)
         _ = (stock, StockMovement)
+
+
+class DashboardChartTests(Base):
+    paid = ReportTests.paid
+
+    def test_charts_match_report_filter_and_empty_state(self):
+        self.paid(2)
+        self.paid(1, "chuyen_khoan")
+        self.client.login(username=self.d["owner"].username, password=PASSWORD)
+        today = timezone.localdate()
+        page = self.client.get(reverse("reports:dashboard"))
+        data = page.context
+        report = services.revenue(data["first"], data["end"])
+        self.assertEqual(sum(d["revenue"] for d in data["days"]), report["total"])
+        self.assertEqual(sum(d["orders"] for d in data["days"]), report["orders"])
+        self.assertContains(page, 'class="chart-svg"')
+        self.assertContains(page, "data-tip=")
+        older = (today.replace(day=1) - timezone.timedelta(days=40)).strftime("%Y-%m")
+        empty = self.client.get(reverse("reports:dashboard") + f"?thang={older}")
+        self.assertContains(empty, "Chưa có đơn đã thanh toán trong tháng này")
+        self.assertIsNone(empty.context["revenue_chart"])
