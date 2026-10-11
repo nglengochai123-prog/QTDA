@@ -17,7 +17,14 @@ def run_all(now=None):
         "chuyen_cap_yeu_cau": adjustments.escalate_due(now),
         "dat_hang_giao_cham": [po.pk for po in inventory_ops.refresh_late(timezone.localdate(now))],
         "nhac_ca_thieu_du_phong": remind_missing_backup(now),
+        "nhac_thieu_gio_ra": _remind_missing_out(now),
     }
+
+
+def _remind_missing_out(now):
+    from apps.staff.timekeeping import remind_missing
+
+    return remind_missing(now)
 
 
 def remind_missing_backup(now=None):

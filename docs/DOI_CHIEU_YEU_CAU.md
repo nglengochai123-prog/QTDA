@@ -66,6 +66,8 @@ Trạng thái: **Đúng** là làm đủ theo BRD và có kiểm thử; **Một 
 | FR-26 | Hao hụt | Đúng | AC-59, AC-60 |
 | FR-27 | Trường hợp thiếu nguyên liệu | Đúng | AC-61, AC-62, AC-63 |
 | FR-28, FR-29, FR-31 | Ước tính nhu cầu, cần đặt hàng, đề xuất số lượng | Chưa làm | Chờ Hai giải thích logic dự báo; chỉ chuẩn bị dữ liệu đầu vào (mục 7) |
+| FR-35 | Chấm công vào ca, ra ca | Đúng | AC-76, AC-77, AC-78 (`staff/tests/test_timekeeping.py`): vào ca chọn vai trò mình đảm nhận; thiếu giờ ra không tính giờ công, nhắc Quản lý ca qua lệnh định kỳ; bổ sung giờ ra phải có lý do, ghi nhật ký. Chưa có lịch ca nên giờ công tính theo giờ vào, ra (BRU-31 khi chưa có lịch). Màn hình /cham-cong/ |
+| FR-36 | Tải và chất lượng phục vụ | Đúng | AC-79: tải theo hệ số nhóm món, thời gian chờ trung vị từ gửi pha chế đến mang ra, món tồn quầy cuối khung, đánh dấu quá tải, số người có mặt theo vai trò. Màn hình /tai/ |
 | FR-30 | Đặt hàng, theo dõi giao | Đúng | AC-68, AC-69; Giao chậm tính khi đọc |
 | FR-59 | Tài khoản, phân quyền | Một phần | AC-111, AC-112 phần đã có màn hình; AC-113: bắt buộc người duyệt dự phòng khi khai báo ca, nhắc trên trang chủ và trong lệnh định kỳ; chưa có thông báo đẩy |
 | FR-60 | Danh mục món, bảng giá | Đúng | AC-114 |
@@ -134,6 +136,8 @@ Chủ quán trả lời ngày 11/10/2026. Cột "Đã làm" ghi cách hệ thố
 | GD-16 | Khoản hoàn đã duyệt nhưng chưa trả khách không chặn kết ca; nó hiện ở trang Ca của tôi cho đến khi có người bấm "Đã hoàn tiền" | Tiền chưa rời quỹ thì không thuộc ca nào |
 | GD-17 | Đơn nhập bù tính tiền theo bảng giá hiện hành lúc nhập bù | Hệ thống chưa lưu lịch sử giá; định mức thì đã theo phiên bản lúc bán |
 | GD-18 | Biểu mẫu nhập bù chỉ ghi món, kích cỡ, số ly; chưa ghi tùy chọn | Giữ biểu mẫu ngắn để nhập nhanh; nếu quán hay bán tùy chọn có thêm tiền khi mất mạng thì cần bổ sung |
+| GD-20 | Một người được tính có mặt trong khung giờ khi làm ít nhất nửa khung (AC-76: vào 16:55, ra 22:05 được tính 17 đến 22 giờ) | BRD không nêu cách tính khung lẻ |
+| GD-21 | Mức món tồn tại quầy cho phép cuối khung giờ: 15 ly (tham số) | BRD không nêu giá trị |
 | GD-19 | Mỗi dãy phiếu đã cấp cho ca phải khai báo số cuối đã dùng (0 nếu không dùng) trước khi kết ca | Nếu không, hệ thống không biết phiếu cuối bị bỏ sót (AC-13 chỉ phát hiện được số thiếu nằm giữa) |
 
 ## 7. Dữ liệu đầu vào cho dự báo (logic dự báo chờ Hai giải thích)

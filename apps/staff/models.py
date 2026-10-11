@@ -86,3 +86,25 @@ class Employee(StoreScopedModel):
         user.save()
         self.user = user
         self.store = user.store
+
+
+class Attendance(StoreScopedModel):
+    """Một lượt chấm công: vào ca, ra ca, vai trò làm việc (FR-35, BRU-31)."""
+
+    user = models.ForeignKey(User, verbose_name="Nhân viên", on_delete=models.PROTECT, related_name="attendances")
+    role = models.CharField("Vai trò làm việc", max_length=20, choices=Role.choices)
+    clock_in = models.DateTimeField("Vào ca lúc")
+    clock_out = models.DateTimeField("Ra ca lúc", null=True, blank=True)
+    out_supplemented_by = models.ForeignKey(User, verbose_name="Người bổ sung giờ ra", on_delete=models.PROTECT,
+                                            null=True, blank=True, related_name="+")
+    out_reason = models.CharField("Lý do bổ sung giờ ra", max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = "Lượt chấm công"
+        verbose_name_plural = "Chấm công"
+        ordering = ["-clock_in"]
+        constraints = [models.UniqueConstraint(fields=["user"], condition=models.Q(clock_out__isnull=True),
+                                               name="one_open_attendance_per_user")]
+
+    def __str__(self):
+        return f"{self.user} · {self.get_role_display()} · {self.clock_in:%d/%m}"

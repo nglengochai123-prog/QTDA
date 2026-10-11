@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Chấm công · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<h1>Chấm công</h1>
+{% if roles or current or mine %}
+<section class="panel" aria-labelledby="me-title">
+  <h2 id="me-title">Lượt của bạn</h2>
+  {% if current %}
+  <p>Đang trong ca từ <strong>{{ current.clock_in|date:"H:i d/m" }}</strong> với vai trò <strong>{{ current.get_role_display }}</strong>.</p>
+  <form method="post" data-once>{% csrf_token %}<input type="hidden" name="action" value="out"><input type="hidden" name="operation_key" value="{{ op }}">
+    <button class="btn btn-primary btn-block" type="submit">Ra ca</button></form>
+  {% elif roles %}
+  <form method="post" class="mini-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="in"><input type="hidden" name="operation_key" value="{{ op }}">
+    <fieldset class="field"><legend>Vai trò làm việc hôm nay</legend>
+      {% for v, l in roles %}<label class="check"><input type="radio" name="role" value="{{ v }}" required{% if forloop.first %} checked{% endif %}> {{ l }}</label>{% endfor %}</fieldset>
+    <button class="btn btn-primary btn-block" type="submit">Vào ca</button></form>
+  {% else %}<p class="muted">Tài khoản chưa có vai trò làm việc để chấm công.</p>{% endif %}
+  {% if mine %}<ul class="ruled-list compact">{% for a in mine %}<li class="row-between"><span>{{ a.clock_in|date:"d/m H:i" }}–{% if a.clock_out %}{{ a.clock_out|date:"H:i" }}{% else %}<span class="flag-low">chưa ra ca</span>{% endif %} · {{ a.get_role_display }}</span>{% if a.out_reason %}<span class="muted">bổ sung: {{ a.out_reason }}</span>{% endif %}</li>{% endfor %}</ul>{% endif %}
+</section>
+{% endif %}
+
+{% if missing is not None %}
+<section class="panel{% if missing %} panel-warn{% endif %}" aria-labelledby="miss-title">
+  <h2 id="miss-title">Thiếu giờ ra ca</h2>
+  {% if missing %}
+  <p class="muted">Lượt thiếu giờ ra không được tính giờ công cho đến khi bổ sung kèm lý do.</p>
+  <ul class="ruled-list">{% for a in missing %}
+    <li class="param-row"><div class="exc-text"><strong>{{ a.user }}</strong><span class="muted">Vào {{ a.clock_in|date:"H:i d/m" }} · {{ a.get_role_display }}</span></div>
+      <form method="post" class="inline-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="supplement"><input type="hidden" name="attendance" value="{{ a.pk }}">
+        <input class="input input-sm" type="datetime-local" name="clock_out" required aria-label="Giờ ra">
+        <input class="input input-sm" name="reason" placeholder="Lý do" required aria-label="Lý do">
+        <button class="btn btn-quiet" type="submit">Bổ sung</button></form></li>
+  {% endfor %}</ul>
+  {% else %}<p class="muted">Không có lượt nào thiếu giờ ra.</p>{% endif %}
+  {% if today %}<h3>Hôm nay</h3><ul class="ruled-list compact">{% for a in today %}<li>{{ a.user }} · {{ a.get_role_display }} · {{ a.clock_in|date:"H:i" }}–{{ a.clock_out|date:"H:i"|default:"đang làm" }}</li>{% endfor %}</ul>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

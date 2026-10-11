@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Tải và thời gian chờ · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<h1>Tải và thời gian chờ theo khung giờ</h1>
+<form method="get" class="inline-form"><label for="w-day">Ngày</label><input class="input input-sm" id="w-day" type="date" name="ngay" value="{{ day|date:'Y-m-d' }}"><button class="btn btn-quiet" type="submit">Xem</button></form>
+<p class="muted">Tải = số ly × hệ số tải của nhóm món. Thời gian chờ tính từ lúc gửi pha chế đến lúc mang ra. Quá tải khi thời gian chờ trung vị vượt {{ standard }} phút hoặc còn hơn {{ backlog_limit }} ly tồn tại quầy cuối khung.</p>
+{% if frames %}
+<div class="table-wrap"><table class="data-table">
+  <thead><tr><th scope="col">Khung giờ</th><th scope="col" class="num">Đơn</th><th scope="col" class="num">Ly</th><th scope="col" class="num">Tải</th><th scope="col" class="num">Chờ trung vị</th><th scope="col" class="num">Tồn quầy</th>{% for label in role_headers %}<th scope="col" class="num">{{ label }} có mặt</th>{% endfor %}<th scope="col">Đánh giá</th></tr></thead>
+  <tbody>{% for f in frames %}
+  <tr><th scope="row">{{ f.start|date:"H" }}–{{ f.end|date:"H" }} giờ</th><td class="num">{{ f.orders }}</td><td class="num">{{ f.cups }}</td><td class="num">{{ f.load }}</td>
+    <td class="num">{% if f.median_wait is not None %}{{ f.median_wait }} phút{% else %}–{% endif %}</td><td class="num">{{ f.backlog }}</td>
+    {% for n in f.presence_list %}<td class="num">{{ n }}</td>{% endfor %}
+    <td>{% if f.overloaded %}<span class="flag-low">Quá tải</span>{% else %}Đạt chuẩn{% endif %}</td></tr>
+  {% endfor %}</tbody></table></div>
+{% else %}<div class="empty"><p><strong>Chưa có đơn trong ngày này.</strong></p></div>{% endif %}
+{% endblock %}

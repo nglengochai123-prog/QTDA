@@ -10,7 +10,7 @@ Mỗi phần là một lát cắt chạy được từ đầu đến cuối, là
 
 ## Tiến độ thực tế (cập nhật 11/10/2026)
 
-Trước ngày 11/10/2026 thư mục D:\QTDA chưa có mã nguồn; các mục Phần 1 từng đánh dấu đã xong là chưa đúng. Kiểm thử hiện tại: 151 bài, OK cả 151 (`.venv\Scripts\python.exe manage.py test`). Số bài kiểm thử không phải bằng chứng hoàn thành; đối chiếu từng chức năng với báo cáo nằm ở `docs/DOI_CHIEU_YEU_CAU.md`.
+Trước ngày 11/10/2026 thư mục D:\QTDA chưa có mã nguồn; các mục Phần 1 từng đánh dấu đã xong là chưa đúng. Kiểm thử hiện tại: 155 bài, OK cả 155 (`.venv\Scripts\python.exe manage.py test`). Số bài kiểm thử không phải bằng chứng hoàn thành; đối chiếu từng chức năng với báo cáo nằm ở `docs/DOI_CHIEU_YEU_CAU.md`.
 
 Mã nguồn được quản lý bằng Git trong `D:\QTDA` (nhánh main, chưa có kho từ xa).
 
@@ -109,6 +109,8 @@ Bán hàng dự phòng và nhập bù (FR-06); đối chiếu tiêu hao trọng 
 
 - [x] Bán hàng dự phòng và nhập bù (FR-06, BRU-03, AC-12, AC-13): dãy phiếu theo ca, nhập bù liên kết đơn đã lưu hoặc tạo đơn theo định mức lúc bán, ngoại lệ số trùng, ngoài dãy, quá hạn, hủy; chặn kết ca khi còn số chưa xử lý; màn hình /du-phong/
 - [x] Đối chiếu tiêu hao nguyên liệu trọng yếu giữa hai lần kiểm kê, ngoại lệ khi vượt mức cho phép, kết quả trong báo cáo nguyên vật liệu (FR-16, BRU-17, AC-32, AC-33, AC-34)
+- [x] Chấm công vào ca, ra ca theo vai trò; thiếu giờ ra không tính giờ, Quản lý ca bổ sung kèm lý do (FR-35, BRU-31, AC-76 đến AC-78)
+- [x] Tải và thời gian chờ theo khung giờ, đánh dấu quá tải, số người có mặt theo vai trò (FR-36, BRU-27, AC-79)
 
 Sẵn sàng bắt đầu: bán hàng dự phòng và nhập bù (dùng lại mã nghiệp vụ, `submit_order`, `stock` và ca); đối chiếu tiêu hao trọng yếu (dựa trên sổ kho, kiểm kê và định mức đã chụp); chấm công theo vai trò; trung tâm cảnh báo theo Bảng 5.4 (gắn vào `core/periodic.run_all`); báo cáo và bảng điều khiển. Ước tính nhu cầu và cảnh báo cần đặt hàng vẫn chờ Hai giải thích.
 
