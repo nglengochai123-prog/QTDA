@@ -88,13 +88,28 @@ def confirm_handover(user, entry_id):
 
 
 def record_refund(order, approver, request_id):
-    """Hoàn tiền khi hủy hóa đơn đã thanh toán được duyệt: hoàn theo phương thức khách đã trả."""
+    """Hoàn tiền khi hủy hóa đơn đã thanh toán được duyệt (BRU-05, BRU-08, BRU-10).
+
+    - Phương thức hoàn: theo phương thức khách đã trả (giả định GD-07, chờ Chủ quán xác nhận).
+    - Ca ghi nhận: ca đang mở lúc duyệt, vì tiền hoàn rời quỹ của ca đó; doanh thu vẫn thuộc ca đã thu.
+    - Mỗi yêu cầu chỉ sinh tối đa một khoản hoàn (ràng buộc duy nhất theo mã yêu cầu).
+    """
     payment = order.payment
     if payment is None or order.total == 0:
         return None
+    existing = Refund.objects.filter(request_id_ref=request_id).first()
+    if existing is not None:
+        return existing
+    shift = Shift.objects.current()
+    if shift is None:
+        raise ValidationError("Không có ca đang mở để ghi khoản hoàn tiền; mở ca rồi duyệt lại.")
     method = Refund.Method.CASH if payment.method == "tien_mat" else Refund.Method.TRANSFER
-    return Refund.objects.create(store=order.store, shift=Shift.objects.current(), order_code=order.code,
-                                 method=method, amount=order.total, approved_by=approver, request_id_ref=request_id)
+    refund = Refund.objects.create(store=order.store, shift=shift, order_code=order.code, method=method,
+                                   amount=order.total, approved_by=approver, request_id_ref=request_id)
+    record(Action.CREATE, actor=approver, obj=refund, object_type="shifts.Refund",
+           after={"don": order.code, "phuong_thuc": refund.get_method_display(), "so_tien": refund.amount,
+                  "ca": str(shift)})
+    return refund
 
 
 # ---------------- Số liệu ca ----------------

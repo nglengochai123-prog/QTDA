@@ -131,11 +131,14 @@ class Refund(StoreScopedModel):
     amount = models.PositiveBigIntegerField("Số tiền (đồng)")
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người duyệt", on_delete=models.PROTECT,
                                     related_name="+")
-    request_id_ref = models.PositiveBigIntegerField("Mã yêu cầu điều chỉnh")
+    request_id_ref = models.PositiveBigIntegerField("Mã yêu cầu điều chỉnh", unique=True)
 
     class Meta:
         verbose_name = "Hoàn tiền"
         verbose_name_plural = "Hoàn tiền"
+
+    def __str__(self):
+        return f"Hoàn {self.amount:,} đ {self.get_method_display().lower()} · đơn {self.order_code}".replace(",", ".")
 
 
 class ShiftReport(StoreScopedModel):
