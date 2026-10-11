@@ -85,17 +85,23 @@ def open_quick_reports():
 
 # ---------------- Đặt hàng (FR-30, BRU-23) ----------------
 
-@transaction.atomic
-def create_purchase_order(user, supplier_id, ingredient_id, quantity, expected_date, note=""):
-    supplier = Supplier.objects.get(pk=supplier_id)
-    ingredient = Ingredient.objects.get(pk=ingredient_id)
-    po = PurchaseOrder.objects.create(store=ingredient.store, supplier=supplier, ingredient=ingredient,
-                                      quantity=_dec(quantity, "Số lượng"), expected_date=expected_date, note=note,
-                                      created_by=user)
-    record(Action.CREATE, actor=user, obj=po, object_type="inventory.PurchaseOrder",
-           after={"nha_cung_cap": supplier.name, "nguyen_lieu": ingredient.name, "so_luong": str(po.quantity),
-                  "ngay_giao": expected_date})
-    return po
+def create_purchase_order(user, supplier_id, ingredient_id, quantity, expected_date, note="", *, operation_key):
+    payload = {"supplier": int(supplier_id), "ingredient": int(ingredient_id), "quantity": str(quantity),
+               "date": str(expected_date), "note": note}
+
+    def action():
+        supplier = Supplier.objects.get(pk=payload["supplier"])
+        ingredient = Ingredient.objects.get(pk=payload["ingredient"])
+        po = PurchaseOrder.objects.create(store=ingredient.store, supplier=supplier, ingredient=ingredient,
+                                          quantity=_dec(quantity, "Số lượng"), expected_date=expected_date, note=note,
+                                          created_by=user)
+        record(Action.CREATE, actor=user, obj=po, object_type="inventory.PurchaseOrder",
+               after={"nha_cung_cap": supplier.name, "nguyen_lieu": ingredient.name, "so_luong": str(po.quantity),
+                      "ngay_giao": expected_date})
+        return {"po": po.pk}
+
+    result, _ = run_once(operation_key, "purchase_order", payload, action, actor=user)
+    return PurchaseOrder.objects.get(pk=result["po"])
 
 
 def refresh_late(today=None):
@@ -196,22 +202,27 @@ def create_receipt(user, operation_key, supplier_id, lines, payment_type, *, inv
     return run_once(operation_key, "receipt", payload, action, actor=user)
 
 
-@transaction.atomic
-def pay_supplier(user, payable_id, amount, source, paid_on=None):
+def pay_supplier(user, payable_id, amount, source, paid_on=None, *, operation_key):
     """Chủ quán ghi thanh toán khoản phải trả; trả một phần thì phần còn lại vẫn phải trả (AC-54)."""
     if not user.is_owner:
         raise ValidationError("Chỉ Chủ quán ghi thanh toán khoản phải trả.")
-    payable = Payable.objects.select_for_update().get(pk=payable_id)
-    value = int(_dec(amount, "Số tiền"))
-    if value > payable.remaining():
-        raise ValidationError(f"Số tiền vượt phần còn phải trả ({payable.remaining():,} đ).".replace(",", "."))
-    if source not in SupplierPayment.Source.values:
-        raise ValidationError("Chọn nguồn tiền.")
-    payment = SupplierPayment.objects.create(payable=payable, amount=value, paid_on=paid_on or timezone.localdate(),
-                                             source=source, actor=user)
-    record(Action.CREATE, actor=user, obj=payable, object_type="inventory.Payable",
-           after={"da_tra": value, "con_lai": payable.remaining(), "nguon": payment.get_source_display()})
-    return payment
+    payload = {"payable": int(payable_id), "amount": str(amount), "source": source, "paid_on": str(paid_on or "")}
+
+    def action():
+        payable = Payable.objects.select_for_update().get(pk=payload["payable"])
+        value = int(_dec(amount, "Số tiền"))
+        if value > payable.remaining():
+            raise ValidationError(f"Số tiền vượt phần còn phải trả ({payable.remaining():,} đ).".replace(",", "."))
+        if source not in SupplierPayment.Source.values:
+            raise ValidationError("Chọn nguồn tiền.")
+        payment = SupplierPayment.objects.create(payable=payable, amount=value,
+                                                 paid_on=paid_on or timezone.localdate(), source=source, actor=user)
+        record(Action.CREATE, actor=user, obj=payable, object_type="inventory.Payable",
+               after={"da_tra": value, "con_lai": payable.remaining(), "nguon": payment.get_source_display()})
+        return {"payment": payment.pk}
+
+    result, _ = run_once(operation_key, "supplier_payment", payload, action, actor=user)
+    return SupplierPayment.objects.get(pk=result["payment"])
 
 
 def overdue_payables(today=None):

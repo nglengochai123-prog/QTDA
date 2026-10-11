@@ -33,7 +33,7 @@
     <input class="input input-sm" name="amount" inputmode="numeric" value="{{ case.proposed_amount }}" required>
     <input class="input input-sm" name="reason" placeholder="{% if case.verified_amount is not None %}Lý do đính chính (bắt buộc){% else %}Ghi chú{% endif %}">
     <button class="btn btn-primary" type="submit">{% if case.verified_amount is not None %}Đính chính giá trị{% else %}Xác nhận tổn thất{% endif %}</button></form>
-  <form method="post" class="inline-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="recover">
+  <form method="post" class="inline-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="recover"><input type="hidden" name="operation_key" value="{{ operation_key }}">
     <input class="input input-sm" name="amount" inputmode="numeric" placeholder="Số tiền thu hồi" required>
     <input class="input input-sm" name="note" placeholder="Ghi chú">
     <button class="btn btn-quiet" type="submit">Ghi thu hồi</button></form>

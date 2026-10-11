@@ -80,7 +80,7 @@ class ReviewAndLossTests(Base):
             control.review(self.manager, exc.pk, "vi_pham", money_loss=True)
         with self.assertRaises(ValidationError):
             control.review(self.d["owner"], exc.pk, "vi_pham", money_loss=True)
-        case = control.open_case(self.d["owner"], "Hủy hóa đơn bàn 5")
+        case = control.open_case(self.d["owner"], "Hủy hóa đơn bàn 5", operation_key=key())
         control.add_evidence(self.d["owner"], case, exception=exc)
         review = control.review(self.d["owner"], exc.pk, "vi_pham", money_loss=True, measure="Trừ lương")
         exc.refresh_from_db()
@@ -115,22 +115,31 @@ class ReviewAndLossTests(Base):
         shift_services.add_cash_entry(self.manager, key(), self.shift.pk, "dau_ca", 0)
         Order.objects.update(status=Order.Status.CANCELLED)
         shift_services.close_shift(self.manager, self.shift.pk)
-        shift_services.submit_report(self.manager, self.shift.pk, 0, 0)
+        first = shift_services.submit_report(self.manager, self.shift.pk, 0, 0)
+        self.assertEqual(shift_services.submit_report(self.manager, self.shift.pk, 0, 0), first)  # gửi lại
+        with self.assertRaises(ValidationError):
+            shift_services.submit_report(self.manager, self.shift.pk, 10000, 0)  # số khác: phải giải trình
         # Tạo thủ công khoản thiếu 100.000 tiền mặt cho ca.
         Discrepancy.objects.create(store=self.d["store"], shift=self.shift, method="tien_mat", expected=100000,
                                    actual=0, difference=-100000, manager=self.manager, over_threshold=True)
         d = Discrepancy.objects.get()
         now = timezone.localtime()
         self.assertEqual(control.monthly_control(now.year, now.month)["in_process"], 100000)
-        case = control.open_case(self.d["owner"], "VV bàn 5")
+        op = key()
+        case = control.open_case(self.d["owner"], "VV bàn 5", operation_key=op)
+        self.assertEqual(control.open_case(self.d["owner"], "VV bàn 5", operation_key=op), case)  # gửi lại
         self.assertEqual(case.code, "VV-001")
         control.add_evidence(self.d["owner"], case, exception=exc)
         control.add_evidence(self.d["owner"], case, discrepancy=d, transaction_ref=order.code)
         with self.assertRaises(ValidationError):
-            control.add_evidence(self.d["owner"], control.open_case(self.d["owner"], "Khác"), discrepancy=d)
+            control.add_evidence(self.d["owner"], control.open_case(self.d["owner"], "Khác", operation_key=key()), discrepancy=d)
         self.assertEqual(case.proposed_amount(), 100000)
         control.verify(self.d["owner"], case, 100000)
-        control.recover(self.d["owner"], case, 100000, "Nhân viên hoàn")
+        control.verify(self.d["owner"], case, 100000)  # bấm lại cùng giá trị
+        self.assertEqual(case.verifications.count(), 1)
+        op = key()
+        control.recover(self.d["owner"], case, 100000, "Nhân viên hoàn", operation_key=op)
+        control.recover(self.d["owner"], case, 100000, "Nhân viên hoàn", operation_key=op)
         self.assertEqual((case.verified_amount(), case.recovered_amount(), case.remaining_amount()), (100000, 100000, 0))
         month = control.monthly_control(now.year, now.month)
         self.assertEqual((month["verified"], month["in_process"], month["control_value"], month["recovered"]),

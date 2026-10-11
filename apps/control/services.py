@@ -84,12 +84,18 @@ def _next_code():
     return f"VV-{number:03d}"
 
 
-@transaction.atomic
-def open_case(user, title):
-    case = LossCase.objects.create(store=user.store or Store.get_default(), code=_next_code(), title=title,
-                                   created_by=user)
-    record(Action.CREATE, actor=user, obj=case, object_type="control.LossCase", after={"ma": case.code, "tieu_de": title})
-    return case
+def open_case(user, title, *, operation_key):
+    from apps.core.idempotency import run_once
+
+    def action():
+        case = LossCase.objects.create(store=user.store or Store.get_default(), code=_next_code(), title=title,
+                                       created_by=user)
+        record(Action.CREATE, actor=user, obj=case, object_type="control.LossCase",
+               after={"ma": case.code, "tieu_de": title})
+        return {"case": case.pk}
+
+    result, _ = run_once(operation_key, "loss_case", {"title": title}, action, actor=user)
+    return LossCase.objects.get(pk=result["case"])
 
 
 @transaction.atomic
@@ -120,6 +126,8 @@ def verify(user, case, amount, reason=""):
     if not user.is_owner:
         raise ValidationError("Chỉ Chủ quán xác nhận tổn thất.")
     previous = case.verified_amount()
+    if previous == int(amount):
+        return  # gửi lại cùng giá trị: không ghi thêm bản xác minh
     if previous is not None and not reason.strip():
         raise ValidationError("Thay đổi giá trị đã xác minh phải có lý do và bằng chứng (bản đính chính).")
     LossVerification.objects.create(case=case, amount=int(amount), reason=reason, actor=user)
@@ -129,10 +137,16 @@ def verify(user, case, amount, reason=""):
            before={"da_xac_minh": previous}, after={"da_xac_minh": int(amount)}, reason=reason)
 
 
-@transaction.atomic
-def recover(user, case, amount, note=""):
-    LossRecovery.objects.create(case=case, amount=int(amount), note=note, actor=user)
-    record(Action.UPDATE, actor=user, obj=case, object_type="control.LossCase", after={"thu_hoi": int(amount)}, reason=note)
+def recover(user, case, amount, note="", *, operation_key):
+    from apps.core.idempotency import run_once
+
+    def action():
+        LossRecovery.objects.create(case=case, amount=int(amount), note=note, actor=user)
+        record(Action.UPDATE, actor=user, obj=case, object_type="control.LossCase", after={"thu_hoi": int(amount)},
+               reason=note)
+        return {"case": case.pk}
+
+    run_once(operation_key, "loss_recovery", {"case": case.pk, "amount": int(amount), "note": note}, action, actor=user)
 
 
 # ---------------- Giá trị kiểm soát tạm tính của tháng (BRU-16) ----------------

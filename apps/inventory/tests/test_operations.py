@@ -54,7 +54,7 @@ class OperationTests(TestCase):
     def test_receipt_pay_now_linked_to_order_resend_safe(self):
         # AC-52: lần đặt 10 hộp sữa (10.000 ml), giao đủ, đơn giá 32.000 đ/hộp = 32 đ/ml.
         po = ops.create_purchase_order(self.d["owner"], self.supplier.pk, self.d["milk"].pk, 10000,
-                                       timezone.localdate() + timedelta(days=1))
+                                       timezone.localdate() + timedelta(days=1), operation_key=key())
         lines = [{"ingredient": self.d["milk"].pk, "quantity": "10000", "unit_price": 32, "purchase_order": po.pk}]
         op = key()
         first, _ = ops.create_receipt(self.d["barista"], op, self.supplier.pk, lines, "tra_ngay", invoice_photo=self.photo())
@@ -79,10 +79,13 @@ class OperationTests(TestCase):
                          (640000, 640000, timezone.localdate() + timedelta(days=7)))
         self.assertFalse(SupplierPayment.objects.exists())
         with self.assertRaises(ValidationError):
-            ops.pay_supplier(self.d["barista"], payable.pk, 400000, "chuyen_khoan")
-        ops.pay_supplier(self.d["owner"], payable.pk, 400000, "chuyen_khoan")
+            ops.pay_supplier(self.d["barista"], payable.pk, 400000, "chuyen_khoan", operation_key=key())
+        op = key()
+        ops.pay_supplier(self.d["owner"], payable.pk, 400000, "chuyen_khoan", operation_key=op)
+        ops.pay_supplier(self.d["owner"], payable.pk, 400000, "chuyen_khoan", operation_key=op)  # gửi lại
         self.assertEqual(payable.remaining(), 240000)
-        ops.pay_supplier(self.d["owner"], payable.pk, 240000, "chuyen_khoan")
+        self.assertEqual(SupplierPayment.objects.count(), 1)
+        ops.pay_supplier(self.d["owner"], payable.pk, 240000, "chuyen_khoan", operation_key=key())
         self.assertTrue(payable.is_paid)
         self.assertEqual(Receipt.objects.get().total, 640000)
 
@@ -97,8 +100,12 @@ class OperationTests(TestCase):
 
     def test_partial_and_late_delivery(self):
         # AC-69, AC-68
+        op = key()
         po = ops.create_purchase_order(self.d["owner"], self.supplier.pk, self.d["milk"].pk, 10000,
-                                       timezone.localdate())
+                                       timezone.localdate(), operation_key=op)
+        again = ops.create_purchase_order(self.d["owner"], self.supplier.pk, self.d["milk"].pk, 10000,
+                                          timezone.localdate(), operation_key=op)
+        self.assertEqual((again, PurchaseOrder.objects.count()), (po, 1))
         ops.create_receipt(self.d["barista"], key(), self.supplier.pk,
                            [{"ingredient": self.d["milk"].pk, "quantity": "6000", "unit_price": 0, "purchase_order": po.pk}],
                            "tra_ngay", invoice_photo=self.photo())

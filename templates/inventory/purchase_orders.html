@@ -4,6 +4,7 @@
 <p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
 <h1>Ghi nhận đặt hàng</h1>
 <form method="post" class="inline-form" data-once>{% csrf_token %}
+  <input type="hidden" name="operation_key" value="{{ operation_key }}">
   <select class="input input-sm" name="supplier" required aria-label="Nhà cung cấp"><option value="">Nhà cung cấp</option>{% for s in suppliers %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}</select>
   <select class="input input-sm" name="ingredient" required aria-label="Nguyên liệu"><option value="">Nguyên liệu</option>{% for i in ingredients %}<option value="{{ i.pk }}">{{ i.name }} ({{ i.get_unit_display }})</option>{% endfor %}</select>
   <input class="input input-sm" name="quantity" inputmode="decimal" placeholder="Số lượng (đơn vị tính)" required>

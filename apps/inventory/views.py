@@ -159,13 +159,14 @@ def purchase_orders(request):
         else:
             _run(request, lambda: ops.create_purchase_order(request.user, p.get("supplier"), p.get("ingredient"),
                                                             p.get("quantity", ""), date.fromisoformat(p.get("expected_date")),
-                                                            p.get("note", "")), "Đã ghi lần đặt hàng.")
+                                                            p.get("note", ""), operation_key=p.get("operation_key", "")),
+                 "Đã ghi lần đặt hàng.")
         return redirect("inventory:purchase_orders")
     ops.refresh_late()
     return render(request, "inventory/purchase_orders.html", {
         "orders": PurchaseOrder.objects.select_related("supplier", "ingredient").order_by("status", "expected_date"),
         "suppliers": Supplier.objects.filter(is_active=True), "ingredients": _ingredients(),
-        "today": timezone.localdate(),
+        "today": timezone.localdate(), "operation_key": uuid.uuid4().hex,
     })
 
 
@@ -174,11 +175,13 @@ def purchase_orders(request):
 def payables(request):
     if request.method == "POST":
         p = request.POST
-        _run(request, lambda: ops.pay_supplier(request.user, p.get("payable"), p.get("amount", ""), p.get("source", "")),
-             "Đã ghi thanh toán.")
+        _run(request, lambda: ops.pay_supplier(request.user, p.get("payable"), p.get("amount", ""), p.get("source", ""),
+                                               operation_key=p.get("operation_key", "")), "Đã ghi thanh toán.")
         return redirect("inventory:payables")
     items = [x for x in Payable.objects.select_related("supplier", "receipt").prefetch_related("payments")
              if not x.is_paid]
+    for item in items:
+        item.op = uuid.uuid4().hex
     return render(request, "inventory/payables.html", {"items": items, "sources": SupplierPayment.Source.choices,
                                                        "today": timezone.localdate()})
 

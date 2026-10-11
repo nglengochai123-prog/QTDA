@@ -55,7 +55,7 @@
   </form>
   {% if not exc.loss_case %}
   <form method="post" class="inline-form" data-once>{% csrf_token %}
-    <input type="hidden" name="action" value="attach">
+    <input type="hidden" name="action" value="attach"><input type="hidden" name="operation_key" value="{{ operation_key }}">
     <span>Gắn vào vụ việc tổn thất</span>
     <select class="input input-sm" name="case"><option value="new">Lập vụ việc mới</option>{% for c in cases %}<option value="{{ c.pk }}">{{ c }}</option>{% endfor %}</select>
     <input class="input input-sm" name="title" placeholder="Tiêu đề vụ việc mới">

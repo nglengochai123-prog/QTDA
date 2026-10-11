@@ -1,8 +1,10 @@
 from django.contrib import admin
 
 from apps.accounts.permissions import OwnerOnlyAdminMixin
+from apps.audit.admin_mixins import AuditedAdminMixin
+from apps.core.models import Store
 
-from .models import Order, OrderLine
+from .models import AdjustmentReason, Order, OrderLine
 
 
 class OrderLineInline(admin.TabularInline):
@@ -44,3 +46,20 @@ class OrderAdmin(OwnerOnlyAdminMixin, admin.ModelAdmin):
 
     def has_view_permission(self, request, obj=None):
         return self._owner(request)
+
+
+@admin.register(AdjustmentReason)
+class AdjustmentReasonAdmin(OwnerOnlyAdminMixin, AuditedAdminMixin, admin.ModelAdmin):
+    """Chủ quán tự sửa danh mục lý do điều chỉnh; lý do đã dùng thì ngừng dùng thay vì xóa (BRU-08)."""
+
+    list_display = ("name", "sort_order", "is_active")
+    list_editable = ("sort_order", "is_active")
+    exclude = ("store",)
+
+    def save_model(self, request, obj, form, change):
+        if getattr(obj, "store_id", None) is None:
+            obj.store = request.user.store or Store.get_default()
+        super().save_model(request, obj, form, change)
+
+    def has_delete_permission(self, request, obj=None):
+        return False

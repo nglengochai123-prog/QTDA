@@ -202,8 +202,14 @@ def submit_report(user, shift_id, counted_cash, transfer_received, transfer_refu
     shift = Shift.objects.select_for_update().get(pk=shift_id)
     if shift.status != Shift.Status.CLOSED:
         raise ValidationError("Kết ca trước rồi mới lập báo cáo cuối ca.")
-    if ShiftReport.objects.filter(shift=shift).exists():
-        raise ValidationError("Ca này đã có báo cáo cuối ca.")
+    existing = ShiftReport.objects.filter(shift=shift).first()
+    if existing is not None:
+        same = (existing.counted_cash, existing.transfer_received, existing.transfer_refunded) == (
+            _money(counted_cash, "Tiền mặt đếm"), _money(transfer_received, "Tiền chuyển khoản nhận"),
+            _money(transfer_refunded or 0, "Tiền hoàn chuyển khoản"))
+        if same:
+            return existing  # gửi lại sau mất phản hồi: không đối soát lần hai
+        raise ValidationError("Ca này đã có báo cáo cuối ca; số liệu khác phải ghi bằng giải trình chênh lệch.")
     report = ShiftReport.objects.create(
         store=shift.store, shift=shift, counted_cash=_money(counted_cash, "Tiền mặt đếm"),
         transfer_received=_money(transfer_received, "Tiền chuyển khoản nhận"),
@@ -260,6 +266,9 @@ def decide(user, discrepancy_id, accept):
     if not user.is_owner:
         raise ValidationError("Chỉ Chủ quán quyết định chấp nhận giải trình.")
     d = Discrepancy.objects.select_for_update().get(pk=discrepancy_id)
+    wanted = Discrepancy.Decision.ACCEPTED if accept else Discrepancy.Decision.REJECTED
+    if d.decision == wanted:
+        return d  # bấm lại cùng quyết định: không ghi thêm
     if d.decision:
         raise ValidationError("Khoản chênh lệch này đã có quyết định.")
     if d.over_threshold and not d.explanation:

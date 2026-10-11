@@ -1,5 +1,7 @@
 """Màn hình ngoại lệ, vụ việc tổn thất, báo cáo điều chỉnh và tham số (FR-14, FR-17, FR-18, NFR-14)."""
 
+import uuid
+
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
@@ -47,7 +49,8 @@ def exception_detail(request, pk):
         if p.get("action") == "attach":
             case_id = p.get("case")
             def attach():
-                case = (services.open_case(request.user, p.get("title") or str(exc)) if case_id == "new"
+                case = (services.open_case(request.user, p.get("title") or str(exc),
+                                           operation_key=p.get("operation_key", "")) if case_id == "new"
                         else LossCase.objects.get(pk=case_id))
                 return services.add_evidence(request.user, case, exception=exc)
             _run(request, attach, "Đã gắn ngoại lệ vào vụ việc tổn thất.")
@@ -70,6 +73,7 @@ def exception_detail(request, pk):
         "exc": exc, "reviews": exc.reviews.select_related("reviewer"), "effective": exc.effective_review(),
         "results": ExceptionReview.Result.choices, "requests": exc.requests.select_related("reason", "requested_by", "decided_by"),
         "trail": trail, "history": history, "cases": LossCase.objects.filter(status=LossCase.Status.OPEN),
+        "operation_key": uuid.uuid4().hex,
         "lines": exc.order.lines.prefetch_related("options") if exc.order_id else [],
     })
 
@@ -78,12 +82,13 @@ def exception_detail(request, pk):
 @require_http_methods(["GET", "POST"])
 def case_list(request):
     if request.method == "POST":
-        case = _run(request, lambda: services.open_case(request.user, request.POST.get("title", "").strip() or "Vụ việc mới"),
+        case = _run(request, lambda: services.open_case(request.user, request.POST.get("title", "").strip() or "Vụ việc mới",
+                                                        operation_key=request.POST.get("operation_key", "")),
                     "Đã lập vụ việc.")
         if case:
             return redirect("control:case_detail", pk=case.pk)
     cases = LossCase.objects.prefetch_related("evidence", "verifications", "recoveries")
-    return render(request, "control/cases.html", {"cases": cases})
+    return render(request, "control/cases.html", {"cases": cases, "operation_key": uuid.uuid4().hex})
 
 
 @capability_required(Cap.EXCEPTION_REVIEW)
@@ -102,14 +107,15 @@ def case_detail(request, pk):
             _run(request, lambda: services.verify(request.user, case, int(p.get("amount") or 0), p.get("reason", "")),
                  "Đã ghi tổn thất đã xác minh.")
         elif action == "recover":
-            _run(request, lambda: services.recover(request.user, case, int(p.get("amount") or 0), p.get("note", "")),
-                 "Đã ghi thu hồi.")
+            _run(request, lambda: services.recover(request.user, case, int(p.get("amount") or 0), p.get("note", ""),
+                                                   operation_key=p.get("operation_key", "")), "Đã ghi thu hồi.")
         return redirect("control:case_detail", pk=pk)
     used = Discrepancy.objects.filter(evidence__isnull=False).values("pk")
     return render(request, "control/case_detail.html", {
         "case": case, "evidence": case.evidence.select_related("exception", "discrepancy", "discrepancy__shift"),
         "verifications": case.verifications.select_related("actor"), "recoveries": case.recoveries.select_related("actor"),
         "free_discrepancies": Discrepancy.objects.filter(difference__lt=0).exclude(pk__in=used).select_related("shift"),
+        "operation_key": uuid.uuid4().hex,
     })
 
 
