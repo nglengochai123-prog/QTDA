@@ -229,10 +229,10 @@ class FiveRoleAcceptanceTests(TestCase):
         # ---------- Đối chiếu chéo ----------
         today = timezone.localdate()
         revenue = reports.revenue(today, today)
-        paid_total = sum(o.total for o in Order.objects.filter(status="da_thanh_toan"))
-        self.assertEqual(revenue["total"], paid_total)  # báo cáo doanh thu khớp các đơn đã thanh toán
-        self.assertEqual(paid_total, 50000)  # phiếu 0151 + đơn chuyển ca; đơn bàn 5 đã hủy và hoàn
-        self.assertEqual(revenue["refunds"], 25000)
+        received = sum(Payment.objects.values_list("amount", flat=True))
+        self.assertEqual(revenue["total"], received)  # doanh thu = số khách đã trả (BRU-10)
+        self.assertEqual(received, 75000)  # bàn 5 (sau đó hủy và hoàn), phiếu 0151, đơn chuyển ca
+        self.assertEqual((revenue["refunds"], revenue["net"]), (25000, 50000))  # hoàn trừ đúng một lần
         self.assertEqual(Order.objects.get(pk=order_a.pk).status, "da_huy")
         self.assertEqual(CashEntry.objects.filter(kind="dau_ca").count(), 1)
         self.assertTrue(ExceptionCase.objects.filter(kind="huy_sau_tt").exists())  # hủy sau thanh toán

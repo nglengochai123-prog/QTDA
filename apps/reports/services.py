@@ -36,7 +36,9 @@ DIMENSIONS = OrderedDict([
 def _paid_lines(start, end):
     from apps.orders.models import OrderLine
 
-    return (OrderLine.objects.filter(order__status="da_thanh_toan", order__payment__created_at__gte=start,
+    # Doanh thu ghi theo số khách đã trả (BRU-10): gồm cả đơn sau đó bị hủy hóa đơn; khoản hoàn trừ một lần
+    # ở dòng doanh thu thuần, không loại đơn khỏi doanh thu để tránh trừ hai lần.
+    return (OrderLine.objects.filter(order__payment__isnull=False, order__payment__created_at__gte=start,
                                      order__payment__created_at__lt=end)
             .select_related("order", "order__payment", "order__shift", "order__created_by", "item__group"))
 
@@ -54,7 +56,7 @@ def _key(line, dim):
 
 
 def revenue(start_day, end_day, dim="ngay"):
-    """Doanh thu theo chiều `dim` = giá trị món tính tiền của các đơn đã thanh toán trong kỳ (AC-105)."""
+    """Doanh thu theo chiều `dim` = giá trị món tính tiền của các đơn đã thu tiền trong kỳ (AC-105); hoàn tiền trừ ở doanh thu thuần."""
     from apps.shifts.models import Refund
 
     start, end = period_bounds(start_day, end_day)

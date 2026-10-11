@@ -23,5 +23,5 @@
   <tbody>{% for r in rows %}<tr><th scope="row">{{ r.key }}</th><td class="num">{{ r.orders }}</td><td class="num">{{ r.cups }}</td><td class="num">{{ r.revenue|intcomma }} đ</td></tr>{% endfor %}</tbody>
 </table></div>
 {% else %}<div class="empty"><p><strong>Chưa có đơn đã thanh toán trong kỳ.</strong></p></div>{% endif %}
-<p class="muted">Doanh thu là giá trị món tính tiền của các đơn đã thanh toán trong kỳ, theo thời điểm thanh toán. Hoàn tiền tính theo thời điểm thực hoàn và chỉ trừ một lần ở doanh thu thuần.</p>
+<p class="muted">Doanh thu là số khách đã trả trong kỳ (giá trị món tính tiền, theo thời điểm thanh toán), kể cả đơn sau đó bị hủy hóa đơn. Hoàn tiền tính theo thời điểm thực hoàn và chỉ trừ một lần ở doanh thu thuần.</p>
 {% endblock %}
