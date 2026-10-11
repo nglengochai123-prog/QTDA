@@ -101,7 +101,7 @@ Mã nguồn được quản lý bằng Git trong `D:\QTDA` (nhánh main, chưa c
 - [x] Ghi nhận đặt hàng, theo dõi Đã đặt, Giao một phần, Đã giao đủ, Giao chậm; lô giao chậm không tính là hàng đang về đến khi có ngày giao mới (FR-30, BRU-23, AC-68, AC-69)
 - [x] Báo cáo nguyên vật liệu tháng: hao hụt theo lý do, hủy sau pha chế, kiểm kê, trường hợp thiếu theo ngày và nguyên liệu
 - [ ] Đề xuất số lượng đặt hàng (FR-31, BRU-24) và cảnh báo cần đặt hàng (FR-29, BRU-22): chờ Hai giải thích logic dự báo
-- [ ] Cảnh báo khoản phải trả quá hạn và giao chậm có thời hạn, chuyển cấp theo Bảng 5.4: hiện hiển thị trong trang, làm tiếp cùng trung tâm cảnh báo (FR-51)
+- [x] Cảnh báo khoản phải trả đến hạn và giao chậm có thời hạn, nhắc lại hằng ngày theo Bảng 5.4: trong trung tâm cảnh báo (FR-51)
 
 ## Phần 4: Dự phòng, ước tính, nhân sự, báo cáo (Sprint 3, đã xong phần không cần dự báo)
 
