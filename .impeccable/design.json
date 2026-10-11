@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-11T00:00:00+07:00",
+  "title": "Design System: LAM Coffee",
+  "extensions": {
+    "provisional": "ĐỊNH HƯỚNG TẠM THỜI cho đến khi quán cung cấp logo, màu sắc hoặc font chính thức.",
+    "colorMeta": {
+      "violet": { "role": "primary", "displayName": "Mực tím", "canonical": "#3f2a9e", "tonalRamp": ["oklch(15% 0.08 283)", "oklch(26% 0.13 283)", "oklch(37% 0.17 283)", "oklch(48% 0.17 283)", "oklch(60% 0.14 283)", "oklch(72% 0.10 283)", "oklch(84% 0.06 283)", "oklch(95% 0.02 283)"] },
+      "violet-press": { "role": "primary", "displayName": "Mực tím đè", "canonical": "#2f1f7a", "tonalRamp": ["oklch(15% 0.08 283)", "oklch(26% 0.13 283)", "oklch(37% 0.17 283)", "oklch(48% 0.17 283)", "oklch(60% 0.14 283)", "oklch(72% 0.10 283)", "oklch(84% 0.06 283)", "oklch(95% 0.02 283)"] },
+      "violet-soft": { "role": "primary", "displayName": "Tím nhạt", "canonical": "#ece8fb", "tonalRamp": ["oklch(15% 0.08 283)", "oklch(26% 0.13 283)", "oklch(37% 0.17 283)", "oklch(48% 0.17 283)", "oklch(60% 0.14 283)", "oklch(72% 0.10 283)", "oklch(84% 0.06 283)", "oklch(95% 0.02 283)"] },
+      "on-violet": { "role": "primary", "displayName": "Chữ trên tím", "canonical": "#ffffff" },
+      "on-violet-2": { "role": "primary", "displayName": "Chữ phụ trên tím", "canonical": "#d9d2fb" },
+      "margin": { "role": "secondary", "displayName": "Đỏ lề", "canonical": "#c62a26", "tonalRamp": ["oklch(15% 0.06 28)", "oklch(27% 0.11 28)", "oklch(40% 0.16 28)", "oklch(54% 0.19 28)", "oklch(65% 0.15 28)", "oklch(76% 0.10 28)", "oklch(87% 0.05 28)", "oklch(95% 0.02 28)"] },
+      "margin-soft": { "role": "secondary", "displayName": "Hồng lề", "canonical": "#fdecec", "tonalRamp": ["oklch(15% 0.06 28)", "oklch(27% 0.11 28)", "oklch(40% 0.16 28)", "oklch(54% 0.19 28)", "oklch(65% 0.15 28)", "oklch(76% 0.10 28)", "oklch(87% 0.05 28)", "oklch(95% 0.02 28)"] },
+      "ok": { "role": "tertiary", "displayName": "Xanh đạt", "canonical": "#1d7a3a", "tonalRamp": ["oklch(15% 0.04 148)", "oklch(27% 0.08 148)", "oklch(39% 0.10 148)", "oklch(51% 0.12 148)", "oklch(63% 0.11 148)", "oklch(75% 0.08 148)", "oklch(87% 0.05 148)", "oklch(95% 0.02 148)"] },
+      "ok-soft": { "role": "tertiary", "displayName": "Xanh đạt nhạt", "canonical": "#e6f4ea" },
+      "warn": { "role": "tertiary", "displayName": "Hổ phách", "canonical": "#8f5200", "tonalRamp": ["oklch(15% 0.04 62)", "oklch(27% 0.07 62)", "oklch(39% 0.09 62)", "oklch(50% 0.11 62)", "oklch(63% 0.12 62)", "oklch(75% 0.11 62)", "oklch(87% 0.07 62)", "oklch(96% 0.03 62)"] },
+      "warn-soft": { "role": "tertiary", "displayName": "Hổ phách nhạt", "canonical": "#fff3df" },
+      "paper": { "role": "neutral", "displayName": "Giấy", "canonical": "#fcfcfe" },
+      "paper-2": { "role": "neutral", "displayName": "Giấy lót", "canonical": "#f4f2fa" },
+      "ink": { "role": "neutral", "displayName": "Mực đen tím", "canonical": "#1e1a33", "tonalRamp": ["oklch(15% 0.03 290)", "oklch(22% 0.04 290)", "oklch(36% 0.05 290)", "oklch(50% 0.05 290)", "oklch(64% 0.04 290)", "oklch(78% 0.03 290)", "oklch(88% 0.02 290)", "oklch(97% 0.01 290)"] },
+      "ink-2": { "role": "neutral", "displayName": "Mực phụ", "canonical": "#4a4566" },
+      "ink-3": { "role": "neutral", "displayName": "Mực gợi ý", "canonical": "#6a6587" },
+      "line": { "role": "neutral", "displayName": "Dòng kẻ", "canonical": "#dcd8ea" },
+      "line-strong": { "role": "neutral", "displayName": "Dòng kẻ đậm", "canonical": "#b9b2d6" },
+      "grid-fine": { "role": "neutral", "displayName": "Ô ly nhỏ (8px)", "canonical": "rgba(90, 70, 190, 0.09)" },
+      "grid-bold": { "role": "neutral", "displayName": "Ô ly lớn (32px)", "canonical": "rgba(90, 70, 190, 0.17)" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Tên quán trên nhãn vở; lời chào trang chủ (--text-2xl)." },
+      "headline": { "displayName": "Headline", "purpose": "h1 trang (--text-xl)." },
+      "title": { "displayName": "Title", "purpose": "h2 chia phần (--text-lg)." },
+      "body": { "displayName": "Body", "purpose": "Chữ thường; 1.0625rem dưới 900px; số dạng bảng." },
+      "label": { "displayName": "Label", "purpose": "Nhãn trường nhập, mục điều hướng." },
+      "small": { "displayName": "Small", "purpose": "Gợi ý, lỗi trường, chip, vai trò người dùng (--text-sm)." }
+    },
+    "shadows": [
+      { "name": "shadow", "value": "0 1px 2px rgba(30, 26, 51, 0.06), 0 6px 18px rgba(30, 26, 51, 0.08)", "purpose": "Chỉ cho nhãn vở trên nền ô ly." }
+    ],
+    "motion": [
+      { "name": "ease", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Đường cong chung cho chuyển trạng thái." },
+      { "name": "state-160", "value": "160ms", "purpose": "Đổi màu nền nút, viền và quầng focus ô nhập." },
+      { "name": "press-120", "value": "120ms", "purpose": "Nút dịch xuống 1px khi nhấn." },
+      { "name": "reduced-motion", "value": "transition: none; animation: none", "purpose": "Tắt mọi chuyển động khi prefers-reduced-motion: reduce." }
+    ],
+    "breakpoints": [
+      { "name": "phone", "value": "max-width: 899px" },
+      { "name": "counter", "value": "min-width: 900px" },
+      { "name": "phone-tall", "value": "max-width: 899px and min-height: 720px" }
+    ],
+    "focus": { "value": "outline: 3px solid var(--violet); outline-offset: 2px", "onViolet": "outline-color: #fff" }
+  },
+  "components": [
+    {
+      "name": "Nút chính",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Hành động chính duy nhất, mực tím, cao tối thiểu 48px.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Lưu</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 48px; padding: 0 1.25rem; font-family: \"Segoe UI\", system-ui, sans-serif; font-weight: 650; font-size: 1rem; line-height: 1; border-radius: 10px; border: 1.5px solid transparent; cursor: pointer; transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1), transform 120ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-btn:active { transform: translateY(1px); } .ds-btn:focus-visible { outline: 3px solid var(--violet, #3f2a9e); outline-offset: 2px; } .ds-btn-primary { background: var(--violet, #3f2a9e); color: var(--on-violet, #fff); } .ds-btn-primary:hover { background: var(--violet-press, #2f1f7a); }"
+    },
+    {
+      "name": "Nút full-width",
+      "kind": "button",
+      "refersTo": "button-block",
+      "description": "Hành động chính của nhãn vở (Đăng nhập, Thử lại), cao 54px.",
+      "html": "<button class=\"ds-btn-block\">Đăng nhập</button>",
+      "css": ".ds-btn-block { display: flex; align-items: center; justify-content: center; width: 100%; min-height: 54px; padding: 0 1.25rem; font-family: \"Segoe UI\", system-ui, sans-serif; font-weight: 650; font-size: 1.125rem; border-radius: 10px; border: 1.5px solid transparent; background: var(--violet, #3f2a9e); color: #fff; cursor: pointer; transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-btn-block:hover { background: var(--violet-press, #2f1f7a); } .ds-btn-block:active { transform: translateY(1px); } .ds-btn-block:focus-visible { outline: 3px solid var(--violet, #3f2a9e); outline-offset: 2px; }"
+    },
+    {
+      "name": "Nút quiet trên thanh tím",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Đăng xuất: nền trong, viền trắng 45% trên thanh tiêu đề.",
+      "html": "<div class=\"ds-bar\"><button class=\"ds-btn-quiet\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M15 4h4v16h-4\"/><path d=\"M10 8l-4 4 4 4\"/><path d=\"M6 12h10\"/></svg>Đăng xuất</button></div>",
+      "css": ".ds-bar { background: var(--violet, #3f2a9e); padding: 4px 12px; display: flex; justify-content: flex-end; } .ds-btn-quiet { display: inline-flex; align-items: center; gap: 0.5rem; min-height: 48px; padding: 0 0.875rem; font-family: \"Segoe UI\", system-ui, sans-serif; font-weight: 650; font-size: 1rem; background: transparent; color: #fff; border: 1.5px solid rgba(255, 255, 255, 0.45); border-radius: 10px; cursor: pointer; transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-btn-quiet:hover { background: rgba(255, 255, 255, 0.12); } .ds-btn-quiet:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Ô nhập có nút",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Ô nhập 52px viền 1.5px; nút chữ Hiện/Ẩn nằm trong ô.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-label\">Mật khẩu</span><span class=\"ds-wrap\"><input class=\"ds-input\" type=\"password\"><button type=\"button\" class=\"ds-input-action\">Hiện</button></span><span class=\"ds-hint\">Ít nhất 8 ký tự.</span></label>",
+      "css": ".ds-field { display: grid; gap: 0.375rem; font-family: \"Segoe UI\", system-ui, sans-serif; color: var(--ink, #1e1a33); } .ds-label { font-weight: 600; } .ds-hint { color: var(--ink-3, #6a6587); font-size: 0.875rem; } .ds-wrap { position: relative; } .ds-input { width: 100%; box-sizing: border-box; min-height: 52px; padding: 0.75rem 5.5rem 0.75rem 0.875rem; font: inherit; font-size: 1.125rem; color: var(--ink, #1e1a33); background: #fff; border: 1.5px solid var(--line-strong, #b9b2d6); border-radius: 10px; transition: border-color 160ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 160ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-input:hover { border-color: var(--ink-3, #6a6587); } .ds-input:focus { outline: none; border-color: var(--violet, #3f2a9e); box-shadow: 0 0 0 3px var(--violet-soft, #ece8fb); } .ds-input[aria-invalid=\"true\"] { border-color: var(--margin, #c62a26); } .ds-input-action { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); min-height: 48px; min-width: 72px; padding: 0 0.75rem; font: inherit; font-size: 0.875rem; font-weight: 600; color: var(--violet, #3f2a9e); background: transparent; border: 0; border-radius: 8px; cursor: pointer; } .ds-input-action:hover { background: var(--violet-soft, #ece8fb); } .ds-input-action:focus-visible { outline: 3px solid var(--violet, #3f2a9e); outline-offset: 2px; }"
+    },
+    {
+      "name": "Thông báo",
+      "kind": "custom",
+      "refersTo": "notice-error",
+      "description": "Bốn biến thể error/ok/warn/info, luôn có biểu tượng và chữ.",
+      "html": "<div class=\"ds-notice ds-notice-error\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M12 7.5v5.5M12 16.5h.01\"/></svg><div>Sai tên đăng nhập hoặc mật khẩu.</div></div><div class=\"ds-notice ds-notice-ok\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M8 12.5l2.7 2.7L16 9.8\"/></svg><div>Đã lưu.</div></div><div class=\"ds-notice ds-notice-warn\"><div>Món thiếu định mức.</div></div><div class=\"ds-notice ds-notice-info\"><div>Đang đồng bộ.</div></div>",
+      "css": ".ds-notice { display: flex; gap: 0.625rem; align-items: flex-start; padding: 0.75rem 0.875rem; border-radius: 10px; margin-bottom: 1rem; font-family: \"Segoe UI\", system-ui, sans-serif; font-weight: 500; } .ds-notice svg { flex: none; margin-top: 0.1em; } .ds-notice-error { background: var(--margin-soft, #fdecec); color: #8a1714; } .ds-notice-ok { background: var(--ok-soft, #e6f4ea); color: #14532a; } .ds-notice-warn { background: var(--warn-soft, #fff3df); color: #6b3d00; } .ds-notice-info { background: var(--violet-soft, #ece8fb); color: var(--violet-press, #2f1f7a); }"
+    },
+    {
+      "name": "Chip vai trò",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Viên thuốc tím nhạt liệt kê vai trò.",
+      "html": "<span class=\"ds-chip\">Chủ quán</span>",
+      "css": ".ds-chip { display: inline-flex; align-items: center; min-height: 28px; padding: 0 0.625rem; border-radius: 999px; font-family: \"Segoe UI\", system-ui, sans-serif; font-size: 0.875rem; font-weight: 600; background: var(--violet-soft, #ece8fb); color: var(--violet-press, #2f1f7a); }"
+    },
+    {
+      "name": "Danh sách kẻ dòng",
+      "kind": "custom",
+      "refersTo": "ruled-list-row",
+      "description": "Hàng 56px phân tách bằng dòng kẻ 1px; số đếm bên phải, cảnh báo màu hổ phách.",
+      "html": "<ul class=\"ds-ruled\"><li><a href=\"#\"><span>Nguyên vật liệu</span><span class=\"ds-count\">12 loại ›</span></a></li><li><a href=\"#\"><span>Định mức món</span><span class=\"ds-count ds-warn\">3 bản nháp ›</span></a></li></ul>",
+      "css": ".ds-ruled { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line, #dcd8ea); font-family: \"Segoe UI\", system-ui, sans-serif; font-variant-numeric: tabular-nums; } .ds-ruled li { border-bottom: 1px solid var(--line, #dcd8ea); } .ds-ruled a { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 56px; padding: 0.5rem 0.25rem; color: var(--ink, #1e1a33); text-decoration: none; } .ds-ruled a:hover { background: var(--paper-2, #f4f2fa); } .ds-ruled a:focus-visible { outline: 3px solid var(--violet, #3f2a9e); outline-offset: 2px; } .ds-count { color: var(--ink-2, #4a4566); font-weight: 600; white-space: nowrap; } .ds-count.ds-warn { color: var(--warn, #8f5200); }"
+    },
+    {
+      "name": "Bút đỏ đính chính",
+      "kind": "custom",
+      "refersTo": "correction",
+      "description": "Giá trị cũ gạch đỏ vẫn đọc được, giá trị mới viết ngay bên cạnh. Chưa dùng trên màn hình nào.",
+      "html": "<p class=\"ds-correction\">Bàn <del>5</del><ins>7</ins></p>",
+      "css": ".ds-correction { font-family: \"Segoe UI\", system-ui, sans-serif; font-variant-numeric: tabular-nums; color: var(--ink, #1e1a33); } .ds-correction del { color: var(--margin, #c62a26); text-decoration: line-through 2px var(--margin, #c62a26); } .ds-correction ins { color: var(--margin, #c62a26); text-decoration: none; font-weight: 650; margin-left: 0.35em; }"
+    },
+    {
+      "name": "Dải mất kết nối",
+      "kind": "custom",
+      "refersTo": "offline-banner",
+      "description": "Dải đỏ lề chữ trắng, biểu tượng mất sóng và hướng dẫn dùng phiếu dự phòng.",
+      "html": "<div class=\"ds-offline\" role=\"alert\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 3l18 18\"/><path d=\"M8.5 16.5a5 5 0 0 1 7 0\"/><path d=\"M5 12.6a10 10 0 0 1 5-2.5M14.3 10.2A10 10 0 0 1 19 12.6\"/><path d=\"M2 8.8a15 15 0 0 1 4.2-2.6M10.5 5.1A15 15 0 0 1 22 8.8\"/><path d=\"M12 20h.01\"/></svg><span>Mất kết nối với máy chủ. Thao tác chưa gửi được; nếu cần bán hàng, dùng phiếu dự phòng.</span></div>",
+      "css": ".ds-offline { display: flex; gap: 0.625rem; align-items: center; padding: 0.625rem 1rem; background: var(--margin, #c62a26); color: #fff; font-family: \"Segoe UI\", system-ui, sans-serif; font-weight: 600; } .ds-offline svg { flex: none; }"
+    },
+    {
+      "name": "Điều hướng",
+      "kind": "nav",
+      "refersTo": "app-nav-item-active",
+      "description": "Cột trái trên máy tính, ngăn với nội dung bằng lề đỏ 1px; mục đang chọn nền tím nhạt.",
+      "html": "<nav class=\"ds-nav\"><a href=\"#\" aria-current=\"page\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 10.5 12 3l9 7.5\"/><path d=\"M5 9.5V21h14V9.5\"/><path d=\"M10 21v-6h4v6\"/></svg>Trang chủ</a><a href=\"#\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M6 3h9l4 4v14H6z\"/><path d=\"M15 3v4h4\"/><path d=\"M9 12h7M9 16h7M9 8h3\"/></svg>Nhật ký</a></nav>",
+      "css": ".ds-nav { display: grid; gap: 0.25rem; width: 232px; padding: 1rem 0.75rem; background: var(--paper, #fcfcfe); border-right: 1px solid var(--margin, #c62a26); font-family: \"Segoe UI\", system-ui, sans-serif; } .ds-nav a { display: flex; align-items: center; gap: 0.75rem; min-height: 48px; padding: 0 0.875rem; border-radius: 10px; color: var(--ink-2, #4a4566); font-weight: 600; text-decoration: none; } .ds-nav a:hover { background: var(--paper-2, #f4f2fa); color: var(--ink, #1e1a33); } .ds-nav a[aria-current=\"page\"] { background: var(--violet-soft, #ece8fb); color: var(--violet-press, #2f1f7a); } .ds-nav a:focus-visible { outline: 3px solid var(--violet, #3f2a9e); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Vở ô ly của quán",
+    "overview": "Ứng dụng là cuốn vở học trò của quán: mực tím đậm trên giấy trắng lạnh, một đường lề đỏ ngăn phần điều hướng với phần nội dung, và khi có sai thì sửa bằng bút đỏ ngay bên cạnh chứ không tẩy xóa. Thế giới này được chọn để từ chối kiểu màn hình POS xám một màu nhấn; nhân viên mở ra phải nhận ngay \"đây là vở của quán\".\n\nMật độ vừa phải, thiên về thao tác nhanh bằng một tay: mọi đích chạm tối thiểu 48px, nút chính nằm trong vùng ngón cái trên điện thoại. Bề mặt phẳng, ranh giới bằng đường kẻ mảnh như dòng kẻ vở; chỉ có \"nhãn vở\" (thẻ đăng nhập) được nâng lên bằng bóng mờ. Lưới ô ly chỉ xuất hiện ở nền trống, không bao giờ nằm sau nội dung đang làm việc.\n\nMọi trạng thái quan trọng đi kèm chữ và biểu tượng, không chỉ bằng màu. Chuyển động ngắn (120 đến 160ms) và tắt hẳn khi người dùng chọn giảm chuyển động.",
+    "keyCharacteristics": [
+      "Mực tím (`--violet`) là màu hành động duy nhất: thanh tiêu đề, nút chính, liên kết, viền focus.",
+      "Đỏ lề (`--margin`) dành cho lề, lỗi, mất kết nối và lời đính chính; không bao giờ là nút hành động.",
+      "Một họ chữ hệ thống, số dạng bảng ở mọi nơi.",
+      "Phẳng, phân tách bằng đường kẻ 1px; bóng chỉ cho nhãn vở.",
+      "Đích chạm 48px, nút đăng nhập full-width 54px."
+    ],
+    "rules": [
+      { "name": "The Một Màu Mực Rule", "body": "Chỉ mực tím được làm màu hành động. Đỏ, xanh, hổ phách là màu trạng thái, không bao giờ là nền nút.", "section": "colors" },
+      { "name": "The Lề Đỏ Rule", "body": "Đỏ lề chỉ mang bốn nghĩa: đường lề, lỗi, mất kết nối, đính chính. Không dùng đỏ để trang trí hay nhấn mạnh.", "section": "colors" },
+      { "name": "The Không Chỉ Bằng Màu Rule", "body": "Mọi trạng thái quan trọng (lỗi, mất kết nối, cảnh báo) có chữ, và có biểu tượng khi là thông báo hoặc dải cảnh báo.", "section": "colors" },
+      { "name": "The Một Họ Chữ Rule", "body": "Toàn ứng dụng dùng một chồng chữ hệ thống `--font`. Không thêm font web cho đến khi quán có font chính thức.", "section": "typography" },
+      { "name": "The Số Dạng Bảng Rule", "body": "Số luôn dạng bảng (`tabular-nums`) để cột tiền, số lượng, mã đơn thẳng hàng.", "section": "typography" },
+      { "name": "The Ô Ly Nền Trống Rule", "body": "Lưới ô ly (`--grid-fine` 8px, `--grid-bold` 32px, cùng đường lề đỏ dọc mờ 55%) chỉ phủ trang không có nội dung làm việc: đăng nhập và ngoại tuyến (`.page-login`). Không đặt lưới sau bảng, danh sách hay biểu mẫu trong khung ứng dụng.", "section": "layout" },
+      { "name": "The 48px Rule", "body": "Không đích chạm nào nhỏ hơn `--tap`.", "section": "layout" },
+      { "name": "The Giấy Phẳng Rule", "body": "Trong khung ứng dụng, bề mặt nằm phẳng trên giấy. Bóng mờ chỉ thuộc về nhãn vở.", "section": "elevation" }
+    ],
+    "dos": [
+      "**Do** dùng `--violet` cho đúng một loại việc: hành động chính và điều hướng đang chọn.",
+      "**Do** giữ mọi đích chạm ≥ `--tap` (48px); hành động chính trên điện thoại nằm trong vùng ngón cái.",
+      "**Do** đi kèm chữ (và biểu tượng với thông báo, dải cảnh báo) cho mọi trạng thái; không chỉ đổi màu.",
+      "**Do** hiển thị thay đổi sau khi gửi bằng `.correction`: giá trị cũ gạch đỏ vẫn đọc được, giá trị mới viết bên cạnh.",
+      "**Do** phân tách hàng bằng đường kẻ `--line` 1px như dòng kẻ vở thay vì hộp có bóng.",
+      "**Do** lấy màu admin từ cùng bảng token khi thêm trang quản trị."
+    ],
+    "donts": [
+      "**Don't** dùng đỏ lề, xanh đạt hay hổ phách làm nền nút hành động.",
+      "**Don't** đặt lưới ô ly sau nội dung làm việc; chỉ dùng trên trang nền trống.",
+      "**Don't** thêm bóng cho thẻ, bảng hay thanh trong khung ứng dụng; bóng chỉ thuộc nhãn vở.",
+      "**Don't** thêm font web hoặc họ chữ thứ hai khi quán chưa có font chính thức.",
+      "**Don't** bật giao diện tối riêng cho admin hay ứng dụng; hệ hiện chỉ có một giao diện sáng.",
+      "**Don't** xóa hoặc ẩn giá trị cũ khi sửa; đính chính bằng bút đỏ."
+    ]
+  }
+}

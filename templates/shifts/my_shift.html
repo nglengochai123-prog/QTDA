@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Ca của tôi · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+{% if to_confirm %}
+<section class="panel panel-warn" aria-labelledby="confirm-title">
+  <h2 id="confirm-title">Tiền nộp chờ bạn xác nhận</h2>
+  <ul class="ruled-list compact">
+    {% for e in to_confirm %}
+    <li class="row-between"><span>{{ e.amount|intcomma }} đ từ {{ e.actor }} · {{ e.shift }}{% if e.note %} · {{ e.note }}{% endif %}</span>
+      <form method="post" action="{% url 'shifts:confirm_handover' e.pk %}" data-once>{% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <button class="btn btn-primary" type="submit">Đã nhận đủ</button></form></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if not shift %}
+<h1>Ca của tôi</h1>
+<div class="empty"><p><strong>Hiện không có ca nào đang mở.</strong></p><p>Chủ quán tạo ca ở Dữ liệu nền › Ca làm việc, chỉ định người duyệt, người duyệt dự phòng và người được ủy quyền thanh toán.</p></div>
+{% else %}
+<header class="page-head">
+  <h1>{{ shift.name }} <span class="muted">{{ shift.starts_at|date:"H:i" }}–{{ shift.ends_at|date:"H:i d/m" }}</span></h1>
+  <span class="chip">{{ shift.get_status_display }}</span>
+</header>
+{% for issue in status.issues %}<div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><div>{{ issue }}. Hạn báo cáo cuối ca: {{ status.deadline|date:"H:i d/m" }}.</div></div>{% endfor %}
+
+<section class="figures" aria-label="Số liệu quỹ ca">
+  <dl class="figure-grid">
+    <div><dt>Tiền đầu ca</dt><dd>{{ figures.opening|intcomma }} đ</dd></div>
+    <div><dt>Doanh thu tiền mặt</dt><dd>{{ figures.revenue_cash|intcomma }} đ</dd></div>
+    <div><dt>Chi tiền mặt</dt><dd>{{ figures.expenses|intcomma }} đ</dd></div>
+    <div><dt>Nộp giữa ca (đã xác nhận)</dt><dd>{{ figures.handovers|intcomma }} đ</dd></div>
+    <div><dt>Hoàn tiền mặt</dt><dd>{{ figures.refunds_cash|intcomma }} đ</dd></div>
+    <div class="figure-key"><dt>Tiền mặt phải có</dt><dd>{{ figures.expected_cash|intcomma }} đ</dd></div>
+    <div><dt>Doanh thu chuyển khoản</dt><dd>{{ figures.revenue_transfer|intcomma }} đ</dd></div>
+    <div><dt>Hoàn chuyển khoản</dt><dd>{{ figures.refunds_transfer|intcomma }} đ</dd></div>
+  </dl>
+</section>
+
+{% if shift.status == "dang_mo" %}
+<section class="panel" aria-labelledby="fund-title">
+  <h2 id="fund-title">Ghi quỹ tiền mặt</h2>
+  <div class="form-grid">
+    {% if not figures.opening and not entries %}
+    <form method="post" action="{% url 'shifts:cash_entry' shift.pk %}" class="mini-form" data-once>{% csrf_token %}
+      <input type="hidden" name="operation_key" value="{{ op_open }}"><input type="hidden" name="kind" value="dau_ca">
+      <h3>Xác nhận tiền đầu ca</h3>
+      <div class="field"><label for="f-open">Số tiền nhận bàn giao (đồng)</label>
+        <input class="input" id="f-open" name="amount" inputmode="numeric" required></div>
+      <button class="btn btn-primary btn-block" type="submit">Xác nhận tiền đầu ca</button>
+    </form>
+    {% endif %}
+    <form method="post" action="{% url 'shifts:cash_entry' shift.pk %}" enctype="multipart/form-data" class="mini-form" data-once>{% csrf_token %}
+      <input type="hidden" name="operation_key" value="{{ op_expense }}"><input type="hidden" name="kind" value="chi">
+      <h3>Chi tiền mặt</h3>
+      <div class="field"><label for="f-exp">Số tiền (đồng)</label><input class="input" id="f-exp" name="amount" inputmode="numeric" required></div>
+      <div class="field"><label for="f-cat">Danh mục</label><select class="input" id="f-cat" name="category" required>
+        <option value="">Chọn danh mục</option>{% for v, l in categories %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
+        <span class="hint">Mua nguyên vật liệu ghi qua phiếu nhập.</span></div>
+      <div class="field"><label for="f-note">Nội dung</label><input class="input" id="f-note" name="note" required maxlength="255"></div>
+      <div class="field"><label for="f-photo">Ảnh chứng từ</label><input class="input" id="f-photo" type="file" name="receipt" accept="image/*" capture="environment">
+        <span class="hint">Bắt buộc với khoản từ 500.000 đ.</span></div>
+      <button class="btn btn-primary btn-block" type="submit">Lưu khoản chi</button>
+    </form>
+    <form method="post" action="{% url 'shifts:cash_entry' shift.pk %}" class="mini-form" data-once>{% csrf_token %}
+      <input type="hidden" name="operation_key" value="{{ op_handover }}"><input type="hidden" name="kind" value="nop">
+      <h3>Nộp tiền giữa ca</h3>
+      <div class="field"><label for="f-hand">Số tiền (đồng)</label><input class="input" id="f-hand" name="amount" inputmode="numeric" required></div>
+      <div class="field"><label for="f-recv">Người nhận</label><select class="input" id="f-recv" name="receiver" required>
+        <option value="">Chọn người nhận</option>{% for u in receivers %}<option value="{{ u.pk }}">{{ u }} ({{ u.get_role_display }})</option>{% endfor %}</select>
+        <span class="hint">Khoản nộp chỉ có hiệu lực khi người nhận bấm xác nhận.</span></div>
+      <button class="btn btn-primary btn-block" type="submit">Ghi khoản nộp</button>
+    </form>
+  </div>
+</section>
+{% endif %}
+
+<section class="panel" aria-labelledby="entries-title">
+  <h2 id="entries-title">Bút toán của ca</h2>
+  {% if entries %}
+  <ul class="ruled-list compact">
+    {% for e in entries %}
+    <li class="row-between"><span>{{ e.created_at|date:"H:i" }} · {{ e.get_kind_display }}{% if e.category %} · {{ e.get_category_display }}{% endif %}{% if e.note %} · {{ e.note }}{% endif %}{% if e.receiver %} · nhận: {{ e.receiver }}{% if not e.confirmed_at %} <strong class="flag-pending">(chờ xác nhận)</strong>{% endif %}{% endif %}{% if e.receipt %} · <a href="{{ e.receipt.url }}" target="_blank" rel="noopener">chứng từ</a>{% endif %}</span>
+      <strong>{{ e.amount|intcomma }} đ</strong></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">Chưa có bút toán nào.</p>{% endif %}
+</section>
+
+{% if shift.status == "dang_mo" %}
+<section class="panel" aria-labelledby="close-title">
+  <h2 id="close-title">Kết ca</h2>
+  {% if blockers %}
+  <div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
+    <ul class="notice-list">{% for b in blockers %}<li>{{ b }}</li>{% endfor %}</ul></div>
+  {% for o in open_orders %}{% if next_shifts %}
+  <form method="post" action="{% url 'shifts:carry' shift.pk %}" class="inline-form" data-once>{% csrf_token %}
+    <input type="hidden" name="order" value="{{ o.pk }}">
+    <span>Chuyển đơn <strong>{{ o.code }}</strong> (bàn {{ o.table.code }}) sang</span>
+    <select class="input input-sm" name="to_shift">{% for s in next_shifts %}<option value="{{ s.pk }}">{{ s }}</option>{% endfor %}</select>
+    <input class="input input-sm" name="reason" placeholder="Lý do" required>
+    <button class="btn btn-quiet" type="submit">Chuyển</button>
+  </form>{% endif %}{% endfor %}
+  {% endif %}
+  <form method="post" action="{% url 'shifts:close' shift.pk %}" data-once>{% csrf_token %}
+    <button class="btn btn-primary" type="submit">Kết ca và chốt doanh thu</button></form>
+</section>
+{% elif not report %}
+<section class="panel" aria-labelledby="report-title">
+  <h2 id="report-title">Báo cáo cuối ca</h2>
+  <form method="post" action="{% url 'shifts:report' shift.pk %}" class="mini-form" data-once>{% csrf_token %}
+    <div class="field"><label for="f-cash">Tiền mặt đếm thực tế (đồng)</label><input class="input" id="f-cash" name="counted_cash" inputmode="numeric" required></div>
+    <div class="field"><label for="f-tin">Tiền chuyển khoản nhận theo sao kê (đồng)</label><input class="input" id="f-tin" name="transfer_received" inputmode="numeric" required></div>
+    <div class="field"><label for="f-tout">Tiền hoàn bằng chuyển khoản theo sao kê (đồng)</label><input class="input" id="f-tout" name="transfer_refunded" inputmode="numeric" value="0"></div>
+    <div class="field"><label for="f-inc">Sự cố phát sinh</label><textarea class="input" id="f-inc" name="incidents" rows="3"></textarea></div>
+    <button class="btn btn-primary btn-block" type="submit">Gửi báo cáo và đối soát</button>
+  </form>
+</section>
+{% else %}
+<section class="panel" aria-labelledby="rec-title">
+  <h2 id="rec-title">Kết quả đối soát</h2>
+  <p class="muted">Báo cáo gửi lúc {{ report.created_at|date:"H:i d/m" }} bởi {{ report.submitted_by }}.</p>
+  {% if discrepancies %}
+  <ul class="ruled-list compact">
+    {% for d in discrepancies %}
+    <li class="discrepancy">
+      <div class="row-between"><span>{{ d.get_method_display }}: phải có {{ d.expected|intcomma }}, thực tế {{ d.actual|intcomma }}</span>
+        <strong class="{% if d.difference < 0 %}text-warn{% endif %}">{{ d.difference|intcomma }} đ{% if d.over_threshold %} · vượt ngưỡng{% endif %}</strong></div>
+      {% if d.explanation %}<p class="muted">Giải trình: {{ d.explanation }}{% if d.decision %} · {{ d.get_decision_display }}{% endif %}</p>
+      {% elif d.over_threshold %}
+      <form method="post" action="{% url 'shifts:explain' d.pk %}" class="inline-form" data-once>{% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <input class="input input-sm" name="text" placeholder="Giải trình chênh lệch" required>
+        <button class="btn btn-primary" type="submit">Gửi giải trình</button></form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p>Không có chênh lệch. Ca đã đối soát khớp.</p>{% endif %}
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

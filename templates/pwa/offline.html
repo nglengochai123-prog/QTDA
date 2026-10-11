@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Mất kết nối · {{ STORE_NAME }}{% endblock %}
+{% block body_class %}page-login{% endblock %}
+{% block shell %}
+<main class="label-card">
+  <h1 class="brand">{{ STORE_NAME }}</h1>
+  <div class="notice notice-error" role="alert">
+    <svg class="icon" aria-hidden="true"><use href="#i-offline"/></svg>
+    <div>Mất kết nối với máy chủ. Thao tác chưa gửi được.</div>
+  </div>
+  <p>Nếu khách đang chờ, bán bằng phiếu dự phòng đánh số và nhập bù khi có mạng lại.</p>
+  <a class="btn btn-primary btn-block" href="{% url 'core:home' %}">Thử lại</a>
+</main>
+{% endblock %}

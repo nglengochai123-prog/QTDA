@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}{{ exc.get_kind_display }} · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'control:exceptions' %}">‹ Danh sách ngoại lệ</a></p>
+<header class="page-head">
+  <h1>{{ exc.get_kind_display }}</h1>
+  <span class="chip">{{ exc.get_status_display }}</span>
+</header>
+<dl class="figure-grid">
+  <div><dt>Quy tắc kích hoạt</dt><dd class="dd-text">{{ exc.rule }}</dd></div>
+  <div><dt>Mức độ</dt><dd class="dd-text">{{ exc.get_severity_display }}</dd></div>
+  {% if exc.employee %}<div><dt>Nhân viên</dt><dd class="dd-text">{{ exc.employee }}</dd></div>{% endif %}
+  {% if exc.shift %}<div><dt>Ca</dt><dd class="dd-text">{{ exc.shift }}</dd></div>{% endif %}
+  {% if exc.amount %}<div class="figure-key"><dt>Giá trị liên quan</dt><dd>{{ exc.amount|intcomma }} đ</dd></div>{% endif %}
+  {% if exc.loss_case %}<div><dt>Vụ việc tổn thất</dt><dd class="dd-text"><a href="{% url 'control:case_detail' exc.loss_case.pk %}">{{ exc.loss_case.code }}</a></dd></div>{% endif %}
+</dl>
+{% if exc.detail %}<p class="pre-line">{{ exc.detail }}</p>{% endif %}
+
+{% if exc.order %}
+<section class="panel" aria-labelledby="order-title">
+  <h2 id="order-title">Đơn {{ exc.order.code }} · Bàn {{ exc.order.table.code }} · {{ exc.order.get_status_display }}</h2>
+  <ul class="ruled-list compact">{% for l in lines %}<li class="row-between"><span class="correction">{% if l.cancelled_quantity or l.voided_done_quantity %}<del>{{ l.quantity }}</del><ins>{{ l.billable_quantity }}</ins>{% else %}{{ l.quantity }}{% endif %} × {{ l.item_name }} {{ l.size_name }} · {{ l.get_status_display }}</span><span>{{ l.line_total|intcomma }} đ</span></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% if requests %}
+<section class="panel" aria-labelledby="req-title">
+  <h2 id="req-title">Yêu cầu điều chỉnh liên quan</h2>
+  <ul class="ruled-list compact">{% for r in requests %}<li>{{ r.created_at|date:"H:i d/m" }} · {{ r.summary }} · lý do {{ r.reason.name }} · người yêu cầu {{ r.requested_by }} · <strong>{{ r.get_status_display }}</strong>{% if r.decided_by %} bởi {{ r.decided_by }}{% endif %}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% if trail %}
+<section class="panel" aria-labelledby="trail-title">
+  <h2 id="trail-title">Chuỗi thao tác</h2>
+  <ol class="trail">{% for t in trail %}<li><span class="muted">{{ t.created_at|date:"H:i:s d/m" }}</span> {{ t.actor_label }} · {{ t.get_action_display }} · {{ t.object_repr }}{% if t.reason %} · {{ t.reason }}{% endif %}</li>{% endfor %}</ol>
+</section>
+{% endif %}
+
+<section class="panel" aria-labelledby="rev-title">
+  <h2 id="rev-title">Kết quả xem xét</h2>
+  {% for r in reviews %}
+  <p class="{% if r.superseded_by_id %}superseded{% endif %}">{{ r.created_at|date:"H:i d/m" }} · <strong>{{ r.get_result_display }}</strong>{% if r.money_loss %} · có tổn thất tiền{% endif %}{% if r.measure %} · {{ r.measure }}{% endif %} · {{ r.reviewer }}{% if r.superseded_by_id %} · <em>Đã đính chính</em>{% endif %}{% if r.correction_reason %} · Đính chính: {{ r.correction_reason }}{% endif %}</p>
+  {% empty %}<p class="muted">Chưa có kết quả.</p>{% endfor %}
+
+  {% if request.user.is_owner %}
+  <form method="post" class="mini-form" data-once>{% csrf_token %}
+    <fieldset class="option-group"><legend>{% if effective %}Lập bản đính chính{% else %}Ghi kết quả{% endif %}</legend>
+      <div class="choice-row">{% for v, l in results %}<label class="pick"><input type="radio" name="result" value="{{ v }}" required><span>{{ l }}</span></label>{% endfor %}</div></fieldset>
+    <label class="toggle"><input type="checkbox" name="money_loss" value="1"> Có tổn thất tiền (phải gắn vụ việc trước)</label>
+    <div class="field"><label for="f-measure">Biện pháp, ghi chú</label><input class="input" id="f-measure" name="measure"></div>
+    {% if effective %}<div class="field"><label for="f-corr">Lý do và bằng chứng mới (bắt buộc khi đính chính)</label><textarea class="input" id="f-corr" name="correction_reason" rows="2" required></textarea></div>{% endif %}
+    <button class="btn btn-primary" type="submit">{% if effective %}Lưu bản đính chính{% else %}Lưu kết quả{% endif %}</button>
+  </form>
+  {% if not exc.loss_case %}
+  <form method="post" class="inline-form" data-once>{% csrf_token %}
+    <input type="hidden" name="action" value="attach">
+    <span>Gắn vào vụ việc tổn thất</span>
+    <select class="input input-sm" name="case"><option value="new">Lập vụ việc mới</option>{% for c in cases %}<option value="{{ c.pk }}">{{ c }}</option>{% endfor %}</select>
+    <input class="input input-sm" name="title" placeholder="Tiêu đề vụ việc mới">
+    <button class="btn btn-quiet" type="submit">Gắn</button>
+  </form>
+  {% endif %}
+  {% endif %}
+</section>
+
+{% if history %}
+<section class="panel" aria-labelledby="hist-title">
+  <h2 id="hist-title">Lịch sử ngoại lệ của {{ exc.employee }}</h2>
+  <ul class="ruled-list compact">{% for h in history %}<li><a href="{% url 'control:exception_detail' h.pk %}">{{ h.created_at|date:"d/m" }} · {{ h.get_kind_display }} · {{ h.get_status_display }}</a></li>{% endfor %}</ul>
+</section>
+{% endif %}
+{% endblock %}

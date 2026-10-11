@@ -1,0 +1,202 @@
+"""Ca làm việc (bản tối thiểu cho FR-11, FR-59, BRU-09).
+
+Mỗi ca có người duyệt đang trong ca, người duyệt dự phòng và người được ủy quyền xác nhận
+thanh toán theo món thực nhận, do Chủ quán chỉ định. Quỹ tiền ca, kết ca và đối soát
+(FR-07, FR-08) sẽ mở rộng model này ở Phần 2.
+"""
+
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.db import models
+from django.utils import timezone
+
+from apps.core.models import StoreScopedModel
+
+
+class ShiftQuerySet(models.QuerySet):
+    def current(self, at=None):
+        at = at or timezone.now()
+        return (self.filter(status=Shift.Status.OPEN, starts_at__lte=at, ends_at__gt=at)
+                .select_related("approver", "backup_approver", "payment_authorizer")
+                .order_by("-starts_at").first())
+
+
+class Shift(StoreScopedModel):
+    class Status(models.TextChoices):
+        OPEN = "dang_mo", "Đang mở"
+        CLOSED = "da_ket", "Đã kết ca"
+
+    name = models.CharField("Tên ca", max_length=40, help_text="Ví dụ: Ca sáng, Ca chiều, Ca tối.")
+    starts_at = models.DateTimeField("Bắt đầu")
+    ends_at = models.DateTimeField("Kết thúc")
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người duyệt trong ca (Quản lý ca)",
+                                 on_delete=models.PROTECT, related_name="+")
+    backup_approver = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người duyệt dự phòng",
+                                        on_delete=models.PROTECT, null=True, blank=True, related_name="+")
+    payment_authorizer = models.ForeignKey(
+        settings.AUTH_USER_MODEL, verbose_name="Người được ủy quyền thanh toán theo món thực nhận",
+        on_delete=models.PROTECT, null=True, blank=True, related_name="+")
+    status = models.CharField("Trạng thái", max_length=10, choices=Status.choices, default=Status.OPEN)
+    closed_at = models.DateTimeField("Kết ca lúc", null=True, blank=True)
+    closed_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người kết ca", on_delete=models.PROTECT,
+                                  null=True, blank=True, related_name="+")
+    # Doanh thu chốt khi kết ca, làm căn cứ đối soát (BRU-06).
+    closed_cash_revenue = models.BigIntegerField("Doanh thu tiền mặt đã chốt", null=True, blank=True)
+    closed_transfer_revenue = models.BigIntegerField("Doanh thu chuyển khoản đã chốt", null=True, blank=True)
+
+    objects = ShiftQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = "Ca làm việc"
+        verbose_name_plural = "Ca làm việc"
+        ordering = ["-starts_at"]
+
+    def __str__(self):
+        local = timezone.localtime(self.starts_at)
+        return f"{self.name} {local:%d/%m/%Y}"
+
+    def clean(self):
+        if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
+            raise ValidationError({"ends_at": "Giờ kết thúc phải sau giờ bắt đầu."})
+        if self.backup_approver_id and self.backup_approver_id == self.approver_id:
+            raise ValidationError({"backup_approver": "Người duyệt dự phòng phải khác người duyệt trong ca."})
+
+    @property
+    def missing_roles(self):
+        """Nhắc Chủ quán khi ca chưa đủ người theo BRU-09 (AC-113)."""
+        missing = []
+        if not self.backup_approver_id:
+            missing.append("người duyệt dự phòng")
+        if not self.payment_authorizer_id:
+            missing.append("người được ủy quyền thanh toán theo món thực nhận")
+        return missing
+
+
+
+class ExpenseCategory(models.TextChoices):
+    """Danh mục chi theo BRU-33. Chi nguyên vật liệu chỉ ghi qua phiếu nhập (Phần 3)."""
+
+    MATERIALS = "nguyen_vat_lieu", "Nguyên vật liệu (chỉ ghi qua phiếu nhập)"
+    FIXED = "co_dinh", "Chi phí cố định"
+    REPAIR = "sua_chua", "Sửa chữa và thiết bị"
+    OTHER = "khac", "Khác"
+
+
+class CashEntry(StoreScopedModel):
+    """Bút toán quỹ tiền mặt ca (FR-07, BRU-05). Chỉ thêm mới; sai thì ghi bút toán khác."""
+
+    class Kind(models.TextChoices):
+        OPENING = "dau_ca", "Tiền đầu ca"
+        EXPENSE = "chi", "Chi tiền mặt"
+        HANDOVER = "nop", "Nộp tiền giữa ca"
+
+    shift = models.ForeignKey(Shift, verbose_name="Ca", on_delete=models.PROTECT, related_name="cash_entries")
+    kind = models.CharField("Loại", max_length=10, choices=Kind.choices)
+    amount = models.PositiveBigIntegerField("Số tiền (đồng)")
+    category = models.CharField("Danh mục chi", max_length=20, choices=ExpenseCategory.choices, blank=True)
+    note = models.CharField("Nội dung", max_length=255, blank=True)
+    receipt = models.FileField("Ảnh chứng từ", upload_to="chung-tu/%Y/%m/", blank=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người ghi", on_delete=models.PROTECT,
+                              related_name="+")
+    receiver = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người nhận", on_delete=models.PROTECT,
+                                 null=True, blank=True, related_name="+")
+    confirmed_at = models.DateTimeField("Người nhận xác nhận lúc", null=True, blank=True)
+    operation_key = models.CharField("Mã nghiệp vụ", max_length=64, unique=True)
+
+    class Meta:
+        verbose_name = "Bút toán quỹ ca"
+        verbose_name_plural = "Bút toán quỹ ca"
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.get_kind_display()} {self.amount:,} đ".replace(",", ".")
+
+    @property
+    def is_effective(self):
+        """Khoản nộp chỉ có hiệu lực khi người nhận xác nhận (BRU-05, AC-14)."""
+        return self.kind != self.Kind.HANDOVER or self.confirmed_at is not None
+
+
+class Refund(StoreScopedModel):
+    """Hoàn tiền cho khách theo yêu cầu hủy hóa đơn đã được duyệt (BRU-05, BRU-10)."""
+
+    class Method(models.TextChoices):
+        CASH = "tien_mat", "Tiền mặt"
+        TRANSFER = "chuyen_khoan", "Chuyển khoản"
+
+    shift = models.ForeignKey(Shift, verbose_name="Ca", on_delete=models.PROTECT, null=True, blank=True,
+                              related_name="refunds")
+    order_code = models.CharField("Mã đơn", max_length=20)
+    method = models.CharField("Phương thức hoàn", max_length=20, choices=Method.choices)
+    amount = models.PositiveBigIntegerField("Số tiền (đồng)")
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người duyệt", on_delete=models.PROTECT,
+                                    related_name="+")
+    request_id_ref = models.PositiveBigIntegerField("Mã yêu cầu điều chỉnh")
+
+    class Meta:
+        verbose_name = "Hoàn tiền"
+        verbose_name_plural = "Hoàn tiền"
+
+
+class ShiftReport(StoreScopedModel):
+    """Báo cáo cuối ca (FR-08). Gửi xong thì chạy đối soát ngay (AC-17)."""
+
+    shift = models.OneToOneField(Shift, verbose_name="Ca", on_delete=models.PROTECT, related_name="report")
+    counted_cash = models.PositiveBigIntegerField("Tiền mặt đếm thực tế")
+    transfer_received = models.PositiveBigIntegerField("Tiền chuyển khoản nhận theo sao kê")
+    transfer_refunded = models.PositiveBigIntegerField("Tiền hoàn bằng chuyển khoản theo sao kê", default=0)
+    incidents = models.TextField("Sự cố phát sinh", blank=True)
+    submitted_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người lập", on_delete=models.PROTECT,
+                                     related_name="+")
+
+    class Meta:
+        verbose_name = "Báo cáo cuối ca"
+        verbose_name_plural = "Báo cáo cuối ca"
+
+
+class Discrepancy(StoreScopedModel):
+    """Một khoản chênh lệch khác 0 của ca theo phương thức (BRU-10). Lưu cả khi dưới ngưỡng."""
+
+    class Method(models.TextChoices):
+        CASH = "tien_mat", "Tiền mặt"
+        TRANSFER_IN = "ck_nhan", "Chuyển khoản nhận"
+        TRANSFER_REFUND = "ck_hoan", "Hoàn bằng chuyển khoản"
+
+    class Decision(models.TextChoices):
+        NONE = "", "Chưa quyết định"
+        ACCEPTED = "chap_nhan", "Chấp nhận giải trình"
+        REJECTED = "khong_chap_nhan", "Không chấp nhận"
+
+    shift = models.ForeignKey(Shift, verbose_name="Ca", on_delete=models.PROTECT, related_name="discrepancies")
+    method = models.CharField("Phương thức", max_length=20, choices=Method.choices)
+    expected = models.BigIntegerField("Phải có")
+    actual = models.BigIntegerField("Thực tế")
+    difference = models.BigIntegerField("Chênh lệch (thực tế - phải có)")
+    manager = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Quản lý ca phụ trách",
+                                on_delete=models.PROTECT, related_name="+")
+    over_threshold = models.BooleanField("Vượt ngưỡng", default=False)
+    explanation = models.TextField("Giải trình của Quản lý ca", blank=True)
+    explained_at = models.DateTimeField("Giải trình lúc", null=True, blank=True)
+    decision = models.CharField("Quyết định của Chủ quán", max_length=20, choices=Decision.choices, blank=True,
+                                default=Decision.NONE)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người quyết định",
+                                   on_delete=models.PROTECT, null=True, blank=True, related_name="+")
+    decided_at = models.DateTimeField("Quyết định lúc", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Chênh lệch ca"
+        verbose_name_plural = "Chênh lệch ca"
+        ordering = ["-created_at"]
+        constraints = [models.UniqueConstraint(fields=["shift", "method"], name="one_discrepancy_per_method")]
+
+    def __str__(self):
+        return f"{self.shift} · {self.get_method_display()} {self.difference:+,} đ".replace(",", ".")
+
+    @property
+    def is_shortage(self):
+        return self.difference < 0
+
+    @property
+    def is_unexplained_shortage(self):
+        """Thiếu tiền chưa được giải thích hợp lệ (BRU-11): mọi khoản thiếu trừ khi Chủ quán chấp nhận giải trình."""
+        return self.is_shortage and self.decision != self.Decision.ACCEPTED

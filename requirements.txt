@@ -1,0 +1,3 @@
+Django>=5.2,<6.0
+# Triển khai thật bằng PostgreSQL thì cài thêm:
+# psycopg[binary]>=3.2

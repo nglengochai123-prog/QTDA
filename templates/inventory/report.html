@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Báo cáo nguyên vật liệu · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
+<h1>Báo cáo nguyên vật liệu tháng {{ month }}</h1>
+<dl class="figure-grid"><div class="figure-key"><dt>Trường hợp thiếu nguyên liệu</dt><dd>{{ shortage_total }}</dd></div><div><dt>Mục tiêu</dt><dd class="dd-text">không quá 1 mỗi tháng</dd></div></dl>
+
+<section class="panel"><h2>Trường hợp thiếu theo nguyên liệu</h2>
+  {% if shortage_by_ingredient %}<ul class="ruled-list compact">{% for r in shortage_by_ingredient %}<li class="row-between"><span>{{ r.ingredient__name }}</span><strong>{{ r.n }}</strong></li>{% endfor %}</ul>{% else %}<p class="muted">Không có.</p>{% endif %}
+</section>
+<section class="panel"><h2>Trường hợp thiếu theo ngày</h2>
+  {% if shortage_by_day %}<ul class="ruled-list compact">{% for r in shortage_by_day %}<li class="row-between"><span>{{ r.day|date:"d/m/Y" }}</span><strong>{{ r.n }}</strong></li>{% endfor %}</ul>{% else %}<p class="muted">Không có.</p>{% endif %}
+  {% if shortages %}<ul class="ruled-list compact">{% for s in shortages %}<li>{{ s.day|date:"d/m" }} · {{ s.ingredient.name }} · {{ s.get_source_display }}{% if s.source_ref %} · {{ s.source_ref }}{% endif %}</li>{% endfor %}</ul>{% endif %}
+</section>
+<section class="panel"><h2>Hao hụt xuất kho theo lý do</h2>
+  {% if waste %}<ul class="ruled-list compact">{% for w in waste %}<li class="row-between"><span>{{ w.ingredient__name }} · {{ w.reason_label }}</span><strong>{{ w.total|floatformat:"-2g" }} {{ w.ingredient__unit }}</strong></li>{% endfor %}</ul>{% else %}<p class="muted">Không có.</p>{% endif %}
+</section>
+<section class="panel"><h2>Hủy sau pha chế (đã trừ khi pha, không trừ thêm)</h2>
+  {% if post_prep %}<ul class="ruled-list compact">{% for ing, qty in post_prep %}<li class="row-between"><span>{{ ing.name }}</span><strong>{{ qty|floatformat:"-2g" }} {{ ing.get_unit_display }}</strong></li>{% endfor %}</ul>{% else %}<p class="muted">Không có.</p>{% endif %}
+</section>
+<section class="panel"><h2>Kiểm kê trong tháng</h2>
+  {% if counts %}<div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">Lúc</th><th scope="col">Nguyên liệu</th><th scope="col" class="num">Vật lý</th><th scope="col" class="num">Đếm</th><th scope="col" class="num">Chênh lệch</th><th scope="col">Trạng thái</th><th scope="col">Người kiểm</th></tr></thead>
+  <tbody>{% for c in counts %}<tr><td>{{ c.created_at|date:"H:i d/m" }}</td><th scope="row">{{ c.ingredient.name }}</th><td class="num">{{ c.physical_at_count|floatformat:"-2g" }}</td><td class="num">{{ c.counted|floatformat:"-2g" }}</td><td class="num">{{ c.difference|floatformat:"-2g" }} ({{ c.percent }}%)</td><td>{{ c.get_status_display }}</td><td>{{ c.counter }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="muted">Chưa có.</p>{% endif %}
+</section>
+{% endblock %}

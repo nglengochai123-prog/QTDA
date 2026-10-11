@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Thu ngân · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<h1>Thu ngân</h1>
+<p class="lead-muted">Thu tiền theo bàn khi mọi đơn của bàn đã phục vụ và không còn yêu cầu chờ duyệt. Số tiền tính tự động, không nhập tay.</p>
+{% if bills %}
+<div class="bill-grid">
+  {% for bill in bills %}
+  <article class="bill" aria-labelledby="b-{{ bill.table.pk }}">
+    <header class="bill-head">
+      <h2 id="b-{{ bill.table.pk }}">Bàn {{ bill.table.code }}</h2>
+      <strong class="bill-amount">{{ bill.amount|intcomma }} đ</strong>
+    </header>
+    <ul class="bill-orders">
+      {% for order in bill.orders %}
+      <li><span class="bar-code-sm">{{ order.code }}</span> · {{ order.get_status_display }} · {{ order.total|intcomma }} đ</li>
+      {% endfor %}
+    </ul>
+    {% if bill.blockers %}
+    <div class="notice notice-warn" role="status">
+      <svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
+      <ul class="notice-list">{% for b in bill.blockers %}<li>{{ b }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+    {% if not bill.blockers or bill.can_received %}
+    <form method="post" action="{% url 'orders:pay' bill.table.pk %}" class="pay-form" data-once>
+      {% csrf_token %}
+      <input type="hidden" name="operation_key" value="{{ bill.operation_key }}">
+      {% if bill.blockers %}<input type="hidden" name="mode" value="received">{% endif %}
+      <fieldset class="option-group">
+        <legend>Phương thức</legend>
+        <div class="choice-row">
+          <label class="pick"><input type="radio" name="method" value="tien_mat" checked><span>Tiền mặt</span></label>
+          <label class="pick"><input type="radio" name="method" value="chuyen_khoan"><span>Chuyển khoản</span></label>
+        </div>
+      </fieldset>
+      <label class="toggle"><input type="checkbox" name="transfer_confirmed" value="1"> Đã thấy tiền chuyển khoản về tài khoản quán</label>
+      <button type="submit" class="btn btn-primary btn-block" data-busy-text="Đang ghi…">
+        {% if bill.blockers %}Thanh toán theo món thực nhận{% else %}Thu {{ bill.amount|intcomma }} đ{% endif %}
+      </button>
+    </form>
+    {% endif %}
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty"><p><strong>Không có bàn nào chờ thanh toán.</strong></p></div>
+{% endif %}
+{% endblock %}

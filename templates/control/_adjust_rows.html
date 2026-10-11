@@ -1,0 +1,8 @@
+{% load humanize %}{% if rows %}
+<div class="table-wrap"><table class="data-table">
+  <thead><tr><th scope="col">Giờ</th><th scope="col">Yêu cầu</th><th scope="col">Người tạo</th><th scope="col">Người duyệt</th><th scope="col">Lý do</th><th scope="col">Kết quả</th><th scope="col" class="num">Giá trị món</th></tr></thead>
+  <tbody>{% for row in rows %}{% with r=row.req %}
+    <tr><td>{{ r.created_at|date:"H:i" }}</td><th scope="row">{{ r.summary }}</th><td>{{ r.requested_by }}</td><td>{{ r.decided_by|default:"—" }}</td><td>{{ r.reason.name }}</td><td>{{ r.get_status_display }}</td><td class="num">{{ row.value|intcomma }} đ</td></tr>
+  {% endwith %}{% endfor %}</tbody>
+</table></div>
+{% else %}<p class="muted">Không có.</p>{% endif %}

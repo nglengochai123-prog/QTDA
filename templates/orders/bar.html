@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Quầy pha chế · {{ STORE_NAME }}{% endblock %}
+{% block body_class %}page-bar{% endblock %}
+{% block content %}
+<div class="bar-screen" id="bar-screen" data-queue-url="{% url 'orders:bar_queue' %}"
+     data-complete-url="{% url 'orders:bar_complete' %}">
+  <div class="bar-head">
+    <h1>Quầy pha chế</h1>
+    <div class="bar-head-right">
+      <div id="bar-feedback" aria-live="assertive"></div>
+      <label class="toggle"><input type="checkbox" id="auto-print"> Tự in phiếu đơn mới</label>
+      <p class="bar-refresh" id="bar-refresh" aria-live="polite">Tự cập nhật mỗi 2 giây</p>
+    </div>
+  </div>
+  <div id="bar-queue">{% include "orders/_bar_queue.html" %}</div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/bar.js' %}" defer></script>{% endblock %}

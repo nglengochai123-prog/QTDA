@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Tham số · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<h1>Tham số quản trị</h1>
+<p class="lead-muted">Thay đổi có hiệu lực ngay khi lưu và được ghi nhật ký. Giá trị mặc định là đề xuất tạm của dự án; Chủ quán điều chỉnh theo thực tế.</p>
+<ul class="ruled-list">
+  {% for p in rows %}
+  <li class="param-row">
+    <div class="exc-text"><strong>{{ p.label }}</strong><span class="muted">{{ p.source }} · mặc định {{ p.default|intcomma }} {{ p.unit }}</span></div>
+    <form method="post" class="inline-form" data-once>{% csrf_token %}
+      <input type="hidden" name="key" value="{{ p.key }}">
+      <label class="visually-hidden" for="p-{{ p.key }}">{{ p.label }}</label>
+      <input class="input input-sm" id="p-{{ p.key }}" name="value" value="{{ p.value }}" inputmode="numeric">
+      <span class="muted">{{ p.unit }}</span>
+      <button class="btn btn-quiet" type="submit">Lưu</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}

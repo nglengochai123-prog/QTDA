@@ -1,0 +1,45 @@
+<p class="bar-summary"><strong>{{ cups_waiting }}</strong> ly chờ pha · {{ tickets|length }} đơn</p>
+{% if tickets %}
+<div class="bar-grid">
+  {% for t in tickets %}
+  <article class="bar-ticket{% if t.is_new %} is-new{% endif %}{% if t.minutes >= 10 %} is-late{% endif %}" aria-labelledby="t-{{ t.order.pk }}">
+    <header class="bar-ticket-head">
+      <h2 class="bar-code" id="t-{{ t.order.pk }}">{{ t.order.code }}</h2>
+      <span class="bar-table">Bàn {{ t.order.table.code }}</span>
+      <span class="bar-time">{{ t.order.created_at|date:"H:i" }}</span>
+      <span class="bar-wait">{% if t.is_new %}Mới · {% endif %}{{ t.minutes }} phút{% if t.minutes >= 10 %} · trễ{% endif %}</span>
+    </header>
+    <ul class="bar-lines">
+      {% for line in t.lines %}
+      <li class="bar-line">
+        <div class="bar-line-text">
+          <span class="bar-qty" aria-label="Còn {{ line.pending_quantity }} ly">{{ line.pending_quantity }}</span>
+          <span class="bar-name">{{ line.item_name }} <strong>{{ line.size_name }}</strong></span>
+          {% if line.done_quantity %}<span class="bar-progress">Đã xong {{ line.done_quantity }}/{{ line.quantity }} ly · còn {{ line.pending_quantity }}</span>{% endif %}
+          {% if line.options.all %}<span class="bar-options">{% for o in line.options.all %}{{ o.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+          {% if line.note %}<span class="bar-note">{{ line.note }}</span>{% endif %}
+        </div>
+        <div class="bar-actions">
+          {% if line.pending_quantity > 1 %}
+          <button type="button" class="btn btn-quiet" data-complete data-line="{{ line.pk }}" data-cups="1"
+                  data-done="{{ line.done_quantity }}" data-op="{{ line.op_one }}">Xong 1 ly</button>
+          {% endif %}
+          <button type="button" class="btn btn-primary" data-complete data-line="{{ line.pk }}"
+                  data-cups="{{ line.pending_quantity }}" data-done="{{ line.done_quantity }}" data-op="{{ line.op_all }}">
+            {% if line.pending_quantity > 1 %}Xong cả {{ line.pending_quantity }} ly{% else %}Xong{% endif %}</button>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    <footer class="bar-ticket-foot">
+      <a class="btn btn-quiet" data-print href="{% url 'orders:print_ticket' t.order.pk %}" target="_blank" rel="noopener">In phiếu</a>
+    </footer>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty">
+  <p><strong>Không có món nào chờ pha.</strong></p>
+  <p>Đơn mới gửi từ điện thoại phục vụ sẽ hiện ở đây trong vài giây, theo thứ tự đến trước.</p>
+</div>
+{% endif %}

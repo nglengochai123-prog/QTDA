@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Hao hụt · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
+<h1>Ghi hao hụt xuất kho</h1>
+<p class="lead-muted">Nguyên liệu hư, hết hạn, đổ vỡ hoặc pha hỏng trước khi bấm Xong. Món đã pha rồi bị hủy thì không ghi ở đây; hệ thống tự ghi khi yêu cầu hủy được duyệt.</p>
+<form method="post" class="mini-form narrow" data-once>{% csrf_token %}
+  <input type="hidden" name="operation_key" value="{{ operation_key }}">
+  <div class="field"><label for="w-ing">Nguyên vật liệu</label><select class="input" id="w-ing" name="ingredient" required>
+    <option value="">Chọn nguyên liệu</option>{% for i in ingredients %}<option value="{{ i.pk }}">{{ i.name }} ({{ i.get_unit_display }})</option>{% endfor %}</select></div>
+  <div class="field"><label for="w-qty">Số lượng</label><input class="input" id="w-qty" name="quantity" inputmode="decimal" required></div>
+  <fieldset class="option-group"><legend>Lý do</legend><div class="choice-row">
+    {% for v, l in reasons %}<label class="pick"><input type="radio" name="reason" value="{{ v }}" required><span>{{ l }}</span></label>{% endfor %}</div></fieldset>
+  <div class="field"><label for="w-note">Ghi chú</label><input class="input" id="w-note" name="note" maxlength="255"></div>
+  <button class="btn btn-primary btn-block" type="submit">Lưu hao hụt</button>
+</form>
+{% if recent %}
+<section class="panel"><h2>Gần đây</h2><ul class="ruled-list compact">{% for w in recent %}<li class="row-between"><span>{{ w.created_at|date:"H:i d/m" }} · {{ w.ingredient.name }} · {{ w.get_reason_display }}{% if w.note %} · {{ w.note }}{% endif %} · {{ w.actor }}</span><strong>{{ w.quantity|floatformat:"-2g" }} {{ w.ingredient.get_unit_display }}</strong></li>{% endfor %}</ul></section>
+{% endif %}
+{% endblock %}

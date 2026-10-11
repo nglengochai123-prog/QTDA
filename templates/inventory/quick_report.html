@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Báo nhanh · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
+<h1>Báo nhanh nguyên liệu</h1>
+<p class="lead-muted">Chạm Sắp hết hoặc Đã hết ở đúng nguyên liệu. Ghi lượng còn lại nếu ước được.</p>
+<ul class="ruled-list">
+  {% for i in ingredients %}
+  <li class="qr-row">
+    <div class="exc-text"><strong>{{ i.name }}</strong><span class="muted">Hệ thống: còn dùng được {{ i.stock.available|floatformat:"-2g" }} {{ i.get_unit_display }}</span></div>
+    <div class="qr-actions">
+      <form method="post" class="inline-form" data-once>{% csrf_token %}
+        <input type="hidden" name="operation_key" value="{{ i.op_low }}"><input type="hidden" name="ingredient" value="{{ i.pk }}"><input type="hidden" name="level" value="sap_het">
+        <label class="visually-hidden" for="left-{{ i.pk }}">Còn lại khoảng</label>
+        <input class="input input-sm qr-left" id="left-{{ i.pk }}" name="left" inputmode="decimal" placeholder="Còn ({{ i.get_unit_display }})">
+        <button class="btn btn-quiet" type="submit">Sắp hết</button>
+      </form>
+      <form method="post" data-once>{% csrf_token %}
+        <input type="hidden" name="operation_key" value="{{ i.op_out }}"><input type="hidden" name="ingredient" value="{{ i.pk }}"><input type="hidden" name="level" value="da_het">
+        <button class="btn btn-primary btn-out" type="submit">Đã hết</button>
+      </form>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}

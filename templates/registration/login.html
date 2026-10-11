@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Đăng nhập · {{ STORE_NAME }}{% endblock %}
+{% block body_class %}page-login{% endblock %}
+{% block shell %}
+{% include "partials/offline_banner.html" %}
+<main class="label-card">
+  <h1 class="brand">{{ STORE_NAME }}</h1>
+  <p class="lead">Đăng nhập bằng tài khoản riêng của bạn để vào ca.</p>
+
+  {% if form.non_field_errors %}
+  <div class="notice notice-error" role="alert" id="login-error">
+    <svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
+    <div>{% for error in form.non_field_errors %}{{ error }}{% endfor %}</div>
+  </div>
+  {% endif %}
+
+  <form method="post" novalidate data-once>
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <div class="field">
+      <label for="{{ form.username.id_for_label }}">Tên đăng nhập</label>
+      <input class="input" type="text" name="{{ form.username.html_name }}" id="{{ form.username.id_for_label }}"
+             value="{{ form.username.value|default_if_none:'' }}" required autofocus
+             autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"
+             aria-describedby="hint-username{% if form.non_field_errors %} login-error{% endif %}"
+             {% if form.errors %}aria-invalid="true"{% endif %}>
+      <span class="hint" id="hint-username">Thường là số điện thoại của bạn.</span>
+    </div>
+    <div class="field">
+      <label for="{{ form.password.id_for_label }}">Mật khẩu</label>
+      <div class="input-with-action">
+        <input class="input" type="password" name="{{ form.password.html_name }}" id="{{ form.password.id_for_label }}"
+               required autocomplete="current-password" {% if form.errors %}aria-invalid="true"{% endif %}
+               {% if form.non_field_errors %}aria-describedby="login-error"{% endif %}>
+        <button type="button" class="input-action" data-toggle-password aria-controls="{{ form.password.id_for_label }}"
+                aria-pressed="false" aria-label="Hiện hoặc ẩn mật khẩu" hidden>Hiện</button>
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary btn-block" data-busy-text="Đang đăng nhập…">Đăng nhập</button>
+  </form>
+  <p class="help">Quên mật khẩu hoặc bị khóa? Báo Chủ quán đặt lại.</p>
+</main>
+{% endblock %}

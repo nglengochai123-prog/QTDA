@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Yêu cầu điều chỉnh · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<h1>Yêu cầu điều chỉnh đơn {{ order.code }}</h1>
+<p class="lead-muted">Bàn {{ order.table.code }} · {{ order.get_status_display }}. Yêu cầu chỉ có hiệu lực khi được duyệt; bạn không tự duyệt được yêu cầu của mình.</p>
+<form method="post" class="adjust-form" data-once>
+  {% csrf_token %}
+  <input type="hidden" name="operation_key" value="{{ operation_key }}">
+  <fieldset class="option-group">
+    <legend>Loại điều chỉnh</legend>
+    <div class="choice-row">
+      {% for value, label in kinds %}
+      <label class="pick"><input type="radio" name="kind" value="{{ value }}" {% if form.kind == value %}checked{% endif %} data-kind><span>{{ label }}</span></label>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <div class="field" data-for="huy_mon doi_mon">
+    <label for="f-line">Món cần điều chỉnh</label>
+    <select class="input" id="f-line" name="line">
+      {% for line in lines %}<option value="{{ line.pk }}" {% if form.line == line.pk|stringformat:"s" %}selected{% endif %}>{{ line.billable_quantity }} × {{ line.item_name }} {{ line.size_name }} ({{ line.get_status_display }})</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field" data-for="huy_mon doi_mon">
+    <label for="f-cups">Số ly</label>
+    <input class="input" id="f-cups" type="number" name="cups" min="1" value="{{ form.cups|default:'1' }}" inputmode="numeric">
+  </div>
+  <div class="field" data-for="doi_mon">
+    <label for="f-new">Đổi sang món</label>
+    <select class="input" id="f-new" name="new_size" data-new-size>
+      <option value="">Chọn món</option>
+      {% for s in sizes %}<option value="{{ s.size }}" data-item="{{ s.item }}" {% if form.new_size == s.size|stringformat:"s" %}selected{% endif %}>{{ s.label }}</option>{% endfor %}
+    </select>
+    <input type="hidden" name="new_item" value="{{ form.new_item }}" data-new-item>
+    <input type="hidden" name="new_quantity" value="{{ form.cups|default:'1' }}" data-new-qty>
+  </div>
+  <div class="field" data-for="chuyen_ban">
+    <label for="f-table">Chuyển sang bàn</label>
+    <select class="input" id="f-table" name="target_table">
+      {% for t in tables %}<option value="{{ t.pk }}" {% if form.target_table == t.pk|stringformat:"s" %}selected{% endif %}>Bàn {{ t.code }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="f-reason">Lý do (bắt buộc)</label>
+    <select class="input" id="f-reason" name="reason" required>
+      <option value="">Chọn lý do</option>
+      {% for r in reasons %}<option value="{{ r.pk }}" {% if form.reason == r.pk|stringformat:"s" %}selected{% endif %}>{{ r.name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="field">
+    <label for="f-note">Ghi chú thêm</label>
+    <input class="input" id="f-note" name="note" maxlength="255" value="{{ form.note|default:'' }}">
+  </div>
+  <button type="submit" class="btn btn-primary btn-block" data-busy-text="Đang gửi…">Gửi yêu cầu</button>
+</form>
+<script>
+(function () {
+  var form = document.querySelector(".adjust-form");
+  function sync() {
+    var kind = (form.querySelector("[data-kind]:checked") || {}).value || "";
+    form.querySelectorAll("[data-for]").forEach(function (f) {
+      f.hidden = f.dataset.for.split(" ").indexOf(kind) < 0;
+    });
+    var sel = form.querySelector("[data-new-size]");
+    var opt = sel.options[sel.selectedIndex];
+    form.querySelector("[data-new-item]").value = opt && opt.dataset.item || "";
+    form.querySelector("[data-new-qty]").value = form.querySelector("[name=cups]").value || 1;
+  }
+  form.addEventListener("change", sync);
+  form.addEventListener("input", sync);
+  sync();
+})();
+</script>
+{% endblock %}

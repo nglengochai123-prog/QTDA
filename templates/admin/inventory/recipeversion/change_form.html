@@ -1,0 +1,13 @@
+{% extends "admin/change_form.html" %}
+{% block object-tools-items %}
+  {% if original %}
+    {% if original.is_published %}
+      <li><form method="post" action="{% url 'admin:inventory_recipeversion_copy' original.pk %}">{% csrf_token %}
+        <button type="submit" class="historylink">Tạo bản nháp mới từ bản này</button></form></li>
+    {% else %}
+      <li><form method="post" action="{% url 'admin:inventory_recipeversion_publish' original.pk %}">{% csrf_token %}
+        <button type="submit" class="historylink">Áp dụng từ bây giờ</button></form></li>
+    {% endif %}
+  {% endif %}
+  {{ block.super }}
+{% endblock %}

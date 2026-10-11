@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Điều chỉnh · {{ shift }} · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'shifts:status' %}">‹ Tình trạng ca</a></p>
+<h1>Báo cáo điều chỉnh · {{ shift }}</h1>
+<dl class="figure-grid">
+  <div><dt>Tổng số yêu cầu</dt><dd>{{ report.total }}</dd></div>
+  <div class="figure-key"><dt>Giá trị món hủy sau pha chế</dt><dd>{{ report.post_prep_value|intcomma }} đ</dd></div>
+  {% for name, n in report.by_employee %}<div><dt>{{ name }}</dt><dd>{{ n }} yêu cầu</dd></div>{% endfor %}
+</dl>
+<section class="panel"><h2>Đã duyệt hoặc đang chờ</h2>{% include "control/_adjust_rows.html" with rows=report.rows %}</section>
+<section class="panel"><h2>Bị từ chối</h2>{% include "control/_adjust_rows.html" with rows=report.rejected %}</section>
+<section class="panel"><h2>Hủy hóa đơn đã thanh toán</h2>{% include "control/_adjust_rows.html" with rows=report.paid_cancel %}</section>
+{% endblock %}

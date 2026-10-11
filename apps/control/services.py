@@ -1,0 +1,160 @@
+"""Tạo ngoại lệ theo quy tắc, xem xét, vụ việc tổn thất và giá trị kiểm soát tạm tính (BRU-12, 14, 15, 16)."""
+
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.utils import timezone
+
+from apps.audit.models import Action
+from apps.audit.services import record
+from apps.core import params
+from apps.core.models import Store
+
+from .models import (ExceptionCase, ExceptionReview, LossCase, LossEvidence, LossRecovery, LossVerification)
+
+Kind = ExceptionCase.Kind
+
+
+def open_exception(kind, *, rule, employee=None, shift=None, period="", order=None, request=None, amount=0,
+                   detail="", severity=ExceptionCase.Severity.IMPORTANT, store=None, one_per_scope=True,
+                   ingredient=None):
+    """Tạo ngoại lệ, hoặc gắn thêm vào ngoại lệ đang mở cùng loại cho cùng nhân viên và ca (BRU-12)."""
+    existing = None
+    if one_per_scope:
+        existing = ExceptionCase.objects.filter(kind=kind, status=ExceptionCase.Status.OPEN, employee=employee,
+                                                shift=shift, period=period, ingredient=ingredient).first()
+    if existing is None:
+        existing = ExceptionCase.objects.create(
+            store=store or Store.get_default(), kind=kind, rule=rule, employee=employee, shift=shift, period=period,
+            order=order, amount=amount, detail=detail, severity=severity, ingredient=ingredient)
+        record(Action.CREATE, obj=existing, object_type="control.ExceptionCase", actor_label="hệ thống",
+               after={"loai": existing.get_kind_display(), "quy_tac": rule, "gia_tri": amount}, reason=detail[:200])
+    else:
+        existing.amount = max(existing.amount, amount)
+        if detail and detail not in existing.detail:
+            existing.detail = (existing.detail + "\n" + detail).strip()
+        existing.save(update_fields=["amount", "detail", "updated_at"])
+    if request is not None:
+        existing.requests.add(request)
+    if shift is not None:
+        existing.shifts.add(shift)
+    return existing
+
+
+# ---------------- Xem xét ngoại lệ (FR-17, BRU-14) ----------------
+
+@transaction.atomic
+def review(user, exception_id, result, money_loss=False, measure="", correction_reason=""):
+    if not user.is_owner:
+        raise ValidationError("Chỉ Chủ quán được ghi kết quả xem xét ngoại lệ.")  # AC-36
+    exc = ExceptionCase.objects.select_for_update().get(pk=exception_id)
+    if result not in ExceptionReview.Result.values:
+        raise ValidationError("Chọn kết quả Hợp lệ, Nhắc nhở hoặc Vi phạm.")
+    previous = exc.effective_review()
+    if previous is not None and not correction_reason.strip():
+        raise ValidationError("Ngoại lệ đã có kết quả; muốn thay đổi phải lập bản đính chính có lý do và bằng chứng.")
+    if money_loss and exc.loss_case_id is None:
+        raise ValidationError("Ngoại lệ có tổn thất tiền phải được gắn vào một vụ việc tổn thất trước khi đóng.")  # AC-35
+    new = ExceptionReview.objects.create(exception=exc, result=result, money_loss=money_loss, measure=measure,
+                                         reviewer=user, corrects=previous, correction_reason=correction_reason)
+    if previous is not None:
+        previous.superseded_by = new
+        previous._superseding = True
+        previous.save(update_fields=["superseded_by", "updated_at"])
+    exc.status = ExceptionCase.Status.CLOSED
+    exc.save(update_fields=["status", "updated_at"])
+    record(Action.STATUS_CHANGE, actor=user, obj=exc, object_type="control.ExceptionCase",
+           before={"ket_qua": previous.get_result_display()} if previous else None,
+           after={"ket_qua": new.get_result_display(), "ton_that_tien": money_loss},
+           reason=("Đính chính: " + correction_reason) if previous else measure)
+    return new
+
+
+def reminders_due(now=None):
+    """Ngoại lệ chờ xem xét quá số ngày quy định (AC-36)."""
+    now = now or timezone.now()
+    cutoff = now - timezone.timedelta(days=params.get("review_reminder_days"))
+    return ExceptionCase.objects.filter(status=ExceptionCase.Status.OPEN, created_at__lte=cutoff)
+
+
+# ---------------- Vụ việc tổn thất (FR-18, BRU-15) ----------------
+
+def _next_code():
+    last = LossCase.objects.order_by("-id").values_list("code", flat=True).first()
+    number = int(last.split("-")[1]) + 1 if last else 1
+    return f"VV-{number:03d}"
+
+
+@transaction.atomic
+def open_case(user, title):
+    case = LossCase.objects.create(store=user.store or Store.get_default(), code=_next_code(), title=title,
+                                   created_by=user)
+    record(Action.CREATE, actor=user, obj=case, object_type="control.LossCase", after={"ma": case.code, "tieu_de": title})
+    return case
+
+
+@transaction.atomic
+def add_evidence(user, case, *, exception=None, discrepancy=None, amount=None, transaction_ref=""):
+    if (exception is None) == (discrepancy is None):
+        raise ValidationError("Chọn đúng một bằng chứng: ngoại lệ hoặc khoản chênh lệch.")
+    if exception is not None:
+        if LossEvidence.objects.filter(exception=exception).exists():
+            raise ValidationError("Ngoại lệ này đã thuộc một vụ việc khác.")
+        amount = exception.amount if amount is None else amount
+        transaction_ref = transaction_ref or (exception.order.code if exception.order_id else "")
+        exception.loss_case = case
+        exception.save(update_fields=["loss_case", "updated_at"])
+    else:
+        if LossEvidence.objects.filter(discrepancy=discrepancy).exists():
+            raise ValidationError("Khoản chênh lệch này đã thuộc một vụ việc khác.")
+        if amount is None:
+            amount = -discrepancy.difference if discrepancy.difference < 0 else 0
+    evidence = LossEvidence.objects.create(case=case, exception=exception, discrepancy=discrepancy, amount=amount,
+                                           transaction_ref=transaction_ref)
+    record(Action.UPDATE, actor=user, obj=case, object_type="control.LossCase",
+           after={"bang_chung": str(exception or discrepancy), "so_tien": amount, "cung_giao_dich": transaction_ref})
+    return evidence
+
+
+@transaction.atomic
+def verify(user, case, amount, reason=""):
+    if not user.is_owner:
+        raise ValidationError("Chỉ Chủ quán xác nhận tổn thất.")
+    previous = case.verified_amount()
+    if previous is not None and not reason.strip():
+        raise ValidationError("Thay đổi giá trị đã xác minh phải có lý do và bằng chứng (bản đính chính).")
+    LossVerification.objects.create(case=case, amount=int(amount), reason=reason, actor=user)
+    case.status = LossCase.Status.CONCLUDED
+    case.save(update_fields=["status", "updated_at"])
+    record(Action.UPDATE, actor=user, obj=case, object_type="control.LossCase",
+           before={"da_xac_minh": previous}, after={"da_xac_minh": int(amount)}, reason=reason)
+
+
+@transaction.atomic
+def recover(user, case, amount, note=""):
+    LossRecovery.objects.create(case=case, amount=int(amount), note=note, actor=user)
+    record(Action.UPDATE, actor=user, obj=case, object_type="control.LossCase", after={"thu_hoi": int(amount)}, reason=note)
+
+
+# ---------------- Giá trị kiểm soát tạm tính của tháng (BRU-16) ----------------
+
+def monthly_control(year, month):
+    from apps.shifts.models import Discrepancy
+
+    cases = LossCase.objects.filter(created_at__year=year, created_at__month=month)
+    verified = sum(c.verified_amount() or 0 for c in cases)
+    recovered = sum(c.recovered_amount() for c in cases)
+    in_process = 0
+    for d in Discrepancy.objects.filter(shift__starts_at__year=year, shift__starts_at__month=month, difference__lt=0):
+        if not d.is_unexplained_shortage:
+            continue
+        try:
+            evidence = d.evidence
+        except LossEvidence.DoesNotExist:
+            evidence = None
+        if evidence is not None and evidence.case.verified_amount() is not None:
+            continue  # đã chuyển sang tổn thất đã xác minh, chỉ tính một lần
+        in_process += -d.difference
+    open_cases = cases.filter(status=LossCase.Status.OPEN).count()
+    return {"verified": verified, "in_process": in_process, "recovered": recovered,
+            "verified_remaining": verified - recovered, "control_value": verified + in_process,
+            "target": 200000, "open_cases": open_cases, "updated_at": timezone.now()}

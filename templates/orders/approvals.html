@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Duyệt điều chỉnh · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<h1>Yêu cầu chờ bạn duyệt</h1>
+<p class="lead-muted">Mỗi cấp có {{ deadline }} phút; quá hạn yêu cầu tự chuyển lên người duyệt dự phòng rồi Chủ quán.</p>
+{% if pending %}
+<ul class="approval-list">
+  {% for req in pending %}
+  <li class="approval">
+    <div class="approval-text">
+      <strong class="approval-title">{{ req.summary }}</strong>
+      <span>Đơn {{ req.order.code }} · Bàn {{ req.order.table.code }} · Lý do: {{ req.reason.name }}{% if req.note %} · {{ req.note }}{% endif %}</span>
+      <span class="muted">Người yêu cầu {{ req.requested_by }} · {{ req.created_at|date:"H:i" }} · Cấp: {{ req.get_level_display }}</span>
+    </div>
+    <div class="approval-actions">
+      <form method="post" action="{% url 'orders:decide' req.pk %}" data-once>{% csrf_token %}
+        <input type="hidden" name="operation_key" value="{{ req.op_reject }}">
+        <input type="hidden" name="decision" value="reject">
+        <button type="submit" class="btn btn-quiet">Từ chối</button>
+      </form>
+      <form method="post" action="{% url 'orders:decide' req.pk %}" data-once>{% csrf_token %}
+        <input type="hidden" name="operation_key" value="{{ req.op_approve }}">
+        <input type="hidden" name="decision" value="approve">
+        <button type="submit" class="btn btn-primary">Đồng ý</button>
+      </form>
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="empty"><p><strong>Không có yêu cầu nào chờ bạn.</strong></p><p>Yêu cầu do chính bạn tạo không hiện ở đây; nó được chuyển cho người duyệt khác.</p></div>
+{% endif %}
+{% endblock %}

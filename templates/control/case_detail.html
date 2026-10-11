@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}{{ case.code }} · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'control:cases' %}">‹ Vụ việc tổn thất</a></p>
+<header class="page-head"><h1>{{ case.code }} · {{ case.title }}</h1><span class="chip">{{ case.get_status_display }}</span></header>
+<dl class="figure-grid">
+  <div><dt>Đề xuất (không tính trùng)</dt><dd>{{ case.proposed_amount|intcomma }} đ</dd></div>
+  <div class="figure-key"><dt>Đã xác minh</dt><dd>{% if case.verified_amount is not None %}{{ case.verified_amount|intcomma }} đ{% else %}—{% endif %}</dd></div>
+  <div><dt>Đã thu hồi</dt><dd>{{ case.recovered_amount|intcomma }} đ</dd></div>
+  <div><dt>Còn lại</dt><dd>{% if case.remaining_amount is not None %}{{ case.remaining_amount|intcomma }} đ{% else %}—{% endif %}</dd></div>
+</dl>
+
+<section class="panel" aria-labelledby="ev-title">
+  <h2 id="ev-title">Bằng chứng</h2>
+  {% if evidence %}
+  <ul class="ruled-list compact">{% for ev in evidence %}<li class="row-between"><span>{% if ev.exception %}<a href="{% url 'control:exception_detail' ev.exception.pk %}">Ngoại lệ: {{ ev.exception.get_kind_display }}</a>{% else %}Chênh lệch: {{ ev.discrepancy }}{% endif %}{% if ev.transaction_ref %} · giao dịch {{ ev.transaction_ref }}{% endif %}</span><strong>{{ ev.amount|intcomma }} đ</strong></li>{% endfor %}</ul>
+  {% else %}<p class="muted">Chưa có bằng chứng. Gắn ngoại lệ từ trang ngoại lệ, hoặc thêm khoản thiếu tiền bên dưới.</p>{% endif %}
+  {% if free_discrepancies %}
+  <form method="post" class="inline-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="discrepancy">
+    <select class="input input-sm" name="discrepancy">{% for d in free_discrepancies %}<option value="{{ d.pk }}">{{ d }}</option>{% endfor %}</select>
+    <input class="input input-sm" name="transaction_ref" placeholder="Cùng giao dịch (mã đơn), nếu có">
+    <button class="btn btn-quiet" type="submit">Thêm khoản chênh lệch</button></form>
+  {% endif %}
+</section>
+
+<section class="panel" aria-labelledby="ver-title">
+  <h2 id="ver-title">Xác minh và thu hồi</h2>
+  {% for v in verifications %}<p class="{% if not forloop.last %}superseded{% endif %}">{{ v.created_at|date:"H:i d/m" }} · xác minh <strong>{{ v.amount|intcomma }} đ</strong> · {{ v.actor }}{% if v.reason %} · {{ v.reason }}{% endif %}</p>{% endfor %}
+  {% for r in recoveries %}<p>{{ r.created_at|date:"H:i d/m" }} · thu hồi <strong>{{ r.amount|intcomma }} đ</strong> · {{ r.actor }}{% if r.note %} · {{ r.note }}{% endif %}</p>{% endfor %}
+  {% if request.user.is_owner %}
+  <form method="post" class="inline-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="verify">
+    <input class="input input-sm" name="amount" inputmode="numeric" value="{{ case.proposed_amount }}" required>
+    <input class="input input-sm" name="reason" placeholder="{% if case.verified_amount is not None %}Lý do đính chính (bắt buộc){% else %}Ghi chú{% endif %}">
+    <button class="btn btn-primary" type="submit">{% if case.verified_amount is not None %}Đính chính giá trị{% else %}Xác nhận tổn thất{% endif %}</button></form>
+  <form method="post" class="inline-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="recover">
+    <input class="input input-sm" name="amount" inputmode="numeric" placeholder="Số tiền thu hồi" required>
+    <input class="input input-sm" name="note" placeholder="Ghi chú">
+    <button class="btn btn-quiet" type="submit">Ghi thu hồi</button></form>
+  {% endif %}
+</section>
+{% endblock %}

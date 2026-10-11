@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Tạo đơn · {{ STORE_NAME }}{% endblock %}
+{% block body_class %}page-order{% endblock %}
+{% block content %}
+<div class="order-screen" id="order-screen"
+     data-submit-url="{% url 'orders:submit' %}" data-switch-url="{% url 'orders:customer_switched' %}" data-availability-url="{% url 'orders:availability' %}"
+     data-operation-key="{{ operation_key }}">
+
+  <section class="ticket" aria-labelledby="ticket-title">
+    <div class="ticket-head">
+      <h1 id="ticket-title" class="ticket-title">Phiếu order</h1>
+      <span class="ticket-head-right">
+        <span class="ticket-table" id="ticket-table" data-empty="Chưa chọn bàn">Chưa chọn bàn</span>
+        <button type="button" class="btn btn-quiet change-table" id="change-table" hidden>Đổi bàn</button>
+      </span>
+    </div>
+
+    <fieldset class="table-picker">
+      <legend class="visually-hidden">Chọn bàn</legend>
+      <div class="chip-row" role="radiogroup" aria-label="Bàn">
+        {% for table in tables %}
+        <label class="pick"><input type="radio" name="table" value="{{ table.id }}" data-code="{{ table.code }}">
+          <span>{{ table.code }}</span></label>
+        {% empty %}
+        <p class="empty-inline">Chưa có bàn nào. Chủ quán khai báo bàn ở Dữ liệu nền.</p>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <ol class="ticket-lines" id="ticket-lines" aria-live="polite"></ol>
+    <p class="ticket-empty" id="ticket-empty">Chạm vào món bên dưới để thêm vào phiếu.</p>
+  </section>
+
+  <div id="order-feedback" class="order-feedback" aria-live="assertive"></div>
+
+  <section class="menu" aria-label="Thực đơn">
+    {% for group in menu %}
+    <h2 class="menu-group">{{ group.name }}</h2>
+    <ul class="menu-items">
+      {% for item in group.items %}
+      <li class="menu-item" data-item="{{ item.id }}">
+        <button type="button" class="menu-item-head" aria-expanded="false" aria-controls="item-{{ item.id }}">
+          <span class="menu-item-name">{{ item.name }}</span>
+          <span class="menu-item-meta" data-meta></span>
+        </button>
+        <div class="menu-item-body" id="item-{{ item.id }}" hidden></div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% empty %}
+    <div class="empty">
+      <p><strong>Chưa có món nào đang bán.</strong></p>
+      <p>Món chỉ hiện ở đây khi đã có kích cỡ, giá và đủ định mức. Chủ quán mở bán ở Dữ liệu nền.</p>
+    </div>
+    {% endfor %}
+  </section>
+
+  <div class="send-bar">
+    <button type="button" class="btn btn-primary btn-block" id="send-order" disabled>
+      <svg class="icon" aria-hidden="true"><use href="#i-send"/></svg>
+      <span data-label>Gửi pha chế</span>
+    </button>
+  </div>
+</div>
+{{ menu|json_script:"menu-data" }}
+{{ stock|json_script:"stock-data" }}
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/order.js' %}" defer></script>{% endblock %}

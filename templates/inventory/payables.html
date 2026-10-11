@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Khoản phải trả · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
+<h1>Khoản phải trả nhà cung cấp</h1>
+{% if items %}
+<ul class="ruled-list">
+  {% for p in items %}
+  <li class="param-row">
+    <div class="exc-text"><strong>{{ p.supplier }} · phiếu {{ p.receipt.code }}</strong>
+      <span class="muted">Phải trả {{ p.amount|intcomma }} đ · đã trả {{ p.paid|intcomma }} đ · còn {{ p.remaining|intcomma }} đ · hạn {{ p.due_date|date:"d/m/Y" }}</span>
+      {% if p.due_date < today %}<span class="flag-low">Quá hạn</span>{% endif %}</div>
+    <form method="post" class="inline-form" data-once>{% csrf_token %}<input type="hidden" name="payable" value="{{ p.pk }}">
+      <input class="input input-sm" name="amount" inputmode="numeric" value="{{ p.remaining }}" aria-label="Số tiền trả">
+      <select class="input input-sm" name="source" aria-label="Nguồn tiền">{% for v, l in sources %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
+      <button class="btn btn-primary" type="submit">Ghi đã trả</button></form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}<div class="empty"><p><strong>Không còn khoản phải trả.</strong></p></div>{% endif %}
+{% endblock %}

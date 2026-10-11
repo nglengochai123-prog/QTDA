@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Kiểm kê · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
+<h1>Kiểm kê</h1>
+<p class="lead-muted">Đếm thực tế rồi nhập theo đơn vị tính. Chênh lệch trong ngưỡng điều chỉnh tồn ngay; vượt ngưỡng phải ghi lý do và chờ Chủ quán xác nhận. Nhóm trọng yếu đứng đầu, kiểm hằng ngày.</p>
+
+{% if pending %}
+<section class="panel panel-warn" aria-labelledby="pend-title">
+  <h2 id="pend-title">Chờ Chủ quán xác nhận</h2>
+  <ul class="ruled-list compact">
+    {% for c in pending %}
+    <li class="row-between"><span><strong>{{ c.ingredient.name }}</strong>: vật lý {{ c.physical_at_count|floatformat:"-2g" }}, đếm {{ c.counted|floatformat:"-2g" }} {{ c.ingredient.get_unit_display }} ({{ c.difference|floatformat:"-2g" }}, {{ c.percent }}%) · {{ c.reason }} · {{ c.counter }}</span>
+      {% if can_confirm %}<span class="approval-actions">
+        <form method="post" data-once>{% csrf_token %}<input type="hidden" name="count" value="{{ c.pk }}"><input type="hidden" name="action" value="reject"><button class="btn btn-quiet" type="submit">Không xác nhận</button></form>
+        <form method="post" data-once>{% csrf_token %}<input type="hidden" name="count" value="{{ c.pk }}"><input type="hidden" name="action" value="confirm"><button class="btn btn-primary" type="submit">Xác nhận, điều chỉnh tồn</button></form>
+      </span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<ul class="ruled-list">
+  {% for i in ingredients %}
+  <li class="qr-row">
+    <div class="exc-text"><strong>{{ i.name }}{% if i.is_critical %} <span class="chip">Trọng yếu</span>{% endif %}</strong><span class="muted">Tồn vật lý trên hệ thống {{ i.stock.physical|floatformat:"-2g" }} {{ i.get_unit_display }}</span></div>
+    <form method="post" class="inline-form" data-once>{% csrf_token %}
+      <input type="hidden" name="operation_key" value="{{ i.op }}"><input type="hidden" name="ingredient" value="{{ i.pk }}">
+      <label class="visually-hidden" for="c-{{ i.pk }}">Đếm được</label>
+      <input class="input input-sm" id="c-{{ i.pk }}" name="counted" inputmode="decimal" placeholder="Đếm được ({{ i.get_unit_display }})" required>
+      <input class="input input-sm" name="reason" placeholder="Lý do nếu lệch nhiều">
+      <button class="btn btn-primary" type="submit">Lưu</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}

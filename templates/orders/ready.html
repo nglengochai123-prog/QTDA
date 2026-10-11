@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Món sẵn sàng · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<div id="ready-screen" data-queue-url="{% url 'orders:ready_queue' %}" data-serve-url="{% url 'orders:serve' %}">
+  <h1>Món đã pha xong</h1>
+  <p class="lead-muted">Mang món ra đúng bàn rồi bấm "Đã mang ra". Danh sách tự cập nhật.</p>
+  <div id="ready-feedback" aria-live="assertive"></div>
+  <div id="ready-queue">{% include "orders/_ready_queue.html" %}</div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'js/ready.js' %}" defer></script>{% endblock %}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Phiếu {{ order.code }}</title>
+<style>
+  @page { size: 80mm auto; margin: 3mm; }
+  body { font-family: "Segoe UI", system-ui, Arial, sans-serif; width: 72mm; margin: 0 auto; color: #000; font-size: 13px; }
+  h1 { font-size: 26px; margin: 0; letter-spacing: 0.02em; }
+  .meta { display: flex; justify-content: space-between; font-size: 16px; font-weight: 700; margin: 2px 0 6px; }
+  .time { font-size: 12px; margin-bottom: 6px; }
+  ul { list-style: none; padding: 0; margin: 0; border-top: 1px dashed #000; }
+  li { padding: 6px 0; border-bottom: 1px dashed #000; }
+  .qty { font-size: 20px; font-weight: 800; margin-right: 6px; }
+  .name { font-size: 15px; font-weight: 700; }
+  .opt { display: block; margin-left: 28px; }
+  .note { display: block; margin-left: 28px; font-weight: 700; }
+  .foot { font-size: 11px; margin-top: 6px; }
+  .noprint { margin: 12px 0; }
+  @media print { .noprint { display: none; } }
+</style>
+</head>
+<body>
+  <h1>{{ order.code }}</h1>
+  <div class="meta"><span>Bàn {{ order.table.code }}</span><span>{{ lines|length }} món</span></div>
+  <div class="time">Gửi lúc {{ order.created_at|date:"H:i d/m/Y" }} · {{ order.created_by }}</div>
+  <ul>
+    {% for line in lines %}
+    <li><span class="qty">{{ line.quantity }}</span><span class="name">{{ line.item_name }} {{ line.size_name }}</span>
+      {% if line.options.all %}<span class="opt">{% for o in line.options.all %}{{ o.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+      {% if line.note %}<span class="note">Ghi chú: {{ line.note }}</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% if order.note %}<p class="note">{{ order.note }}</p>{% endif %}
+  <p class="foot">Chỉ pha món có trên phiếu này hoặc trên màn hình quầy.</p>
+  <p class="noprint"><button type="button" onclick="window.print()">In phiếu</button></p>
+  {% if auto %}<script>window.addEventListener("load", function () { window.print(); });</script>{% endif %}
+</body>
+</html>

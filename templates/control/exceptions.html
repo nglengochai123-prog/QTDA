@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Ngoại lệ · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <h1>Ngoại lệ cần xem xét</h1>
+  <nav class="tabs" aria-label="Lọc trạng thái">
+    <a href="?trang-thai=cho_xem_xet"{% if status == "cho_xem_xet" %} aria-current="page"{% endif %}>Chờ xem xét</a>
+    <a href="?trang-thai=da_dong"{% if status == "da_dong" %} aria-current="page"{% endif %}>Đã đóng</a>
+    <a href="?trang-thai=tat-ca"{% if status == "tat-ca" %} aria-current="page"{% endif %}>Tất cả</a>
+  </nav>
+</header>
+{% if items %}
+<ul class="ruled-list">
+  {% for e in items %}
+  <li><a href="{% url 'control:exception_detail' e.pk %}">
+    <span class="exc-text"><strong>{{ e.get_kind_display }}</strong>
+      <span class="muted">{% if e.employee %}{{ e.employee }} · {% endif %}{% if e.shift %}{{ e.shift }} · {% endif %}{% if e.order %}Đơn {{ e.order.code }} · {% endif %}{{ e.created_at|date:"H:i d/m" }}</span>
+      {% if e.pk in due %}<span class="flag-low">Quá hạn xem xét, cần xử lý</span>{% endif %}</span>
+    <span class="count">{% if e.amount %}{{ e.amount|intcomma }} đ{% endif %} <span class="chip">{{ e.get_status_display }}</span>
+      <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></span></a></li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="empty"><p><strong>Không có ngoại lệ nào ở mục này.</strong></p><p>Ngoại lệ được tạo tự động theo quy tắc BRU-12 khi có điều chỉnh bị từ chối, hủy hóa đơn đã thanh toán, điều chỉnh vượt mức, thiếu tiền tích lũy.</p></div>
+{% endif %}
+{% endblock %}

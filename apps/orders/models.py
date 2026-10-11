@@ -1,0 +1,310 @@
+"""Đơn hàng và dòng món (FR-01, FR-02, FR-03, FR-10, BRU-39).
+
+Đơn được tạo ở trạng thái Đã gửi pha chế và bị khóa ngay: dòng món không sửa trực tiếp được;
+thay đổi về sau đi qua yêu cầu điều chỉnh có phê duyệt (FR-11, phần sau).
+"""
+
+from decimal import Decimal
+
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.db import models
+
+from apps.catalog.models import ItemSize, MenuItem, Option, Table
+from apps.core.models import StoreScopedModel, TimeStampedModel
+from apps.inventory.models import RecipeVersion
+
+
+class Order(StoreScopedModel):
+    class Status(models.TextChoices):
+        # Vòng đời theo BRU-02: Đã gửi pha chế → Đã pha chế → Đã phục vụ → Đã thanh toán; Đã hủy chỉ qua phê duyệt.
+        SENT = "da_gui", "Đã gửi pha chế"
+        PREPARED = "da_pha", "Đã pha chế"
+        SERVED = "da_phuc_vu", "Đã phục vụ"
+        PAID = "da_thanh_toan", "Đã thanh toán"
+        CANCELLED = "da_huy", "Đã hủy"
+
+    code = models.CharField("Mã đơn", max_length=20, unique=True)
+    table = models.ForeignKey(Table, verbose_name="Bàn", on_delete=models.PROTECT, related_name="orders")
+    status = models.CharField("Trạng thái", max_length=20, choices=Status.choices, default=Status.SENT)
+    note = models.CharField("Ghi chú đơn", max_length=255, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người tạo", on_delete=models.PROTECT,
+                                   related_name="+")
+    operation_key = models.CharField("Mã nghiệp vụ", max_length=64, unique=True)
+    total = models.PositiveIntegerField("Tổng tiền (đồng)", default=0)
+    shift = models.ForeignKey("shifts.Shift", verbose_name="Ca", on_delete=models.PROTECT, null=True, blank=True,
+                              related_name="orders")
+    payment = models.ForeignKey("orders.Payment", verbose_name="Thanh toán", on_delete=models.PROTECT,
+                                null=True, blank=True, related_name="orders")
+
+    class Meta:
+        verbose_name = "Đơn hàng"
+        verbose_name_plural = "Đơn hàng"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Đơn {self.code} · {self.table}"
+
+    @property
+    def is_locked(self):
+        return True  # Đơn luôn khóa sau khi gửi (FR-10).
+
+    def derived_status(self):
+        """Trạng thái đơn suy ra từ các dòng món (chỉ trước khi thanh toán hoặc hủy)."""
+        if self.status in (self.Status.PAID, self.Status.CANCELLED):
+            return self.status
+        all_statuses = {line.status for line in self.lines.all()}
+        statuses = all_statuses - {OrderLine.Status.CANCELLED}
+        if not statuses:
+            return self.Status.CANCELLED if all_statuses else self.status
+        if statuses == {OrderLine.Status.SERVED}:
+            return self.Status.SERVED
+        if statuses <= {OrderLine.Status.DONE, OrderLine.Status.SERVED}:
+            return self.Status.PREPARED
+        return self.Status.SENT
+
+    def refresh_status(self):
+        new = self.derived_status()
+        if new != self.status:
+            self.status = new
+            self.save(update_fields=["status", "updated_at"])
+        return self.status
+
+    def recompute_total(self):
+        self.total = sum(line.unit_price * line.billable_quantity for line in self.lines.all())
+        self.save(update_fields=["total", "updated_at"])
+        return self.total
+
+    def pending_request(self):
+        return self.adjustment_requests.filter(status=AdjustmentRequest.Status.PENDING).first()
+
+
+class OrderLine(TimeStampedModel):
+    class Status(models.TextChoices):
+        WAITING = "cho_pha", "Chờ pha"
+        DONE = "da_pha", "Đã pha chế"
+        SERVED = "da_phuc_vu", "Đã phục vụ"
+        CANCELLED = "da_huy", "Đã hủy"
+
+    order = models.ForeignKey(Order, verbose_name="Đơn", on_delete=models.PROTECT, related_name="lines")
+    position = models.PositiveSmallIntegerField("Thứ tự")
+    item = models.ForeignKey(MenuItem, verbose_name="Món", on_delete=models.PROTECT, related_name="+")
+    size = models.ForeignKey(ItemSize, verbose_name="Kích cỡ", on_delete=models.PROTECT, related_name="+")
+    # Ảnh chụp tại lúc nhận đơn: đổi tên, giá, định mức sau đó không ảnh hưởng dòng này (BRU-39, AC-114).
+    item_name = models.CharField("Tên món lúc bán", max_length=120)
+    size_name = models.CharField("Kích cỡ lúc bán", max_length=20)
+    unit_price = models.PositiveIntegerField("Đơn giá lúc bán (đã gồm tùy chọn)")
+    quantity = models.PositiveSmallIntegerField("Số ly")
+    done_quantity = models.PositiveSmallIntegerField("Số ly đã pha", default=0)
+    cancelled_quantity = models.PositiveSmallIntegerField("Số ly hủy khi chưa pha", default=0)
+    voided_done_quantity = models.PositiveSmallIntegerField("Số ly hủy sau pha chế", default=0)
+    note = models.CharField("Ghi chú", max_length=255, blank=True)
+    recipe_version = models.ForeignKey(RecipeVersion, verbose_name="Phiên bản định mức", on_delete=models.PROTECT,
+                                       null=True, blank=True, related_name="+")
+    usage_per_unit = models.JSONField("Nguyên liệu cho một ly", default=dict,
+                                      help_text="{mã nguyên liệu: lượng} theo phiên bản định mức đã lưu.")
+    status = models.CharField("Trạng thái", max_length=20, choices=Status.choices, default=Status.WAITING)
+    done_at = models.DateTimeField("Pha xong lúc", null=True, blank=True)
+    served_at = models.DateTimeField("Mang ra lúc", null=True, blank=True)
+    served_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người mang ra", on_delete=models.PROTECT,
+                                  null=True, blank=True, related_name="+")
+
+    class Meta:
+        verbose_name = "Dòng món"
+        verbose_name_plural = "Dòng món"
+        ordering = ["order", "position"]
+        constraints = [
+            models.UniqueConstraint(fields=["order", "position"], name="uniq_line_position"),
+            models.CheckConstraint(condition=models.Q(quantity__gte=1), name="line_quantity_positive"),
+            models.CheckConstraint(
+                condition=models.Q(done_quantity__lte=models.F("quantity") - models.F("cancelled_quantity")),
+                name="line_done_within_quantity"),
+            models.CheckConstraint(condition=models.Q(voided_done_quantity__lte=models.F("done_quantity")),
+                                   name="line_voided_within_done"),
+        ]
+
+    def __str__(self):
+        return f"{self.quantity} × {self.item_name} {self.size_name}"
+
+    @property
+    def pending_quantity(self):
+        return self.quantity - self.done_quantity - self.cancelled_quantity
+
+    @property
+    def billable_quantity(self):
+        """Số ly tính tiền: trừ ly hủy trước và sau pha chế."""
+        return self.quantity - self.cancelled_quantity - self.voided_done_quantity
+
+    @property
+    def line_total(self):
+        return self.unit_price * self.billable_quantity
+
+    def settle_status(self):
+        """Cập nhật trạng thái dòng sau khi hủy bớt ly."""
+        if self.billable_quantity == 0:
+            self.status = self.Status.CANCELLED
+        elif self.pending_quantity == 0 and self.status == self.Status.WAITING:
+            self.status = self.Status.DONE
+
+    def usage_for(self, cups):
+        return {int(k): Decimal(str(v)) * cups for k, v in self.usage_per_unit.items()}
+
+    def option_text(self):
+        return ", ".join(o.name for o in self.options.all())
+
+    def save(self, *args, **kwargs):
+        # Khóa đơn: chỉ được cập nhật tiến độ pha chế, không đổi món, giá, số lượng.
+        if self.pk is not None and not getattr(self, "_progress_update", False):
+            raise ValidationError("Đơn đã gửi pha chế bị khóa; thay đổi phải qua yêu cầu điều chỉnh.")
+        super().save(*args, **kwargs)
+
+
+class OrderLineOption(models.Model):
+    line = models.ForeignKey(OrderLine, verbose_name="Dòng món", on_delete=models.PROTECT, related_name="options")
+    option = models.ForeignKey(Option, verbose_name="Tùy chọn", on_delete=models.PROTECT, related_name="+")
+    name = models.CharField("Tùy chọn lúc bán", max_length=80)
+    extra_price = models.PositiveIntegerField("Giá cộng thêm lúc bán")
+
+    class Meta:
+        verbose_name = "Tùy chọn của dòng món"
+        verbose_name_plural = "Tùy chọn của dòng món"
+
+    def __str__(self):
+        return self.name
+
+
+
+class AdjustmentReason(StoreScopedModel):
+    """Danh mục lý do điều chỉnh (BRU-08, AC-20)."""
+
+    name = models.CharField("Lý do", max_length=80)
+    is_active = models.BooleanField("Đang dùng", default=True)
+    sort_order = models.PositiveSmallIntegerField("Thứ tự", default=0)
+
+    class Meta:
+        verbose_name = "Lý do điều chỉnh"
+        verbose_name_plural = "Lý do điều chỉnh"
+        ordering = ["sort_order", "name"]
+
+    def __str__(self):
+        return self.name
+
+
+class AdjustmentRequest(StoreScopedModel):
+    """Yêu cầu điều chỉnh đơn đã gửi pha chế (FR-10, FR-11, BRU-08, BRU-09)."""
+
+    class Kind(models.TextChoices):
+        CANCEL_ITEMS = "huy_mon", "Hủy món hoặc giảm số lượng"
+        CHANGE_ITEM = "doi_mon", "Đổi món"
+        MOVE_TABLE = "chuyen_ban", "Chuyển bàn hoặc gộp bàn"
+        CANCEL_PAID = "huy_hoa_don", "Hủy hóa đơn đã thanh toán"
+
+    class Status(models.TextChoices):
+        PENDING = "cho_duyet", "Chờ duyệt"
+        APPROVED = "da_duyet", "Đã duyệt"
+        REJECTED = "tu_choi", "Từ chối"
+        POST_AUDIT = "cho_hau_kiem", "Chờ hậu kiểm"
+
+    class Level(models.IntegerChoices):
+        SHIFT = 0, "Người duyệt trong ca"
+        BACKUP = 1, "Người duyệt dự phòng"
+        OWNER = 2, "Chủ quán"
+        EXHAUSTED = 3, "Quá hạn mọi cấp"
+
+    order = models.ForeignKey(Order, verbose_name="Đơn", on_delete=models.PROTECT, related_name="adjustment_requests")
+    kind = models.CharField("Loại", max_length=20, choices=Kind.choices)
+    line = models.ForeignKey(OrderLine, verbose_name="Dòng món", on_delete=models.PROTECT, null=True, blank=True,
+                             related_name="+")
+    cups = models.PositiveSmallIntegerField("Số ly", default=0)
+    target_table = models.ForeignKey(Table, verbose_name="Bàn mới", on_delete=models.PROTECT, null=True,
+                                     blank=True, related_name="+")
+    new_line = models.JSONField("Món thay thế", null=True, blank=True)
+    new_line_text = models.CharField("Món thay thế (mô tả)", max_length=200, blank=True)
+    reason = models.ForeignKey(AdjustmentReason, verbose_name="Lý do", on_delete=models.PROTECT, related_name="+")
+    note = models.CharField("Ghi chú", max_length=255, blank=True)
+    status = models.CharField("Trạng thái", max_length=20, choices=Status.choices, default=Status.PENDING)
+    level = models.PositiveSmallIntegerField("Cấp đang chờ", choices=Level.choices, default=Level.SHIFT)
+    level_since = models.DateTimeField("Ở cấp này từ")
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người yêu cầu",
+                                     on_delete=models.PROTECT, related_name="+")
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người xử lý", on_delete=models.PROTECT,
+                                   null=True, blank=True, related_name="+")
+    decided_at = models.DateTimeField("Xử lý lúc", null=True, blank=True)
+    decision_note = models.CharField("Ghi chú xử lý", max_length=255, blank=True)
+    operation_key = models.CharField("Mã nghiệp vụ", max_length=64, unique=True)
+    after_prep = models.BooleanField("Gửi sau khi đã có món pha xong", default=False)
+    shift = models.ForeignKey("shifts.Shift", verbose_name="Ca", on_delete=models.PROTECT, null=True, blank=True,
+                              related_name="+")
+
+    class Meta:
+        verbose_name = "Yêu cầu điều chỉnh"
+        verbose_name_plural = "Yêu cầu điều chỉnh"
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["order"], condition=models.Q(status="cho_duyet"),
+                                    name="one_pending_request_per_order"),
+        ]
+
+    def __str__(self):
+        return f"{self.get_kind_display()} · đơn {self.order.code}"
+
+    def summary(self):
+        if self.kind == self.Kind.CANCEL_ITEMS:
+            return f"Hủy {self.cups} × {self.line.item_name} {self.line.size_name}"
+        if self.kind == self.Kind.CHANGE_ITEM:
+            return f"Đổi {self.cups} × {self.line.item_name} {self.line.size_name} sang {self.new_line_text}"
+        if self.kind == self.Kind.MOVE_TABLE:
+            return f"Chuyển đơn từ {self.order.table} sang {self.target_table}"
+        return f"Hủy hóa đơn đã thanh toán {self.order.total:,} đồng".replace(",", ".")
+
+
+class PostPrepCancellation(models.Model):
+    """Hủy sau pha chế (BRU-19): lượng nguyên liệu đã trừ khi pha được phân loại lại, không trừ tồn lần nữa."""
+
+    created_at = models.DateTimeField("Thời điểm", auto_now_add=True)
+    line = models.ForeignKey(OrderLine, verbose_name="Dòng món", on_delete=models.PROTECT, related_name="+")
+    cups = models.PositiveSmallIntegerField("Số ly")
+    usage = models.JSONField("Nguyên liệu (theo định mức đã lưu)", default=dict)
+    reason = models.ForeignKey(AdjustmentReason, verbose_name="Lý do", on_delete=models.PROTECT, related_name="+")
+    request = models.ForeignKey(AdjustmentRequest, verbose_name="Yêu cầu", on_delete=models.PROTECT,
+                                related_name="post_prep_cancellations")
+
+    class Meta:
+        verbose_name = "Hủy sau pha chế"
+        verbose_name_plural = "Hủy sau pha chế"
+
+
+class Payment(StoreScopedModel):
+    """Thanh toán theo bàn (FR-04, BRU-04)."""
+
+    class Method(models.TextChoices):
+        CASH = "tien_mat", "Tiền mặt"
+        TRANSFER = "chuyen_khoan", "Chuyển khoản"
+
+    class Kind(models.TextChoices):
+        NORMAL = "thuong", "Thanh toán thường"
+        RECEIVED_ITEMS = "mon_thuc_nhan", "Thanh toán theo món thực nhận"
+
+    class Status(models.TextChoices):
+        VALID = "hop_le", "Hợp lệ"
+        VOIDED = "da_huy", "Đã hủy theo yêu cầu được duyệt"
+
+    table = models.ForeignKey(Table, verbose_name="Bàn", on_delete=models.PROTECT, related_name="payments")
+    method = models.CharField("Phương thức", max_length=20, choices=Method.choices)
+    kind = models.CharField("Loại", max_length=20, choices=Kind.choices, default=Kind.NORMAL)
+    amount = models.PositiveIntegerField("Số tiền (đồng)")
+    cashier = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người thu", on_delete=models.PROTECT,
+                                related_name="+")
+    shift = models.ForeignKey("shifts.Shift", verbose_name="Ca", on_delete=models.PROTECT, null=True, blank=True,
+                              related_name="payments")
+    status = models.CharField("Trạng thái", max_length=20, choices=Status.choices, default=Status.VALID)
+    operation_key = models.CharField("Mã nghiệp vụ", max_length=64, unique=True)
+
+    class Meta:
+        verbose_name = "Thanh toán"
+        verbose_name_plural = "Thanh toán"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.get_method_display()} {self.amount:,} đ · {self.table}".replace(",", ".")
+

@@ -1,0 +1,20 @@
+{% if ready %}
+{% for table, lines in ready %}
+<section class="ready-table" aria-labelledby="rt-{{ forloop.counter }}">
+  <h2 class="ready-table-title" id="rt-{{ forloop.counter }}">Bàn {{ table }}</h2>
+  <ul class="ready-lines">
+    {% for line in lines %}
+    <li class="ready-line">
+      <div class="ready-text">
+        <span class="ready-name">{{ line.quantity }} × {{ line.item_name }} {{ line.size_name }}</span>
+        <span class="ready-detail">Đơn {{ line.order.code }}{% if line.options.all %} · {% for o in line.options.all %}{{ o.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}{% if line.note %} · {{ line.note }}{% endif %}</span>
+      </div>
+      <button type="button" class="btn btn-primary" data-serve data-line="{{ line.pk }}" data-op="{{ line.op_serve }}">Đã mang ra</button>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}
+{% else %}
+<div class="empty"><p><strong>Chưa có món nào chờ mang ra.</strong></p><p>Khi quầy bấm pha xong, món sẽ hiện ở đây kèm số bàn.</p></div>
+{% endif %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Đặt hàng · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
+<h1>Ghi nhận đặt hàng</h1>
+<form method="post" class="inline-form" data-once>{% csrf_token %}
+  <select class="input input-sm" name="supplier" required aria-label="Nhà cung cấp"><option value="">Nhà cung cấp</option>{% for s in suppliers %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}</select>
+  <select class="input input-sm" name="ingredient" required aria-label="Nguyên liệu"><option value="">Nguyên liệu</option>{% for i in ingredients %}<option value="{{ i.pk }}">{{ i.name }} ({{ i.get_unit_display }})</option>{% endfor %}</select>
+  <input class="input input-sm" name="quantity" inputmode="decimal" placeholder="Số lượng (đơn vị tính)" required>
+  <input class="input input-sm" type="date" name="expected_date" value="{{ today|date:'Y-m-d' }}" required aria-label="Ngày giao dự kiến">
+  <input class="input input-sm" name="note" placeholder="Ghi chú">
+  <button class="btn btn-primary" type="submit">Ghi lần đặt</button>
+</form>
+<div class="table-wrap"><table class="data-table">
+  <thead><tr><th scope="col">Lần đặt</th><th scope="col" class="num">Đã nhận</th><th scope="col">Ngày giao</th><th scope="col">Trạng thái</th><th scope="col">Đổi ngày giao</th></tr></thead>
+  <tbody>{% for po in orders %}
+  <tr><th scope="row">{{ po }}</th><td class="num">{{ po.received_quantity|floatformat:"-2g" }} / {{ po.quantity|floatformat:"-2g" }}</td>
+    <td>{{ po.expected_date|date:"d/m/Y" }}</td>
+    <td>{% if po.status == "giao_cham" %}<span class="flag-low">Giao chậm · không tính vào hàng đang về</span>{% else %}{{ po.get_status_display }}{% endif %}</td>
+    <td>{% if po.status != "da_giao_du" %}<form method="post" class="inline-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="reschedule"><input type="hidden" name="po" value="{{ po.pk }}"><input class="input input-sm" type="date" name="expected_date" required aria-label="Ngày giao mới"><button class="btn btn-quiet" type="submit">Lưu</button></form>{% endif %}</td></tr>
+  {% empty %}<tr><td colspan="5" class="muted">Chưa có lần đặt nào.</td></tr>{% endfor %}</tbody>
+</table></div>
+{% endblock %}

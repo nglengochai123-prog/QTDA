@@ -1,0 +1,69 @@
+{% load static %}<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#3f2a9e">
+  <title>{% block title %}{{ STORE_NAME }}{% endblock %}</title>
+  <link rel="manifest" href="{% url 'core:manifest' %}">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}" data-sw-url="{% url 'core:service_worker' %}" data-health-url="{% url 'core:healthz' %}"{% if READY_COUNT_URL %} data-ready-count-url="{{ READY_COUNT_URL }}"{% endif %}{% if APPROVALS_COUNT_URL %} data-approvals-count-url="{{ APPROVALS_COUNT_URL }}"{% endif %}{% if QUICK_REPORT_COUNT_URL %} data-quick-report-count-url="{{ QUICK_REPORT_COUNT_URL }}"{% endif %}>
+  {% include "partials/icons.html" %}
+  {% block shell %}
+  <header class="app-header">
+    <a class="store" href="{% url 'core:home' %}">{{ STORE_NAME }}</a>
+    <div class="who">
+      <span class="who-id">
+        <span class="who-name">{{ user }}</span>
+        <span class="who-name-short">{{ user.given_name }}</span>
+        <span class="who-role">{{ user.get_role_display }}</span>
+      </span>
+      <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}
+        <button type="submit" class="btn btn-quiet btn-logout">
+          <svg class="icon" aria-hidden="true"><use href="#i-logout"/></svg>Đăng xuất
+        </button>
+      </form>
+    </div>
+  </header>
+  {% include "partials/offline_banner.html" %}
+  {% if QUICK_REPORT_COUNT_URL %}
+  <a class="ready-banner stock-banner" id="stock-banner" href="{{ STOCK_URL }}" hidden>
+    <svg class="icon" aria-hidden="true"><use href="#i-exceptions"/></svg><span data-text></span>
+    <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+  </a>
+  {% endif %}
+  {% if APPROVALS_URL %}
+  <a class="ready-banner approvals-banner" id="approvals-banner" href="{{ APPROVALS_URL }}" hidden>
+    <svg class="icon" aria-hidden="true"><use href="#i-approve"/></svg><span data-text></span>
+    <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+  </a>
+  {% endif %}
+  {% if READY_URL %}
+  <a class="ready-banner" id="ready-banner" href="{{ READY_URL }}" hidden>
+    <svg class="icon" aria-hidden="true"><use href="#i-bar"/></svg><span data-text></span>
+    <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+  </a>
+  {% endif %}
+  <div class="app-body">
+    <nav class="app-nav" aria-label="Điều hướng chính">
+      <ul>
+        {% for item in NAV_ITEMS %}
+        <li{% if item.desktop_only %} class="nav-desktop-only"{% endif %}><a href="{{ item.url }}"{% if item.active %} aria-current="page"{% endif %}>
+          <svg class="icon" aria-hidden="true"><use href="#i-{{ item.key }}"/></svg>{{ item.label }}</a></li>
+        {% endfor %}
+      </ul>
+    </nav>
+    <main class="app-main" id="noi-dung">
+      {% for message in messages %}
+      <div class="notice notice-{% if message.level_tag == 'error' %}error{% elif message.level_tag == 'success' %}ok{% elif message.level_tag == 'warning' %}warn{% else %}info{% endif %}" role="status">{{ message }}</div>
+      {% endfor %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  {% endblock %}
+  <script src="{% static 'js/app.js' %}" defer></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

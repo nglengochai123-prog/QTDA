@@ -1,0 +1,33 @@
+{% extends "admin/base.html" %}
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:"LAM Coffee" }}{% endblock %}
+{% block dark-mode-vars %}{# Một giao diện sáng thống nhất với ứng dụng. #}{% endblock %}
+{% block extrastyle %}{{ block.super }}
+<style>
+  /* Trang dữ liệu nền dùng chung bảng màu vở ô ly (xem DESIGN.md). */
+  :root, html[data-theme="light"] {
+    --primary: #3f2a9e; --secondary: #2f1f7a; --accent: #d9d2fb;
+    --primary-fg: #fff; --header-color: #d9d2fb; --header-branding-color: #fff;
+    --breadcrumbs-bg: #2f1f7a; --breadcrumbs-link-fg: #fff;
+    --link-fg: #3f2a9e; --link-hover-color: #2f1f7a; --link-selected-fg: #2f1f7a;
+    --button-bg: #3f2a9e; --button-hover-bg: #2f1f7a;
+    --default-button-bg: #2f1f7a; --default-button-hover-bg: #1e1a33;
+    --selected-bg: #ece8fb; --selected-row: #f4f2fa;
+    --error-fg: #c62a26; --message-error-bg: #fdecec; --message-success-bg: #e6f4ea; --message-warning-bg: #fff3df;
+    --font-family-primary: "Segoe UI", system-ui, -apple-system, Roboto, "Noto Sans", Arial, sans-serif;
+  }
+  #header { border-bottom: 1px solid #c62a26; }
+  .theme-toggle { display: none; }
+  input[type=checkbox], input[type=radio] { accent-color: #3f2a9e; }
+  input:focus, select:focus, textarea:focus, :focus-visible { outline: 3px solid #3f2a9e; outline-offset: 2px; }
+  #toggle-nav-sidebar { font-size: 0; color: #3f2a9e; }
+  #toggle-nav-sidebar::before {
+    content: ""; display: block; width: 18px; height: 18px; margin: auto; background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 6l-6 6 6 6'/%3E%3C/svg%3E") center / contain no-repeat;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 6l-6 6 6 6'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  .main.shifted #toggle-nav-sidebar::before { transform: none; }
+  .main:not(.shifted) #toggle-nav-sidebar::before { transform: rotate(180deg); }
+</style>
+{% endblock %}
+{% block branding %}<div id="site-name"><a href="{% url 'admin:index' %}">{{ site_header|default:"LAM Coffee" }}</a></div>{% endblock %}
+{% block userlinks %}<a href="{% url 'core:home' %}">Về trang chủ</a> / {{ block.super }}{% endblock %}

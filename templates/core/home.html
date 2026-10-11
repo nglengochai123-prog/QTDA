@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="greeting">
+  <h1>Chào {{ user.given_name }}</h1>
+  <div class="roles" aria-label="Vai trò">
+    {% for label in user.role_labels %}<span class="chip">{{ label }}</span>{% endfor %}
+  </div>
+</section>
+
+{% if master_data %}
+<h2>Dữ liệu nền</h2>
+<p>Khai báo đủ món, kích cỡ, nguyên vật liệu và định mức trước khi mở bán. Món thiếu định mức sẽ không mở bán được.</p>
+<ul class="ruled-list">
+  {% for label, url, count, attention in master_data %}
+  <li><a href="{{ url }}"><span>{{ label }}</span>
+    <span class="count{% if attention %} warn{% endif %}">{{ count }}
+      <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></span></a></li>
+  {% endfor %}
+</ul>
+{% else %}
+<h2>Việc của bạn</h2>
+<ul class="ruled-list">
+  {% for item in NAV_ITEMS %}{% if item.key != "home" %}
+  <li><a href="{{ item.url }}"><span>{{ item.label }}</span><span class="count"><svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></span></a></li>
+  {% endif %}{% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

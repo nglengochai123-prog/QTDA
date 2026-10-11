@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Đơn đang mở · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<h1>Đơn đang mở</h1>
+<p class="lead-muted">Đơn đã gửi pha chế bị khóa. Cần hủy món, đổi món hay chuyển bàn thì gửi yêu cầu điều chỉnh có lý do.</p>
+{% if orders %}
+<div class="order-list">
+  {% for order in orders %}
+  <article class="open-order" aria-labelledby="o-{{ order.pk }}">
+    <header class="open-order-head">
+      <h2 id="o-{{ order.pk }}"><span class="bar-code-sm">{{ order.code }}</span> Bàn {{ order.table.code }}</h2>
+      <span class="chip">{{ order.get_status_display }}</span>
+    </header>
+    <ul class="open-order-lines">
+      {% for line in order.lines.all %}
+      <li class="{% if line.status == 'da_huy' %}is-void{% endif %}">
+        <span class="correction">{% if line.cancelled_quantity or line.voided_done_quantity %}<del>{{ line.quantity }}</del><ins>{{ line.billable_quantity }}</ins>{% else %}{{ line.quantity }}{% endif %}</span>
+        × {{ line.item_name }} {{ line.size_name }}
+        <span class="muted">· {{ line.get_status_display }}{% if line.options.all %} · {% for o in line.options.all %}{{ o.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    <footer class="open-order-foot">
+      <strong>{{ order.total|intcomma }} đ</strong>
+      {% with req=order.pending_request %}
+      {% if req %}
+      <span class="flag-pending">Đang chờ duyệt: {{ req.summary }} ({{ req.get_level_display }})</span>
+      {% else %}
+      <a class="btn btn-quiet" href="{% url 'orders:request_adjustment' order.pk %}">Yêu cầu điều chỉnh</a>
+      {% endif %}
+      {% endwith %}
+    </footer>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty"><p><strong>Không có đơn nào đang mở.</strong></p><p>Đơn đã thanh toán hoặc đã hủy không hiện ở đây.</p></div>
+{% endif %}
+{% endblock %}

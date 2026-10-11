@@ -1,0 +1,9 @@
+{
+  "name": "{{ STORE_NAME }}",
+  "short_name": "LAM Coffee",
+  "lang": "vi",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "icons": []
+}
