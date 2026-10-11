@@ -87,8 +87,8 @@ Một họ chữ hệ thống, số dạng bảng (`tabular-nums`) toàn ứng d
 
 - **Máy tính:** thanh đầu trang xanh đen 56px; cột điều hướng trái 232px, mục đang mở có vạch 3px màu chính bên trái; nội dung tối đa 1100px (quầy pha chế và báo cáo rộng hơn khi cần).
 - **Điện thoại:** thanh điều hướng dưới 64px, tối đa 5 mục theo vai trò, mục đang mở có vạch 3px phía trên.
-- **Khối (`.panel`):** nền trắng, viền 1px, dải đầu khối nền `--surface-2` có đường kẻ dưới. Khối cần chú ý (`.panel-warn`) có viền trái 4px màu hổ phách.
-- **Ô số liệu (`.figure-grid`):** ô vuông viền 1px; chỉ số chính (`.figure-key`) có viền trái 4px màu chính.
+- **Khối (`.panel`):** nền trắng, viền 1px, dải đầu khối nền `--surface-2` có đường kẻ dưới. Khối cần chú ý (`.panel-warn`) có viền 1px và dải đầu khối màu hổ phách.
+- **Ô số liệu (`.figure-grid`):** ô vuông viền 1px; chỉ số chính (`.figure-key`) có viền 1px màu chính.
 - **Bảng (`.data-table`):** viền ngoài 1px, hàng đầu nền xám, chữ 14px đậm vừa, số căn phải; bảng rộng nằm trong `.table-wrap` cuộn ngang.
 - **Biểu mẫu:** nhãn trên ô; ô cao 52px (ô nhỏ trong dòng 48px); lưới biểu mẫu tự chia cột từ 260px.
 
@@ -97,13 +97,13 @@ Một họ chữ hệ thống, số dạng bảng (`tabular-nums`) toàn ứng d
 - **Nút chính (`.btn-primary`):** nền xanh đen, chữ trắng, góc 2px; nhấn giữ hơi tối lại, không nhảy vị trí.
 - **Nút phụ (`.btn-quiet`):** nền trắng, viền `--border-input`, hover nền `--surface-2`.
 - **Ô nhập (`.input`):** viền 1px `--border-input`; tiêu điểm đổi viền sang màu nhấn kèm quầng 2px.
-- **Thông báo (`.notice`):** viền 1px cùng màu chữ, viền trái 4px, nền nhạt theo trạng thái, có biểu tượng.
+- **Thông báo (`.notice`):** viền 1px cùng màu chữ, nền nhạt theo trạng thái, có biểu tượng.
 - **Chip, cờ trạng thái:** ô vuông viền 1px, chữ 14px; không dùng viên thuốc.
 - **Lựa chọn dạng nút (`.pick`):** ô vuông viền `--border-input`; đang chọn thì nền màu chính, chữ trắng.
 - **Phiếu order, phiếu ở quầy:** khối trắng viền 1px, không còn đường lề đỏ; mã đơn lớn, đậm.
 - **Thanh so sánh (`.bar-track`):** vạch vuông, phần đầy màu chính.
 - **Dải mất kết nối:** nền đỏ đậm, chữ trắng, có biểu tượng và chữ.
-- **Trang đăng nhập:** thẻ trắng viền 1px, dải trên 4px màu chính, nền trang trơn.
+- **Trang đăng nhập:** thẻ trắng viền 1px, nền trang trơn.
 
 ## Chuyển động
 
@@ -113,4 +113,4 @@ Một họ chữ hệ thống, số dạng bảng (`tabular-nums`) toàn ứng d
 
 **Nên:** dùng token thay vì mã màu trực tiếp; mọi trạng thái có chữ; giữ đích chạm 48px; đặt bảng rộng trong `.table-wrap`; kiểm tra ở 375px, 768px, 1024px, 1440px.
 
-**Không nên:** bo góc lớn, bóng đổ, nền họa tiết, nhiều màu nhấn, chữ dưới 14px, nhãn chỉ bằng chữ gợi ý trong ô, emoji làm biểu tượng, chỉ dùng màu để báo trạng thái.
+**Không nên:** viền màu dày một cạnh, bo góc lớn, bóng đổ, nền họa tiết, nhiều màu nhấn, chữ dưới 14px, nhãn chỉ bằng chữ gợi ý trong ô, emoji làm biểu tượng, chỉ dùng màu để báo trạng thái.

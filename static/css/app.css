@@ -135,7 +135,7 @@ p { margin: 0 0 1rem; }
 
 .notice {
   display: flex; gap: 0.625rem; align-items: flex-start;
-  padding: 0.75rem 0.875rem; border-radius: var(--radius); margin-bottom: 1rem; border: 1px solid currentColor; border-left-width: 4px;
+  padding: 0.75rem 0.875rem; border-radius: var(--radius); margin-bottom: 1rem; border: 1px solid currentColor;
   font-weight: 500;
 }
 .notice .icon { margin-top: 0.1em; }
@@ -165,7 +165,7 @@ p { margin: 0 0 1rem; }
 .label-card {
   width: min(100%, 420px);
   background: var(--surface);
-  border: 1px solid var(--border-strong); border-top: 4px solid var(--primary);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   padding: 1.75rem 1.5rem 1.5rem;
   }
@@ -471,14 +471,14 @@ p { margin: 0 0 1rem; }
 .page-head h1 { margin: 0; }
 .panel { margin: 1.25rem 0; padding: 1rem 1.25rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); }
 .panel h2 { margin: -1rem -1.25rem 1rem; padding: 0.75rem 1.25rem; font-size: var(--text-md); border-bottom: 1px solid var(--border); background: var(--surface-2); }
-.panel-warn { border-color: var(--warn); border-left-width: 4px; }
+.panel-warn { border-color: var(--warn); }
 .panel-warn h2 { background: var(--warn-soft); }
 .figure-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.75rem; margin: 0 0 1rem; }
 .figure-grid > div { padding: 0.625rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .figure-grid dt { color: var(--fg-2); font-size: var(--text-sm); }
 .figure-grid dd { margin: 0.125rem 0 0; font-size: var(--text-lg); font-weight: 700; }
 .figure-grid .dd-text { font-size: var(--text-base); font-weight: 600; }
-.figure-grid .figure-key { border-color: var(--primary); border-left-width: 4px; background: var(--surface); }
+.figure-grid .figure-key { border-color: var(--primary); background: var(--surface); }
 .figure-grid .figure-key dd { color: var(--fg); }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
 .mini-form { display: grid; gap: 0.25rem; align-content: start; }
