@@ -10,6 +10,15 @@
     <a href="?trang-thai=tat-ca"{% if status == "tat-ca" %} aria-current="page"{% endif %}>Tất cả</a>
   </nav>
 </header>
+<form method="get" class="filter-bar" aria-label="Bộ lọc ngoại lệ"><input type="hidden" name="trang-thai" value="{{ status }}">
+  <div class="field"><label for="f-loai">Loại</label><select class="input" id="f-loai" name="loai"><option value="">Tất cả</option>{% for v, l in kinds %}<option value="{{ v }}"{% if f.loai == v %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  <div class="field"><label for="f-nv">Nhân viên</label><select class="input" id="f-nv" name="nhan_vien"><option value="">Tất cả</option>{% for u in staff %}<option value="{{ u.pk }}"{% if f.nhan_vien == u.pk|stringformat:"d" %} selected{% endif %}>{{ u }}</option>{% endfor %}</select></div>
+  <div class="field"><label for="f-tu">Từ ngày</label><input class="input" id="f-tu" type="date" name="tu" value="{{ f.tu }}"></div>
+  <div class="field"><label for="f-den">Đến ngày</label><input class="input" id="f-den" type="date" name="den" value="{{ f.den }}"></div>
+  {% if f.ca %}<input type="hidden" name="ca" value="{{ f.ca }}">{% endif %}
+  <div class="filter-actions"><button class="btn btn-primary" type="submit">Lọc</button><a class="btn btn-quiet" href="?trang-thai={{ status }}">Xóa lọc</a></div>
+</form>
+{% if shift %}<p class="muted">Đang xem ngoại lệ của {{ shift }}. <a href="?trang-thai={{ status }}">Bỏ lọc ca</a></p>{% endif %}
 {% if items %}
 <ul class="ruled-list">
   {% for e in items %}
@@ -21,6 +30,7 @@
       <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></span></a></li>
   {% endfor %}
 </ul>
+{% include "partials/pagination.html" %}
 {% else %}
 <div class="empty"><p><strong>Không có ngoại lệ nào ở mục này.</strong></p><p>Ngoại lệ được tạo tự động theo quy tắc BRU-12 khi có điều chỉnh bị từ chối, hủy hóa đơn đã thanh toán, điều chỉnh vượt mức, thiếu tiền tích lũy.</p></div>
 {% endif %}

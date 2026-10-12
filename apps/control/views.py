@@ -13,6 +13,7 @@ from apps.accounts.permissions import Cap, capability_required
 from apps.audit.models import Action, AuditLog
 from apps.audit.services import record
 from apps.core import params
+from apps.core.paging import paginate
 from apps.shifts.models import Discrepancy, Shift
 
 from . import reports, services
@@ -37,8 +38,24 @@ def exception_list(request):
     items = ExceptionCase.objects.select_related("employee", "shift", "order", "loss_case")
     if status in ExceptionCase.Status.values:
         items = items.filter(status=status)
+    g = request.GET
+    if g.get("loai") in ExceptionCase.Kind.values:
+        items = items.filter(kind=g["loai"])
+    for key, field in (("nhan_vien", "employee_id"), ("ca", "shift_id")):
+        if (g.get(key) or "").isdigit():
+            items = items.filter(**{field: int(g[key])})
+    for key, lookup in (("tu", "created_at__date__gte"), ("den", "created_at__date__lte")):
+        try:
+            items = items.filter(**{lookup: datetime.strptime(g.get(key, ""), "%Y-%m-%d").date()})
+        except ValueError:
+            pass
+    page, qs = paginate(request, items)
     due = set(services.reminders_due().values_list("pk", flat=True))
-    return render(request, "control/exceptions.html", {"items": items, "status": status, "due": due})
+    from apps.accounts.models import User
+    return render(request, "control/exceptions.html", {
+        "items": page.object_list, "page": page, "qs": qs, "f": g, "status": status, "due": due,
+        "kinds": ExceptionCase.Kind.choices, "staff": User.objects.filter(is_active=True).order_by("first_name"),
+        "shift": Shift.objects.filter(pk=g["ca"]).first() if (g.get("ca") or "").isdigit() else None})
 
 
 @capability_required(Cap.EXCEPTION_REVIEW)
@@ -89,7 +106,12 @@ def case_list(request):
         if case:
             return redirect("control:case_detail", pk=case.pk)
     cases = LossCase.objects.prefetch_related("evidence", "verifications", "recoveries")
-    return render(request, "control/cases.html", {"cases": cases, "operation_key": uuid.uuid4().hex})
+    status = request.GET.get("trang-thai", "")
+    if status in LossCase.Status.values:
+        cases = cases.filter(status=status)
+    page, qs = paginate(request, cases)
+    return render(request, "control/cases.html", {"cases": page.object_list, "page": page, "qs": qs, "status": status,
+                                                  "statuses": LossCase.Status.choices, "operation_key": uuid.uuid4().hex})
 
 
 @capability_required(Cap.EXCEPTION_REVIEW)

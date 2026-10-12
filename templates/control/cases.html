@@ -7,6 +7,7 @@
   <input class="input input-sm" name="title" placeholder="Tiêu đề vụ việc" required>
   <button class="btn btn-primary" type="submit">Lập vụ việc</button>
 </form>
+<nav class="tabs" aria-label="Lọc trạng thái"><a href="?"{% if not status %} aria-current="page"{% endif %}>Tất cả</a>{% for v, l in statuses %}<a href="?trang-thai={{ v }}"{% if status == v %} aria-current="page"{% endif %}>{{ l }}</a>{% endfor %}</nav>
 {% if cases %}
 <ul class="ruled-list">
   {% for c in cases %}
@@ -16,6 +17,7 @@
       <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></span></a></li>
   {% endfor %}
 </ul>
+{% include "partials/pagination.html" %}
 {% else %}
 <div class="empty"><p><strong>Chưa có vụ việc nào.</strong></p><p>Lập vụ việc khi một ngoại lệ hay khoản thiếu tiền được xác định gây mất tiền, rồi gắn bằng chứng vào.</p></div>
 {% endif %}

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views
+from . import views, views_ledger
 
 app_name = "inventory"
 
@@ -14,5 +14,6 @@ urlpatterns = [
     path("kho/phieu-nhap/", views.receipt, name="receipt"),
     path("kho/dat-hang/", views.purchase_orders, name="purchase_orders"),
     path("kho/phai-tra/", views.payables, name="payables"),
+    path("kho/so-kho/", views_ledger.ledger, name="ledger"),
     path("kho/bao-cao/", views.report, name="report"),
 ]
