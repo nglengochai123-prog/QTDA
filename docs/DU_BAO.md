@@ -23,7 +23,7 @@ Cập nhật 12/10/2026. Làm theo tệp "Khung lý thuyết dự báo nhu cầu
 | Độ nhạy nhận định | CRPS khi nhân sức nặng nhận định ×0,5 và ×2, báo trên trang Đánh giá | Khung 2.1 |
 | Kiểm tra nhận định | Trang chi tiết món sinh 2.000 tuần bán theo nhận định để Chủ quán đối chiếu tính hợp lý | Khung 6.1 |
 | Đối chiếu phát hành | So các dự báo đã lưu với số bán thực theo thời hạn, đếm riêng điểm có nhập bù sau thời điểm phát hành | Khung 6.1 |
-| Lịch sử bán từ tệp | Dự báo › Lịch sử bán: nhập CSV (ngày, món, kích cỡ, số ly, trạng thái đóng cửa hoặc thiếu hàng); lịch sử thật và dữ liệu mô phỏng lưu riêng, dữ liệu mô phỏng không dùng cho dự báo thật | Khung 6.1 |
+| Lịch sử bán từ tệp | Dự báo › Lịch sử bán: nhập CSV hoặc Excel .xlsx (ngày, món, kích cỡ, số ly, trạng thái đóng cửa hoặc thiếu hàng; với Excel tự chọn sheet có đủ các cột này); lịch sử thật và dữ liệu mô phỏng lưu riêng, dữ liệu mô phỏng không dùng cho dự báo thật | Khung 6.1 |
 | Quy đổi nguyên liệu | Số ly × định mức đang áp dụng theo kích cỡ; tùy chọn theo tỷ lệ chọn rút từ hậu nghiệm Beta(1 + có chọn, 1 + không chọn) của 56 ngày gần nhất cho mỗi đường mô phỏng. Hao hụt và hủy sau pha không tính vào nhu cầu khách | Khung 6.2 |
 
 ## 2. Cách tính dùng cho đặt hàng
@@ -72,5 +72,5 @@ Trang **Dự báo › Đánh giá dự báo**:
 
 - Chưa ước lượng nhu cầu bị mất khi hết hàng; ngày thiếu hàng chỉ bị loại khỏi phần học (khung 2.2, 6.3).
 - Chưa có hiệu ứng ngày lễ, khuyến mãi, mùa vụ năm; cần dữ liệu nhất quán và qua các chu kỳ năm (khung 3.1, 5.3).
-- Kết quả hiện mới kiểm trên dữ liệu mô phỏng và bộ dữ liệu mẫu 14 ngày, chỉ xác minh phần mềm, chưa chứng minh độ chính xác tại quán (khung 5.1). Chờ bộ dữ liệu đơn hàng mẫu của Hai.
+- Kết quả hiện mới kiểm trên dữ liệu mô phỏng và bộ dữ liệu mẫu 14 ngày, chỉ xác minh phần mềm, chưa chứng minh độ chính xác tại quán (khung 5.1). Kết quả chạy thử trên dữ liệu giả định 6 tháng của Hai ở `docs/KET_QUA_THU_DU_BAO.md`.
 - Chạy bằng thư viện chuẩn Python, không cài thêm gói tính toán.
