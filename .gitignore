@@ -9,3 +9,4 @@ nghiem_thu.sqlite3*
 staticfiles/
 media/
 .idea/workspace.xml
+backups/

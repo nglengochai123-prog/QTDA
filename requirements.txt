@@ -1,3 +1,5 @@
 Django>=5.2,<6.0
-# Triển khai thật bằng PostgreSQL thì cài thêm:
-# psycopg[binary]>=3.2
+# Thông báo đẩy Web Push (NFR-17)
+pywebpush==2.5.0
+# PostgreSQL (vận hành thật và kiểm thử đồng thời)
+psycopg[binary]==3.3.6

@@ -5,7 +5,7 @@ import json
 import re
 
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from .models import OperationRecord
 
@@ -31,11 +31,18 @@ def run_once(key, kind, payload, action, actor=None):
         raise OperationKeyError("Thiếu mã nghiệp vụ hoặc mã không hợp lệ.")
     digest = payload_hash(payload)
     with transaction.atomic():
-        existing = OperationRecord.objects.select_for_update().filter(key=key).first()
-        if existing is not None:
+        try:
+            # Giữ chỗ mã trước khi làm: yêu cầu cùng mã gửi đồng thời sẽ chờ ở chỉ mục duy nhất cho đến khi
+            # yêu cầu đầu hoàn tất, rồi đọc kết quả đã lưu thay vì chạy lại (đã kiểm trên PostgreSQL).
+            with transaction.atomic():
+                record = OperationRecord.objects.create(key=key, kind=kind, payload_hash=digest, result={},
+                                                        actor=actor)
+        except IntegrityError:
+            existing = OperationRecord.objects.select_for_update().get(key=key)
             if existing.kind != kind or existing.payload_hash != digest:
                 raise OperationKeyError("Mã nghiệp vụ này đã được dùng cho một yêu cầu khác.")
             return existing.result, True
         result = action()
-        OperationRecord.objects.create(key=key, kind=kind, payload_hash=digest, result=result, actor=actor)
+        record.result = result
+        record.save(update_fields=["result"])
         return result, False

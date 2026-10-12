@@ -218,7 +218,7 @@ def escalate_due(now=None):
     now = now or timezone.now()
     moved = []
     with transaction.atomic():
-        for req in (AdjustmentRequest.objects.select_for_update()
+        for req in (AdjustmentRequest.objects.select_for_update(of=("self",))
                     .filter(status=Status.PENDING, level__lt=Level.EXHAUSTED).select_related("order", "shift")):
             steps = req.level_steps(now)
             for level, since in steps:
