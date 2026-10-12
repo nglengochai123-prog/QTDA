@@ -565,3 +565,27 @@ class ConsumptionCheck(StoreScopedModel):
         verbose_name = "Đối chiếu tiêu hao"
         verbose_name_plural = "Đối chiếu tiêu hao"
         ordering = ["-created_at"]
+
+
+class RecountRequest(StoreScopedModel):
+    """Đề nghị kiểm kê lại một nguyên liệu khi đơn bị từ chối vì thiếu mà quầy cho rằng còn hàng (BRU-20, Bảng 5.4)."""
+
+    ingredient = models.ForeignKey(Ingredient, verbose_name="Nguyên vật liệu", on_delete=models.PROTECT,
+                                   related_name="recount_requests")
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người đề nghị", on_delete=models.PROTECT,
+                                     related_name="+")
+    shift = models.ForeignKey("shifts.Shift", verbose_name="Ca", on_delete=models.PROTECT, null=True, blank=True,
+                              related_name="+")
+    count = models.ForeignKey(StockCount, verbose_name="Lần kiểm kê đáp ứng", on_delete=models.PROTECT, null=True,
+                              blank=True, related_name="recount_requests")
+    done_at = models.DateTimeField("Đã kiểm kê lúc", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Đề nghị kiểm kê lại"
+        verbose_name_plural = "Đề nghị kiểm kê lại"
+        ordering = ["-created_at"]
+        constraints = [models.UniqueConstraint(fields=["ingredient"], condition=models.Q(done_at__isnull=True),
+                                               name="one_open_recount_per_ingredient")]
+
+    def __str__(self):
+        return f"Kiểm kê lại {self.ingredient.name}"

@@ -370,6 +370,21 @@
       }).catch(function () { button.disabled = false; button.textContent = "Chưa ghi được, bấm lại"; });
     });
     box.querySelector("div").appendChild(button);
+    // Quầy cho rằng còn hàng: đề nghị pha chế kiểm kê lại; kết quả có hiệu lực thì gửi lại đơn.
+    var recount = el("button", "btn btn-quiet switch-btn", "Đề nghị pha chế kiểm kê lại");
+    recount.type = "button";
+    var recountKey = newKey();
+    recount.addEventListener("click", function () {
+      recount.disabled = true;
+      fetch(root.dataset.recountUrl, {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
+        body: JSON.stringify({ operation_key: recountKey, ingredients: ingredientIds }),
+      }).then(function (r) { return r.json(); }).then(function (data) {
+        recount.textContent = data.ok ? "Đã báo pha chế kiểm kê lại" : (data.error || "Chưa gửi được");
+      }).catch(function () { recount.disabled = false; recount.textContent = "Chưa gửi được, bấm lại"; });
+    });
+    box.querySelector("div").appendChild(recount);
   }
 
   function refreshAvailability() {

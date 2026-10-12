@@ -204,6 +204,8 @@ class Alert(StoreScopedModel):
         PURCHASE_LATE = "giao_cham", "Giao chậm"
         COUNT_PENDING = "kiem_ke", "Chênh lệch kiểm kê vượt ngưỡng"
         PAYABLE_DUE = "phai_tra", "Khoản phải trả đến hạn"
+        RECOUNT = "kiem_ke_lai", "Nguyên liệu cần kiểm kê lại"
+        LATE_COUNT = "kiem_ke_tre", "Kiểm kê nhóm trọng yếu trễ hạn"
 
     class Severity(models.TextChoices):
         URGENT = "khan", "Khẩn"

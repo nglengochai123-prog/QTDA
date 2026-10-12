@@ -254,6 +254,13 @@ def submit_report(user, shift_id, counted_cash, transfer_received, transfer_refu
            after={"tien_mat_dem": report.counted_cash, "ck_nhan": report.transfer_received,
                   "ck_hoan": report.transfer_refunded, "su_co": incidents})
     reconcile(shift)
+    from apps.accounts.models import User
+    from apps.core.push import notify_later
+
+    gaps = shift.discrepancies.current()
+    notify_later([u.pk for u in User.objects.filter(is_active=True) if u.is_owner],  # AC-17
+                 f"Báo cáo cuối ca {shift}", (f"{gaps.count()} khoản chênh lệch" if gaps.exists() else "Đối soát khớp")
+                 + f" · gửi bởi {user}", f"/ca/{shift.pk}/")
     return report
 
 
@@ -452,6 +459,21 @@ def accumulated_report(year, month):
 
 # ---------------- Tình trạng dữ liệu ca (FR-09, BRU-07) ----------------
 
+def critical_count_status(day, now=None):
+    """Nhóm trọng yếu của ngày `day` phải được kiểm kê trước giờ mở cửa ngày hôm sau (BRU-07)."""
+    from datetime import datetime, time
+
+    from apps.inventory.models import Ingredient, StockCount
+
+    now = now or timezone.now()
+    start = timezone.make_aware(datetime.combine(day, time.min))
+    deadline = timezone.make_aware(datetime.combine(day + timedelta(days=1), time(params.get("open_hour", at=start))))
+    counted = set(StockCount.objects.filter(created_at__gte=start, created_at__lt=deadline)
+                  .exclude(status=StockCount.Status.REJECTED).values_list("ingredient_id", flat=True))
+    missing = [i.name for i in Ingredient.objects.filter(is_critical=True, is_active=True).exclude(pk__in=counted)]
+    return {"deadline": deadline, "missing": missing, "late": bool(missing) and now > deadline}
+
+
 def data_status(shift, now=None):
     now = now or timezone.now()
     deadline = shift.ends_at + timedelta(hours=params.get("shift_report_hours", at=shift.ends_at))
@@ -465,5 +487,10 @@ def data_status(shift, now=None):
 
     if any(backup.unprocessed_numbers(r) for r in shift.backup_ranges.all()):
         issues.append("Còn phiếu dự phòng chưa nhập bù")  # FR-09
-    return {"shift": shift, "closed": shift.status == Shift.Status.CLOSED, "has_report": has_report,
+    day = timezone.localtime(shift.starts_at).date()
+    last_of_day = not Shift.objects.filter(starts_at__date=shift.starts_at.date(), starts_at__gt=shift.starts_at).exists()
+    count = critical_count_status(day, now) if last_of_day else None
+    if count and count["late"]:
+        issues.append("Thiếu kiểm kê nhóm trọng yếu: " + ", ".join(count["missing"]))  # BRU-07
+    return {"count": count,"shift": shift, "closed": shift.status == Shift.Status.CLOSED, "has_report": has_report,
             "deadline": deadline, "issues": issues, "overdue": bool(issues)}

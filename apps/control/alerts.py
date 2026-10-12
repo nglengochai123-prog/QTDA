@@ -25,7 +25,7 @@ from apps.core.models import Store
 
 from .models import Alert, ExceptionCase
 
-OWNER, MANAGER = Role.CHU_QUAN, Role.QUAN_LY_CA
+OWNER, MANAGER, BARISTA = Role.CHU_QUAN, Role.QUAN_LY_CA, Role.PHA_CHE
 
 
 def _end_of_day(day):
@@ -137,6 +137,38 @@ def _inventory_owner(now):
                    "escalate": False, "kind": Alert.Kind.PAYABLE_DUE}
 
 
+def _recount(now):
+    from apps.inventory.models import RecountRequest
+
+    for req in RecountRequest.objects.filter(done_at__isnull=True).select_related("ingredient", "shift"):
+        due = req.shift.ends_at if req.shift else req.created_at + timedelta(hours=2)
+        yield {"subject": f"kk-lai-{req.pk}", "title": f"Kiểm kê lại {req.ingredient.name}",
+               "detail": f"{req.requested_by} báo đơn bị từ chối vì thiếu nhưng quầy cho là còn hàng. "
+                         f"Kiểm kê lại nguyên liệu này và ghi kết quả.",
+               "assignee": None, "role": BARISTA, "severity": Alert.Severity.IMPORTANT, "due": due,
+               "link": "/kho/kiem-ke/", "escalate": True, "escalate_to": MANAGER,
+               "escalate_user": req.shift.approver if req.shift else None}
+
+
+def _late_count(now):
+    from apps.shifts.models import Shift
+    from apps.shifts.services import critical_count_status
+
+    seen = set()
+    for shift in Shift.objects.filter(ends_at__gte=now - timedelta(days=30), ends_at__lt=now).order_by("-ends_at"):
+        day = timezone.localtime(shift.starts_at).date()
+        if day in seen:
+            continue
+        seen.add(day)
+        st = critical_count_status(day, now)
+        if st["missing"] and now > st["deadline"]:
+            yield {"subject": f"kk-tre-{day:%Y%m%d}", "title": f"Thiếu kiểm kê nhóm trọng yếu ngày {day:%d/%m}",
+                   "detail": "Chưa kiểm kê: " + ", ".join(st["missing"]) + ". Kiểm kê và ghi kết quả.",
+                   "assignee": None, "role": BARISTA, "severity": Alert.Severity.IMPORTANT,
+                   "due": st["deadline"] + timedelta(hours=params.get("shift_report_hours")),
+                   "link": "/kho/kiem-ke/", "escalate": True}
+
+
 COLLECTORS = [
     (Alert.Kind.OUT_OF_STOCK, _out_of_stock),
     (Alert.Kind.BACKUP_PENDING, _backup_pending),
@@ -144,6 +176,8 @@ COLLECTORS = [
     (Alert.Kind.DISCREPANCY, _discrepancy),
     (Alert.Kind.EXCEPTION, _exceptions),
     (None, _inventory_owner),
+    (Alert.Kind.RECOUNT, _recount),
+    (Alert.Kind.LATE_COUNT, _late_count),
 ]
 
 
@@ -155,6 +189,7 @@ def sync(now=None):
     for kind, collector in COLLECTORS:
         for item in collector(now):
             active[(item.pop("kind", kind), item["subject"])] = item
+    escalation = {key: (item.pop("escalate_to", None), item.pop("escalate_user", None)) for key, item in active.items()}
     open_alerts = {(a.kind, a.subject): a for a in Alert.objects.select_for_update().filter(status__in=Alert.OPEN)}
     for key, alert in open_alerts.items():
         if key not in active:
@@ -177,19 +212,28 @@ def sync(now=None):
             created.append(alert.pk)
             _push(alert)
             continue
-        if alert.level == 0 and (alert.assignee_id != getattr(item["assignee"], "pk", None)
-                                 or alert.assignee_role != item["role"]):
+        if alert.level == 0 and not alert.escalated_at and (
+                alert.assignee_id != getattr(item["assignee"], "pk", None) or alert.assignee_role != item["role"]):
             # Chuyển bước (ví dụ: đã giải trình, chuyển Chủ quán quyết định).
             alert.assignee, alert.assignee_role, alert.due_at = item["assignee"], item["role"], item["due"]
             alert.title, alert.detail = item["title"][:200], item["detail"][:1000]
             alert.save(update_fields=["assignee", "assignee_role", "due_at", "title", "detail", "updated_at"])
     for alert in Alert.objects.select_for_update().filter(status__in=Alert.OPEN, due_at__lt=now):
-        _escalate(alert, now)
+        _escalate(alert, now, *escalation.get((alert.kind, alert.subject), (None, None)))
         escalated.append(alert.pk)
     return {"tao": created, "dong": closed, "chuyen_cap": escalated}
 
 
-def _escalate(alert, now):
+def _escalate(alert, now, escalate_to=None, escalate_user=None):
+    if escalate_to and alert.assignee_role != escalate_to and alert.level == 0:
+        # Bảng 5.4: một số loại chuyển cấp lên Quản lý ca chứ không lên Chủ quán (ví dụ kiểm kê lại).
+        alert.assignee_role, alert.assignee, alert.escalated_at = escalate_to, escalate_user, now
+        alert.due_at = now + timedelta(hours=1)
+        alert.save(update_fields=["assignee_role", "assignee", "escalated_at", "due_at", "updated_at"])
+        record(Action.STATUS_CHANGE, obj=alert, object_type="control.Alert", actor_label="hệ thống",
+               after={"cap": alert.handler_label()}, reason="Quá hạn: chuyển cấp đến Quản lý ca")
+        _push(alert)
+        return
     if alert.can_escalate and alert.level == 0 and alert.assignee_role != OWNER:
         alert.level, alert.escalated_at = 1, now
         reason = "Quá hạn: chuyển cấp đến Chủ quán"
@@ -229,8 +273,9 @@ def visible_to(user):
     from django.db.models import Q
 
     q = Q(assignee=user)
-    if user.has_role(MANAGER):
-        q |= Q(assignee__isnull=True, assignee_role=MANAGER)
+    for role in (MANAGER, BARISTA):
+        if user.has_role(role):
+            q |= Q(assignee__isnull=True, assignee_role=role)
     if user.is_owner:
         q |= Q(assignee_role=OWNER) | Q(level=1)
     return Alert.objects.filter(q)

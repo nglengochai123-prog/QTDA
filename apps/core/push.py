@@ -88,3 +88,21 @@ def notify_alert(alert):
         send_to_user(user, ("Khẩn: " if alert.severity == "khan" else "") + alert.title, alert.detail[:160],
                      alert.link or "/canh-bao/")
 
+
+
+def notify_later(user_ids, title, body, url):
+    """Gửi sau khi giao dịch ghi xong; giao dịch bị hủy thì không gửi. Lỗi gửi không ảnh hưởng nghiệp vụ."""
+    from django.db import transaction
+
+    ids = list(user_ids)
+
+    def send():
+        from apps.accounts.models import User
+
+        for user in User.objects.filter(pk__in=ids, is_active=True):
+            try:
+                send_to_user(user, title, body, url, kind="phe_duyet")
+            except Exception:  # noqa: BLE001
+                pass
+
+    transaction.on_commit(send)

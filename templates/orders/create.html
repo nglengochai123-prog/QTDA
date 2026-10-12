@@ -4,7 +4,7 @@
 {% block body_class %}page-order{% endblock %}
 {% block content %}
 <div class="order-screen" id="order-screen"
-     data-submit-url="{% url 'orders:submit' %}" data-switch-url="{% url 'orders:customer_switched' %}" data-availability-url="{% url 'orders:availability' %}"
+     data-submit-url="{% url 'orders:submit' %}" data-switch-url="{% url 'orders:customer_switched' %}" data-recount-url="{% url 'orders:recount' %}" data-availability-url="{% url 'orders:availability' %}"
      data-operation-key="{{ operation_key }}">
 
   <section class="ticket" aria-labelledby="ticket-title">

@@ -194,6 +194,22 @@ def serve(request):
 
 @capability_required(Cap.ORDER_CREATE)
 @require_POST
+def recount(request):
+    """Đề nghị pha chế kiểm kê lại nguyên liệu vừa bị báo thiếu (AC-03)."""
+    from apps.inventory.operations import request_recount
+
+    try:
+        body = json.loads(request.body.decode("utf-8"))
+        result, _ = request_recount(request.user, body.get("operation_key", ""), body.get("ingredients") or [])
+    except (ValueError, TypeError, UnicodeDecodeError):
+        return JsonResponse({"ok": False, "error": "Dữ liệu gửi lên không đọc được."}, status=400)
+    except OperationKeyError as error:
+        return JsonResponse({"ok": False, "error": str(error)}, status=400)
+    return JsonResponse({"ok": True, **result})
+
+
+@capability_required(Cap.ORDER_CREATE)
+@require_POST
 def customer_switched(request):
     """Nhân viên xác nhận khách phải đổi món sau cảnh báo không đủ nguyên liệu (BRU-26, AC-63)."""
     from apps.core.idempotency import run_once

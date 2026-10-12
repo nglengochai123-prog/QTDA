@@ -285,6 +285,7 @@ def submit_count(user, operation_key, ingredient_id, counted, reason=""):
                       "chenh_lech": str(diff), "ty_le": f"{percent:.2f}%", "trang_thai": count.get_status_display()},
                reason=reason)
         _check_count_accumulated(count)
+        _close_recounts(count, user)
         if not over:
             consumption.check_after_count(count, user)  # FR-16
         return {"count": count.pk, "difference": str(diff), "percent": f"{percent:.1f}", "pending": over}
@@ -330,3 +331,36 @@ def _check_count_accumulated(count):
                             f"{ingredient.get_unit_display()} (BRU-25)",
                        detail=f"Tổng thiếu {stock.fmt_qty(total)} {ingredient.get_unit_display()} qua {month.count()} lần "
                               f"kiểm kê; người kiểm kê: {', '.join(counters)}.")
+
+
+def request_recount(user, operation_key, ingredient_ids):
+    """Phục vụ đề nghị pha chế kiểm kê nhanh các nguyên liệu bị báo thiếu khi tạo đơn (AC-03, Bảng 5.4)."""
+    from apps.shifts.models import Shift
+
+    from .models import RecountRequest
+
+    ids = sorted({int(i) for i in ingredient_ids})
+
+    def action():
+        created = []
+        for ingredient in Ingredient.objects.filter(pk__in=ids):
+            req, new = RecountRequest.objects.get_or_create(
+                ingredient=ingredient, done_at__isnull=True,
+                defaults={"store": ingredient.store, "requested_by": user, "shift": Shift.objects.current()})
+            if new:
+                record(Action.CREATE, actor=user, obj=req, object_type="inventory.RecountRequest",
+                       after={"nguyen_lieu": ingredient.name})
+            created.append(ingredient.name)
+        return {"ingredients": created}
+
+    return run_once(operation_key, "recount_request", {"ingredients": ids}, action, actor=user)
+
+
+def _close_recounts(count, actor):
+    from .models import RecountRequest
+
+    for req in RecountRequest.objects.filter(ingredient_id=count.ingredient_id, done_at__isnull=True):
+        req.count, req.done_at = count, timezone.now()
+        req.save(update_fields=["count", "done_at", "updated_at"])
+        record(Action.STATUS_CHANGE, actor=actor, obj=req, object_type="inventory.RecountRequest",
+               after={"da_kiem_ke": str(count.counted)})

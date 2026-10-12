@@ -66,3 +66,34 @@ class AlertPageTests(TestCase):
         page = self.client.get(reverse("control:alerts"))
         self.assertContains(page, "Thông báo đẩy trên điện thoại")
         self.assertContains(page, "js/push.js")
+
+
+class NotifyOnEventsTests(TestCase):
+    """NFR-17: yêu cầu phê duyệt đến người duyệt; AC-17: báo cáo cuối ca đến Chủ quán. Chỉ gửi khi giao dịch ghi xong."""
+
+    def test_approval_request_and_shift_report_notify(self):
+        from unittest import mock
+
+        from apps.orders.tests.test_adjust_pay import Base
+
+        base = Base(methodName="setUp")
+        base.setUp()
+        with mock.patch("apps.core.push.send_to_user", return_value=(1, "")) as send:
+            with self.captureOnCommitCallbacks(execute=True):
+                order, line = base.order()
+                base.request(base.d["waiter"], order, "huy_mon", line=line.pk, cups=1)
+            targets = {c.args[0] for c in send.call_args_list}
+            self.assertIn(base.manager, targets)
+            self.assertNotIn(base.d["waiter"], targets)  # người tạo yêu cầu không tự duyệt
+            send.reset_mock()
+            from apps.orders.models import Order
+            from apps.shifts import services as shift_services
+
+            Order.objects.update(status=Order.Status.CANCELLED)
+            from apps.orders.models import AdjustmentRequest
+            AdjustmentRequest.objects.update(status="tu_choi")
+            with self.captureOnCommitCallbacks(execute=True):
+                shift_services.add_cash_entry(base.manager, "k" * 12, base.shift.pk, "dau_ca", 0)
+                shift_services.close_shift(base.manager, base.shift.pk)
+                shift_services.submit_report(base.manager, base.shift.pk, 0, 0)
+            self.assertIn(base.d["owner"], {c.args[0] for c in send.call_args_list})

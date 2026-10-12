@@ -9,6 +9,7 @@ urlpatterns = [
     path("don/con-dap-ung/", views.availability, name="availability"),
     path("don/gui/", views.submit, name="submit"),
     path("don/khach-doi-mon/", views.customer_switched, name="customer_switched"),
+    path("don/de-nghi-kiem-ke/", views.recount, name="recount"),
     path("quay/", views.bar, name="bar"),
     path("quay/danh-sach/", views.bar_queue, name="bar_queue"),
     path("quay/xong/", views.bar_complete, name="bar_complete"),

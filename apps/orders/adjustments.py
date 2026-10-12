@@ -204,6 +204,10 @@ def create_request(user, operation_key, payload):
                    after={"cap": req.get_level_display()}, reason=SKIP_BACKUP_REASON)
         record(Action.CREATE, actor=user, obj=req, object_type="orders.AdjustmentRequest",
                after={"summary": req.summary(), "level": req.get_level_display()}, reason=reason.name)
+        from apps.core.push import notify_later
+
+        notify_later(approver_ids(req), f"Yêu cầu duyệt: {req.summary()}"[:120],
+                     f"Bàn {order.table.code} · {reason.name} · {user}", "/duyet/")  # NFR-17
         return {"request": req.pk, "summary": req.summary(), "level": req.get_level_display()}
 
     return run_once(operation_key, "adjust_request", clean, action, actor=user)
@@ -233,6 +237,10 @@ def escalate_due(now=None):
             if steps:
                 req.save(update_fields=["level", "level_since", "updated_at"])
                 moved.append(req.pk)
+                from apps.core.push import notify_later
+
+                notify_later(approver_ids(req, now), f"Chuyển cấp duyệt: {req.summary()}"[:120],
+                             f"Quá hạn ở cấp trước; giờ chờ {req.get_level_display()}.", "/duyet/")
     return moved
 
 
