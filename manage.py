@@ -7,6 +7,10 @@ import sys
 def main():
     """Run administrative tasks."""
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+    # Thông báo tiếng Việt in đúng cả khi chạy từ Task Scheduler hoặc cửa sổ dòng lệnh mã trang cũ của Windows.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure') and (stream.encoding or '').lower() != 'utf-8':
+            stream.reconfigure(encoding='utf-8', errors='replace')
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

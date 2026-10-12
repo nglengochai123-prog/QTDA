@@ -201,6 +201,13 @@ MEDIA_ROOT = BASE_DIR / env("MEDIA_DIR", "media")
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 
 
+# --- Sao lưu (NFR-09): thư mục nên nằm ngoài ổ chứa dữ liệu (ổ ngoài, thư mục đồng bộ đám mây) ---------
+
+LAM_BACKUP_DIR = Path(env("LAM_BACKUP_DIR") or BASE_DIR / "backups")  # để trống trong .env vẫn dùng mặc định
+LAM_BACKUP_KEEP = int(env("LAM_BACKUP_KEEP") or 30)
+LAM_PG_BIN = env("LAM_PG_BIN", "")  # thư mục chứa pg_dump, pg_restore khi chúng không nằm trong PATH
+
+
 # --- Thông tin cửa hàng (NFR-18: dữ liệu chính có mã cửa hàng) -------------------
 
 LAM_STORE_CODE = env("LAM_STORE_CODE", "LAM01")

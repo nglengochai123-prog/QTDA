@@ -6,7 +6,7 @@ Cập nhật 12/10/2026. Mọi lệnh chạy trong PowerShell, tại thư mục 
 
 | Hạng mục | Kết quả | Kiểm chứng bằng |
 |---|---|---|
-| Kiểm thử tự động trên SQLite | 176 bài đạt | `manage.py test` |
+| Kiểm thử tự động trên SQLite | Xem dòng cập nhật ở cuối tài liệu | `manage.py test` |
 | Kiểm thử tự động trên PostgreSQL 16.10 | 176 bài đạt (sau khi sửa 2 lỗi chỉ lộ ra trên PostgreSQL) | `manage.py test` với cấu hình PostgreSQL |
 | Đồng thời trên PostgreSQL: hai đơn tranh phần tồn cuối, gửi lại cùng mã, hoàn thành một món nhiều lần, thanh toán cùng lúc, hai người duyệt một yêu cầu | Đạt: không âm kho, không ghi trùng tiền, không hiệu lực hai lần, `kiem_tra_toan_ven` sạch | `apps/core/tests/test_concurrency.py`, 6 luồng chạy cùng lúc |
 | Bộ dữ liệu 14 ngày trên PostgreSQL | Tạo được, `kiem_tra_toan_ven` không báo sai lệch | Lệnh mục 4 |
@@ -15,7 +15,9 @@ Cập nhật 12/10/2026. Mọi lệnh chạy trong PowerShell, tại thư mục 
 | Cảnh báo | Đạt trên trình duyệt: báo Đã hết tạo cảnh báo Khẩn giao Quản lý ca, nhận xử lý, đóng không ghi kết quả bị từ chối, đóng có kết quả được | Trình duyệt |
 | Xuất Excel | Đạt: Microsoft Excel mở được tệp, 7 trang, hàm SUM của Excel trên mỗi trang bằng 8.485.000 đ, khớp hệ thống; hoàn 64.000 đ; thuần 8.421.000 đ | Excel mở qua tự động hóa, đối chiếu với báo cáo |
 | Thông báo đẩy: máy chủ | Sẵn sàng: đã cài pywebpush, có khóa VAPID, trang Cảnh báo báo "sẵn sàng" | Trình duyệt trên máy tính |
-| Thông báo đẩy: điện thoại thật nhận được | **Chờ Hai thử** theo mục 3 | |
+| Thông báo đẩy: điện thoại thật nhận được | **Tạm hoãn, chờ Hai nghiệm thu** theo mục 3; đường hầm đã tắt | |
+| Sao lưu và phục hồi SQLite | Đạt: `sao_luu` tạo bản sao nhất quán, giữ đúng số bản; `phuc_hoi` vào tệp riêng, `PRAGMA integrity_check` ok, `kiem_tra_toan_ven` sạch; từ chối phục hồi đè CSDL đang chạy; mã băm `db.sqlite3` trước và sau phục hồi giống nhau | Mục 6, `apps/core/tests/test_backup.py` |
+| Sao lưu và phục hồi PostgreSQL | Đạt: `pg_dump` 449 KB, phục hồi vào CSDL riêng `lamcoffee_phuc_hoi_thu`, kiểm tra cấu trúc và toàn vẹn đạt; số đơn, thanh toán, biến động kho, nhật ký khớp bản gốc (237, 123, 543, 1023) | Mục 6 |
 
 ## 1. Bộ dữ liệu mẫu để tự nghiệm thu
 
@@ -68,8 +70,10 @@ Chạy lặp mỗi 60 giây trong một cửa sổ riêng (`Ctrl+C` để dừng
 Lên lịch bằng Task Scheduler (chạy cả khi chưa đăng nhập; cần PowerShell mở bằng "Run as administrator"):
 
 ```powershell
-schtasks /Create /TN "LAM Coffee - kiem tra dinh ky" /SC MINUTE /MO 1 /TR "D:\QTDA\.venv\Scripts\python.exe D:\QTDA\manage.py chay_dinh_ky" /RU SYSTEM
+schtasks /Create /TN "LAM Coffee - kiem tra dinh ky" /SC MINUTE /MO 1 /TR "D:\QTDA\scripts\chay_dinh_ky.cmd" /RU SYSTEM
 ```
+
+`scripts\chay_dinh_ky.cmd` tự chuyển về thư mục dự án và ghi kết quả từng lần chạy vào `logs\dinh_ky.log` (đã thử chạy tay: thoát mã 0, nhật ký có dòng "Chuyển cấp 0 yêu cầu; ...").
 
 Dừng hoặc xóa lịch:
 
@@ -81,6 +85,8 @@ schtasks /Delete /TN "LAM Coffee - kiem tra dinh ky" /F
 Với bộ dữ liệu mẫu, đặt `$env:SQLITE_NAME = "nghiem_thu.sqlite3"` trước khi chạy lệnh.
 
 ## 3. Thử thông báo đẩy trên điện thoại thật
+
+**Trạng thái 12/10/2026: tạm hoãn theo yêu cầu của Hai, chờ người dùng nghiệm thu.** Đường hầm đã tắt; không có tiến trình `ssh` hay máy chủ cổng 8767 nào còn chạy. Mục này không chặn các phần khác. Khi muốn thử, làm theo các bước dưới.
 
 ### Đã chuẩn bị
 
@@ -167,3 +173,63 @@ Gỡ hẳn khi không cần: tắt PostgreSQL rồi xóa thư mục `C:\Users\HP
 
 - Gửi lại cùng mã nghiệp vụ đúng lúc yêu cầu đầu còn đang xử lý: trên PostgreSQL yêu cầu sau chạy lại nghiệp vụ và báo lỗi sai (ví dụ "thiếu nguyên liệu") dù không ghi trùng. Đã sửa: giữ chỗ mã trước khi làm, yêu cầu sau chờ rồi nhận đúng kết quả của yêu cầu đầu.
 - Chuyển cấp yêu cầu điều chỉnh khóa cả dòng của bảng liên kết có thể rỗng, PostgreSQL từ chối. Đã sửa để chỉ khóa dòng của yêu cầu.
+
+## 5. Khởi động và dừng
+
+**Chạy thử trên máy này (SQLite, chế độ phát triển):**
+
+```powershell
+.venv\Scripts\python.exe manage.py migrate
+.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8765
+```
+
+Dừng: bấm `Ctrl+C` trong cửa sổ đó. Nếu đã đóng cửa sổ mà máy chủ còn chạy, chỉ dừng đúng tiến trình đang nghe cổng của mình (không tắt mọi `python.exe`):
+
+```powershell
+Get-NetTCPConnection -LocalPort 8765 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess }
+```
+
+**Máy chủ thật theo báo cáo (máy chủ ảo Linux, Nginx, Gunicorn, PostgreSQL, HTTPS Let's Encrypt).** Chưa triển khai; các bước dưới là kịch bản, chưa chạy thử trên máy chủ thật.
+
+1. Sao chép `.env.production.example` thành `.env`, điền khóa bí mật, tên miền, mật khẩu CSDL, thư mục sao lưu, khóa VAPID mới. `.env` thật không đưa lên Git.
+2. `python manage.py migrate`, `python manage.py collectstatic --noinput`, `python manage.py check --deploy`.
+3. Chạy `gunicorn config.wsgi --bind 127.0.0.1:8000 --workers 3` dưới systemd; Nginx chuyển tiếp HTTPS vào cổng 8000 và đặt `X-Forwarded-Proto`.
+4. Tác vụ định kỳ bằng cron: `* * * * * cd /srv/lamcoffee && .venv/bin/python manage.py chay_dinh_ky >> logs/dinh_ky.log 2>&1` và `30 23 * * * cd /srv/lamcoffee && .venv/bin/python manage.py sao_luu >> logs/sao_luu.log 2>&1`.
+5. Dừng: `systemctl stop` dịch vụ Gunicorn; khởi động lại sau cập nhật mã: `migrate`, `collectstatic`, `systemctl restart`.
+
+## 6. Sao lưu và phục hồi (NFR-09)
+
+Yêu cầu: tự động hằng ngày ra nơi lưu trữ ngoài máy chủ, giữ tối thiểu 30 bản, mất dữ liệu tối đa 24 giờ, phục hồi không quá 4 giờ.
+
+**Cấu hình** trong `.env`: `LAM_BACKUP_DIR` (thư mục đích, nên là ổ ngoài hoặc thư mục được đồng bộ lên dịch vụ lưu trữ; để trống thì dùng `D:\QTDAackups`), `LAM_BACKUP_KEEP` (mặc định 30), `LAM_PG_BIN` (thư mục chứa `pg_dump` khi dùng PostgreSQL).
+
+**Sao lưu tay:**
+
+```powershell
+.venv\Scripts\python.exe manage.py sao_luu
+```
+
+SQLite được chép bằng cơ chế sao lưu trực tuyến của SQLite (nhất quán cả khi máy chủ đang chạy) rồi kiểm tra toàn vẹn bản chép; PostgreSQL dùng `pg_dump` định dạng nén. Nếu có ảnh chứng từ chi tiền thì nén kèm thành tệp `-media.zip`. Bản cũ vượt số bản giữ lại tự xóa.
+
+**Lên lịch hằng ngày 23:30** (PowerShell "Run as administrator"):
+
+```powershell
+schtasks /Create /TN "LAM Coffee - sao luu" /SC DAILY /ST 23:30 /TR "D:\QTDA\scripts\sao_luu.cmd" /RU SYSTEM
+```
+
+Kết quả từng lần ghi ở `logs\sao_luu.log`. Chưa tạo lịch này trên máy của Hai; tạo lịch là thay đổi cấu hình máy nên để Hai tự chạy lệnh.
+
+**Diễn tập phục hồi** (không đụng CSDL đang chạy; nên làm mỗi tháng):
+
+```powershell
+.venv\Scripts\python.exe manage.py phuc_hoi --danh-sach
+.venv\Scripts\python.exe manage.py phuc_hoi --vao backups	hu-phuc-hoi.sqlite3
+```
+
+Bỏ tên tệp thì lấy bản mới nhất. Lệnh chép bản sao lưu vào đích riêng, kiểm tra toàn vẹn, kiểm tra cấu trúc khớp mã nguồn (`migrate --check`) và chạy `kiem_tra_toan_ven` trên đích đó. Lệnh từ chối nếu đích trùng CSDL đang chạy, hoặc đích đã có mà không thêm `--ghi-de`.
+
+Nếu bản sao lưu được tạo trước một lần cập nhật mã, lệnh báo "Bản sao lưu có cấu trúc cũ hơn mã nguồn, còn thiếu: ..." và gợi ý thêm `--cap-nhat-cau-truc` để áp các bước còn thiếu lên bản phục hồi. Lần diễn tập 12/10/2026 đã gặp đúng trường hợp này (bản sao lưu trước 4 bước cập nhật cấu trúc mới) và xử lý được.
+
+Với PostgreSQL, `--vao` là tên CSDL đích mới, ví dụ `--vao lamcoffee_phuc_hoi_thu`; người dùng CSDL cần quyền tạo CSDL.
+
+**Khi cần dùng bản phục hồi thật:** dừng máy chủ và tác vụ định kỳ, sao lưu tay CSDL hiện tại (dù hỏng) để giữ dấu vết, trỏ `SQLITE_NAME` hoặc `DB_NAME` trong `.env` tới đích đã kiểm tra, khởi động lại, chạy `kiem_tra_toan_ven`. Dữ liệu phát sinh sau giờ sao lưu cần nhập lại từ phiếu dự phòng và sổ tay của ca.
