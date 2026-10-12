@@ -147,7 +147,8 @@ class MenuItem(StoreScopedModel):
             return ["kích cỡ và giá bán"]
         from apps.inventory.services import recipe_gaps
 
-        return recipe_gaps(self)
+        no_price = [f"giá bán cỡ {s.name}" for s in self.active_sizes() if not s.price]
+        return no_price + recipe_gaps(self)
 
     def clean(self):
         if self.status == self.Status.ON_SALE:
