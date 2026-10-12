@@ -60,16 +60,31 @@ def navigation(request):
         last = item["group"]
     # Thanh dưới điện thoại giữ tối đa 5 mục theo thứ tự ưu tiên; các mục còn lại xem trên máy tính.
     priority = ["home", "order", "approve", "shift", "alerts", "attendance", "stock", "open", "ready"]
-    mobile = [key for key in priority if any(i["key"] == key and not i["desktop_only"] for i in nav)][:5]
+    mobile = [key for key in priority if any(i["key"] == key and not i["desktop_only"] for i in nav)][:4]
     for item in nav:
         item["desktop_only"] = item["key"] not in mobile
     # Mục khớp đường dẫn dài nhất là mục đang mở.
     matches = [item for item in nav if path == item["url"] or (item["url"] != "/" and path.startswith(item["url"]))]
+    if not matches:
+        # Trang chi tiết thuộc về danh sách của nó (ví dụ /don/12/ thuộc Tra cứu đơn) để thẻ phân hệ vẫn sáng.
+        import re
+        parents = {r"^/don/\d+/$": "lookup"}
+        keys = [key for pattern, key in parents.items() if re.match(pattern, path)]
+        matches = [item for item in nav if item["key"] in keys]
     if matches:
         max(matches, key=lambda item: len(item["url"]))["active"] = True
+    # Thanh trên kiểu ServiceDesk Plus: mỗi nhóm nghiệp vụ là một thẻ, các mục của nhóm đang mở nằm ở thanh phụ.
+    nav_groups = []
+    for item in nav:
+        label = item["group"] or "Tổng quan"
+        if not nav_groups or nav_groups[-1]["label"] != label:
+            nav_groups.append({"label": label, "url": item["url"], "items": [], "active": False})
+        nav_groups[-1]["items"].append(item)
+        nav_groups[-1]["active"] = nav_groups[-1]["active"] or item["active"]
+    active_group = next((g for g in nav_groups if g["active"]), None)
     can_order = user_can(user, Cap.ORDER_CREATE)
     # Bảng điều khiển không nằm ở thanh dưới điện thoại; Trang chủ có lối vào (AC-100: Chủ quán mở trên điện thoại).
-    return {"NAV_ITEMS": nav, "APPROVALS_COUNT_URL": reverse("orders:approvals_count"),
+    return {"NAV_ITEMS": nav, "NAV_GROUPS": nav_groups, "NAV_ACTIVE_GROUP": active_group, "APPROVALS_COUNT_URL": reverse("orders:approvals_count"),
             "QUICK_REPORT_COUNT_URL": reverse("inventory:quick_report_count") if user_can(user, Cap.VIEW_WORKLOAD) else "",
             "STOCK_URL": reverse("inventory:stock"),
             "APPROVALS_URL": reverse("orders:approvals"), "READY_COUNT_URL": reverse("orders:ready_count") if can_order else "",

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0f172a">
+  <meta name="theme-color" content="#252e35">
   <title>{% block title %}{{ STORE_NAME }}{% endblock %}</title>
   <link rel="manifest" href="{% url 'core:manifest' %}">
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
@@ -13,7 +13,10 @@
   {% include "partials/icons.html" %}
   {% block shell %}
   <header class="app-header">
-    <a class="store" href="{% url 'core:home' %}">{{ STORE_NAME }}</a>
+    <a class="store" href="{% url 'core:home' %}"><span class="store-mark" aria-hidden="true">L</span>{{ STORE_NAME }}</a>
+    <nav class="module-tabs" aria-label="Phân hệ">
+      {% for g in NAV_GROUPS %}<a href="{{ g.url }}"{% if g.active %} aria-current="true"{% endif %}>{{ g.label }}</a>{% endfor %}
+    </nav>
     <div class="who">
       <span class="who-id">
         <span class="who-name">{{ user }}</span>
@@ -21,12 +24,17 @@
         <span class="who-role">{{ user.get_role_display }}</span>
       </span>
       <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}
-        <button type="submit" class="btn btn-quiet btn-logout">
-          <svg class="icon" aria-hidden="true"><use href="#i-logout"/></svg>Đăng xuất
+        <button type="submit" class="btn-logout" title="Đăng xuất">
+          <svg class="icon" aria-hidden="true"><use href="#i-logout"/></svg><span class="logout-text">Đăng xuất</span>
         </button>
       </form>
     </div>
   </header>
+  {% if NAV_ACTIVE_GROUP and NAV_ACTIVE_GROUP.items|length > 1 %}
+  <nav class="sub-tabs" aria-label="{{ NAV_ACTIVE_GROUP.label }}">
+    {% for item in NAV_ACTIVE_GROUP.items %}<a href="{{ item.url }}"{% if item.active %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}
+  </nav>
+  {% endif %}
   {% include "partials/offline_banner.html" %}
   {% if QUICK_REPORT_COUNT_URL %}
   <a class="ready-banner stock-banner" id="stock-banner" href="{{ STOCK_URL }}" hidden>
@@ -54,6 +62,9 @@
         <li{% if item.desktop_only %} class="nav-desktop-only"{% endif %}><a href="{{ item.url }}"{% if item.active %} aria-current="page"{% endif %}>
           <svg class="icon" aria-hidden="true"><use href="#i-{{ item.key }}"/></svg>{{ item.label }}</a></li>
         {% endfor %}
+        <li class="nav-more-item"><details class="nav-more"><summary><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg>Tất cả</summary>
+          <div class="nav-more-panel">{% for g in NAV_GROUPS %}<p class="nav-more-group">{{ g.label }}</p>{% for item in g.items %}<a href="{{ item.url }}"{% if item.active %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}{% endfor %}</div>
+        </details></li>
       </ul>
     </nav>
     <main class="app-main" id="noi-dung">
