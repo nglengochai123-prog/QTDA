@@ -86,19 +86,21 @@ class ReportTests(Base):
                          (165000, 50000, 215000, 100000, 65000))
         self.assertFalse(data["met"])
 
-    def test_dashboard_renders_for_owner_and_manager(self):
+    def test_dashboard_renders_for_owner_only(self):
+        # Bỏ Quản lý ca (12/10/2026): bảng điều khiển và báo cáo chỉ dành cho Chủ quán.
         self.paid()
         self.d["milk"].is_critical = True
         self.d["milk"].save()
-        for user, sees_bo in ((self.d["owner"], True), (self.manager, False)):
-            self.client.login(username=user.username, password=PASSWORD)
-            page = self.client.get(reverse("reports:dashboard"))
-            self.assertContains(page, "Ca đang mở")
-            self.assertContains(page, "Sữa đặc")
-            (self.assertContains if sees_bo else self.assertNotContains)(page, "BO-01")
-        self.assertEqual(self.client.get(reverse("reports:revenue_control")).status_code, 403)  # Quản lý ca
-        for name in ("reports:revenue", "reports:materials"):
+        self.client.login(username=self.d["owner"].username, password=PASSWORD)
+        page = self.client.get(reverse("reports:dashboard"))
+        self.assertContains(page, "Ca đang mở")
+        self.assertContains(page, "Sữa đặc")
+        self.assertContains(page, "BO-01")
+        for name in ("reports:revenue", "reports:materials", "reports:revenue_control"):
             self.assertEqual(self.client.get(reverse(name)).status_code, 200)
+        self.client.login(username=self.cashier.username, password=PASSWORD)
+        for name in ("reports:dashboard", "reports:revenue", "reports:revenue_control"):
+            self.assertEqual(self.client.get(reverse(name)).status_code, 403)
         _ = (stock, StockMovement)
 
 

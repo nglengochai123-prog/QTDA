@@ -101,20 +101,11 @@ def approver_ids(req, now=None):
 
     Cấp được tính khi đọc (req.effective_level), không phụ thuộc việc ai đó vừa mở màn hình.
     """
-    owners = _owners()
-    if req.kind == Kind.CANCEL_PAID:
-        allowed = owners  # AC-23: chỉ Chủ quán.
-    else:
-        shift = _shift_for(req.order)
-        allowed = set(owners)
-        if shift is not None:
-            allowed.add(shift.approver_id)
-            if req.effective_level(now) >= Level.BACKUP and shift.backup_approver_id:
-                allowed.add(shift.backup_approver_id)
-        else:
-            # Chưa khai báo ca: mọi Quản lý ca đang làm được duyệt.
-            allowed |= {u.pk for u in User.objects.filter(is_active=True) if u.has_role(Role.QUAN_LY_CA)}
-    allowed.discard(req.requested_by_id)
+    # Chủ quán trực tiếp quản lý ca nên mọi yêu cầu do Chủ quán duyệt (quyết định ngày 12/10/2026, bỏ Quản lý ca).
+    # Nhân viên không tự duyệt yêu cầu của mình (AC-22); Chủ quán tự gửi thì tự duyệt, có nhật ký.
+    allowed = set(_owners())
+    if req.requested_by_id not in allowed:
+        allowed.discard(req.requested_by_id)
     return allowed
 
 
@@ -123,12 +114,7 @@ def can_decide(user, req, now=None):
 
 
 def _initial_level(user, order, kind):
-    if kind == Kind.CANCEL_PAID:
-        return Level.OWNER
-    shift = _shift_for(order)
-    if shift is not None and shift.approver_id == user.pk:
-        return Level.BACKUP if shift.backup_approver_id else Level.OWNER  # AC-22
-    return Level.SHIFT
+    return Level.OWNER  # một cấp duyệt: Chủ quán
 
 
 def _cups(value, maximum, label):
@@ -199,9 +185,6 @@ def create_request(user, operation_key, payload):
             shift=order.shift or Shift.objects.current(), **fields)
         if after_prep:
             _check_adjust_count(req)
-        if kind != Kind.CANCEL_PAID and req.level == Level.OWNER:
-            record(Action.STATUS_CHANGE, actor=user, obj=req, object_type="orders.AdjustmentRequest",
-                   after={"cap": req.get_level_display()}, reason=SKIP_BACKUP_REASON)
         record(Action.CREATE, actor=user, obj=req, object_type="orders.AdjustmentRequest",
                after={"summary": req.summary(), "level": req.get_level_display()}, reason=reason.name)
         from apps.core.push import notify_later

@@ -14,9 +14,8 @@ class Command(BaseCommand):
     def handle(self, *args, lap=0, **options):
         while True:
             result = periodic.run_all()
-            self.stdout.write(f"Chuyển cấp {len(result['chuyen_cap_yeu_cau'])} yêu cầu; "
+            self.stdout.write(f"Ghi quá hạn {len(result['chuyen_cap_yeu_cau'])} yêu cầu chờ duyệt; "
                               f"{len(result['dat_hang_giao_cham'])} lần đặt giao chậm; "
-                              f"nhắc {len(result['nhac_ca_thieu_du_phong'])} ca thiếu người duyệt dự phòng; "
                               f"nhắc {len(result['nhac_thieu_gio_ra'])} lượt thiếu giờ ra; cảnh báo: tạo "
                               f"{len(result['canh_bao']['tao'])}, đóng {len(result['canh_bao']['dong'])}, "
                               f"chuyển cấp hoặc nhắc {len(result['canh_bao']['chuyen_cap'])}.")

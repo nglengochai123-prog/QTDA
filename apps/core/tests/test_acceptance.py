@@ -41,9 +41,7 @@ class FiveRoleAcceptanceTests(TestCase):
         self.d = build_menu()
         mk = lambda name, role: User.objects.create_user(name, password=PASSWORD, role=role)  # noqa: E731
         self.owner, self.waiter, self.barista = self.d["owner"], self.d["waiter"], self.d["barista"]
-        self.manager = mk("quanlyca", Role.QUAN_LY_CA)
-        self.cashier = mk("thungan", Role.THU_NGAN)
-        self.backup = mk("duphong", Role.QUAN_LY_CA)
+        self.cashier = mk("thungan", Role.THU_NGAN)  # Không còn Quản lý ca (12/10/2026): Thu ngân và Chủ quán lo ca.
         self.table7 = Table.objects.create(store=self.d["store"], code="7")
         self.reason = AdjustmentReason.objects.get(name="Khách đổi ý")
 
@@ -67,17 +65,16 @@ class FiveRoleAcceptanceTests(TestCase):
 
     def test_full_day_through_the_web(self):
         now = timezone.localtime()
-        # 1. Chủ quán khai báo ca qua trang dữ liệu nền; thiếu người duyệt dự phòng thì không lưu được (GD-08).
+        # 1. Chủ quán khai báo ca trên trang Quản trị › Ca làm việc; giờ kết thúc sai thì không lưu được.
         self.as_(self.owner)
-        form = {"name": "Ca chiều", "starts_at_0": (now - timedelta(hours=1)).strftime("%Y-%m-%d"),
-                "starts_at_1": (now - timedelta(hours=1)).strftime("%H:%M:%S"),
-                "ends_at_0": (now + timedelta(hours=3)).strftime("%Y-%m-%d"),
-                "ends_at_1": (now + timedelta(hours=3)).strftime("%H:%M:%S"),
-                "approver": self.manager.pk, "payment_authorizer": self.cashier.pk, "status": "dang_mo"}
-        self.client.post(reverse("admin:shifts_shift_add"), form)
+        fmt = "%Y-%m-%dT%H:%M"
+        form = {"name": "Ca chiều", "starts_at": (now - timedelta(hours=1)).strftime(fmt),
+                "ends_at": (now - timedelta(hours=2)).strftime(fmt), "payment_authorizer": self.cashier.pk}
+        self.client.post(reverse("masterdata:create", args=["ca"]), form)
         self.assertFalse(Shift.objects.exists())
-        self.client.post(reverse("admin:shifts_shift_add"), {**form, "backup_approver": self.backup.pk})
+        self.client.post(reverse("masterdata:create", args=["ca"]), {**form, "ends_at": (now + timedelta(hours=3)).strftime(fmt)})
         shift_a = Shift.objects.get()
+        self.assertEqual(shift_a.approver, self.owner)
 
         # 2. Nhập hàng (Pha chế): ảnh hóa đơn bắt buộc; gửi lại không ghi trùng.
         supplier = Supplier.objects.create(store=self.d["store"], name="NCC sữa")
@@ -93,8 +90,8 @@ class FiveRoleAcceptanceTests(TestCase):
         self.assertEqual(Receipt.objects.count(), 1)
         self.assertEqual(levels(self.d["milk"])[0], D(2000))
 
-        # 3. Mở ca: Quản lý ca xác nhận tiền đầu ca.
-        self.as_(self.manager)
+        # 3. Mở ca: Thu ngân xác nhận tiền đầu ca.
+        self.as_(self.cashier)
         self.client.post(reverse("shifts:cash_entry", args=[shift_a.pk]),
                          {"operation_key": key(), "kind": "dau_ca", "amount": "500000"})
         self.assertEqual(shift_services.figures(shift_a)["opening"], 500000)
@@ -115,13 +112,14 @@ class FiveRoleAcceptanceTests(TestCase):
             self.post_json("orders:bar_complete", {"operation_key": key(), "line": line.pk, "cups": 2, "expected_done": 0})
         self.assertEqual(levels(self.d["coffee"]), (D(1960), D(20), D(1940)))
 
-        # 6. Điều chỉnh: phục vụ xin bỏ 2 ly (1 chưa pha, 1 đã pha); Quản lý ca duyệt trên điện thoại.
+        # 6. Điều chỉnh: phục vụ xin bỏ 2 ly (1 chưa pha, 1 đã pha); Chủ quán duyệt trên điện thoại.
         self.as_(self.waiter)
         self.client.post(reverse("orders:request_adjustment", args=[order_a.pk]),
                          {"operation_key": key(), "kind": "huy_mon", "line": line.pk, "cups": 2, "reason": self.reason.pk})
         req = AdjustmentRequest.objects.get()
         self.denied(self.waiter, "post", "orders:decide", req.pk, data={"decision": "approve"})
-        self.as_(self.manager)
+        self.denied(self.cashier, "post", "orders:decide", req.pk, data={"decision": "approve"})
+        self.as_(self.owner)
         op = key()
         for _ in range(2):
             self.client.post(reverse("orders:decide", args=[req.pk]), {"operation_key": op, "decision": "approve"})
@@ -142,7 +140,7 @@ class FiveRoleAcceptanceTests(TestCase):
         self.client.post(reverse("orders:request_adjustment", args=[order_a.pk]),
                          {"operation_key": key(), "kind": "huy_hoa_don", "reason": self.reason.pk})
         cancel = AdjustmentRequest.objects.get(kind="huy_hoa_don")
-        self.denied(self.manager, "post", "orders:decide", cancel.pk, data={"decision": "approve"})
+        self.denied(self.waiter, "post", "orders:decide", cancel.pk, data={"decision": "approve"})
         cancel.refresh_from_db()
         self.assertEqual(cancel.status, "cho_duyet")
         self.as_(self.owner)
@@ -156,12 +154,12 @@ class FiveRoleAcceptanceTests(TestCase):
         refund.refresh_from_db()
         self.assertEqual((refund.status, refund.shift), ("da_hoan", shift_a))
 
-        # 9. Mất mạng: Quản lý ca cấp dãy phiếu và nhập bù một phiếu; thu ngân không có quyền.
+        # 9. Mất mạng: Chủ quán cấp dãy phiếu và nhập bù một phiếu; thu ngân không có quyền.
         self.denied(self.cashier, "post", "orders:backup_slips", data={"action": "issue"})
-        self.as_(self.manager)
+        self.as_(self.owner)
         url = reverse("orders:backup_slips")
         self.client.post(url, {"action": "issue", "shift": shift_a.pk, "first": "151", "last": "152",
-                               "receiver": self.manager.pk})
+                               "receiver": self.cashier.pk})
         sold = (timezone.localtime() + timedelta(minutes=1)).strftime("%Y-%m-%dT%H:%M")
         slip = {"action": "enter", "operation_key": key(), "number": "151", "sold_at": sold, "restored_at": sold,
                 "table": self.table7.pk, "method": "chuyen_khoan", "transfer_confirmed": "1",
@@ -185,13 +183,13 @@ class FiveRoleAcceptanceTests(TestCase):
         late_cart["table"] = self.table7.pk
         self.order(self.waiter, late_cart)
         late = Order.objects.filter(shift=shift_a).exclude(pk=order_a.pk).exclude(backup_slip__isnull=False).get()
-        self.as_(self.manager)
+        self.as_(self.cashier)
         self.client.post(reverse("shifts:close", args=[shift_a.pk]))
         shift_a.refresh_from_db()
         self.assertEqual(shift_a.status, "dang_mo")
         shift_b = Shift.objects.create(store=self.d["store"], name="Ca tối", starts_at=timezone.now(),
-                                       ends_at=timezone.now() + timedelta(hours=4), approver=self.manager,
-                                       backup_approver=self.backup, payment_authorizer=self.cashier)
+                                       ends_at=timezone.now() + timedelta(hours=4), approver=self.owner,
+                                       payment_authorizer=self.cashier)
         self.client.post(reverse("shifts:carry", args=[shift_a.pk]),
                          {"order": late.pk, "to_shift": shift_b.pk, "reason": "Khách ngồi lại"})
         self.client.post(reverse("shifts:close", args=[shift_a.pk]))
@@ -207,7 +205,7 @@ class FiveRoleAcceptanceTests(TestCase):
         self.assertEqual(Payment.objects.get(orders=late).shift, shift_b)
 
         # 12. Báo cáo cuối ca A: tiền mặt 500.000 + 25.000 − hoàn 25.000 = 500.000, chuyển khoản 25.000 (phiếu).
-        self.as_(self.manager)
+        self.as_(self.cashier)
         self.client.post(reverse("shifts:report", args=[shift_a.pk]),
                          {"counted_cash": "500000", "transfer_received": "25000", "transfer_refunded": "0"})
         self.assertTrue(ShiftReport.objects.filter(shift=shift_a).exists())
@@ -219,9 +217,9 @@ class FiveRoleAcceptanceTests(TestCase):
         # 13. Quyền xem báo cáo.
         self.denied(self.waiter, "get", "reports:dashboard")
         self.denied(self.cashier, "get", "reports:revenue")
-        self.denied(self.manager, "get", "reports:revenue_control")
+        self.denied(self.cashier, "get", "reports:revenue_control")
         self.denied(self.barista, "get", "shifts:status")
-        for user, name in ((self.manager, "reports:dashboard"), (self.manager, "reports:materials"),
+        for user, name in ((self.owner, "reports:dashboard"), (self.owner, "reports:materials"),
                            (self.owner, "reports:revenue_control"), (self.owner, "reports:revenue")):
             self.as_(user)
             self.assertEqual(self.client.get(reverse(name)).status_code, 200)
@@ -239,6 +237,6 @@ class FiveRoleAcceptanceTests(TestCase):
         self.assertEqual(stock.ledger_problems(), [])
         self.assertEqual(integrity.problems(), [])
         actors = set(AuditLog.objects.exclude(actor=None).values_list("actor__username", flat=True))
-        self.assertTrue({u.username for u in (self.owner, self.manager, self.cashier, self.waiter, self.barista)} <= actors)
+        self.assertTrue({u.username for u in (self.owner, self.cashier, self.waiter, self.barista)} <= actors)
         denied = AuditLog.objects.filter(action="access_denied").count()
         self.assertGreaterEqual(denied, 6)  # mọi lần bị từ chối quyền đều ghi nhật ký (AC-111)

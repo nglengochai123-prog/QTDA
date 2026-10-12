@@ -136,13 +136,6 @@ def pending_refunds():
     return Refund.objects.filter(status=Refund.Status.APPROVED).select_related("approved_by", "payment")
 
 
-def shifts_missing_backup(now=None):
-    """Ca chưa kết thúc mà chưa có người duyệt dự phòng (GD-08): nhắc Chủ quán bổ sung trước giờ ca."""
-    now = now or timezone.now()
-    return list(Shift.objects.filter(status=Shift.Status.OPEN, ends_at__gt=now, backup_approver__isnull=True)
-                .order_by("starts_at"))
-
-
 # ---------------- Số liệu ca ----------------
 
 def figures(shift):
@@ -302,7 +295,7 @@ def reconcile(shift, correction=None):
         if diff == 0:
             continue
         d = Discrepancy.objects.create(store=shift.store, shift=shift, method=method, expected=expected,
-                                       actual=real, difference=diff, manager=shift.approver,
+                                       actual=real, difference=diff, manager=_responsible(shift),
                                        over_threshold=abs(diff) > threshold, threshold=threshold)
         record(Action.CREATE, obj=d, object_type="shifts.Discrepancy", actor_label="hệ thống",
                after={"phuong_thuc": d.get_method_display(), "phai_co": expected, "thuc_te": real,
@@ -379,7 +372,7 @@ def explain(user, discrepancy_id, text):
     if d.superseded_at:
         raise ValidationError("Khoản chênh lệch này đã hết hiệu lực sau đối soát lại.")
     if user.pk != d.manager_id and not user.is_owner:
-        raise ValidationError("Chỉ Quản lý ca phụ trách giải trình khoản chênh lệch này.")
+        raise ValidationError("Chỉ người lập báo cáo cuối ca hoặc Chủ quán giải trình khoản chênh lệch này.")
     if not text.strip():
         raise ValidationError("Ghi nội dung giải trình.")
     d.explanation, d.explained_at = text, timezone.now()
@@ -401,7 +394,7 @@ def decide(user, discrepancy_id, accept):
     if d.decision:
         raise ValidationError("Khoản chênh lệch này đã có quyết định.")
     if d.over_threshold and not d.explanation:
-        raise ValidationError("Chờ Quản lý ca giải trình trước khi quyết định.")
+        raise ValidationError("Chờ giải trình trước khi quyết định.")
     d.decision = Discrepancy.Decision.ACCEPTED if accept else Discrepancy.Decision.REJECTED
     d.decided_by, d.decided_at = user, timezone.now()
     d.save(update_fields=["decision", "decided_by", "decided_at", "updated_at"])
@@ -411,8 +404,14 @@ def decide(user, discrepancy_id, accept):
     return d
 
 
+def _responsible(shift):
+    """Người chịu trách nhiệm số tiền của ca: người lập báo cáo cuối ca, nếu chưa có thì người kết ca, cuối cùng là Chủ quán phụ trách."""
+    report = getattr(shift, "report", None)
+    return (report.submitted_by if report else None) or shift.closed_by or shift.approver
+
+
 def check_accumulated(shift):
-    """Cộng dồn thiếu tiền chưa giải thích theo Quản lý ca và toàn quán trong tháng (FR-13, BRU-11)."""
+    """Cộng dồn thiếu tiền chưa giải thích theo người phụ trách ca và toàn quán trong tháng (FR-13, BRU-11)."""
     from apps.control.models import ExceptionCase
     from apps.control.services import open_exception
 
@@ -446,7 +445,7 @@ def check_accumulated(shift):
 
 
 def accumulated_report(year, month):
-    """Tích lũy thiếu chưa giải thích theo Quản lý ca, loại ca và tháng (AC-28)."""
+    """Tích lũy thiếu chưa giải thích theo người phụ trách ca, loại ca và tháng (AC-28)."""
     rows = {}
     for d in Discrepancy.objects.current().filter(shift__starts_at__year=year, shift__starts_at__month=month,
                                                   difference__lt=0).select_related("manager", "shift"):

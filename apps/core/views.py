@@ -62,7 +62,6 @@ def home(request):
         from apps.catalog.models import MenuItem, Table
         from apps.inventory.models import Ingredient, RecipeVersion
         from apps.shifts.models import Shift
-        from apps.shifts.services import shifts_missing_backup
         from apps.staff.models import Employee
 
         md = lambda key: reverse("masterdata:list", args=[key])  # noqa: E731
@@ -76,7 +75,6 @@ def home(request):
             ("Nguyên vật liệu", md("nguyen-lieu"), f"{Ingredient.objects.filter(is_active=True).count()} loại", False),
             ("Định mức", md("dinh-muc"), f"{RecipeVersion.objects.filter(status='nhap').count()} bản nháp", False),
         ]
-        context["missing_backup"] = shifts_missing_backup()
     from .models import DATA_NOTICE_VERSION, DataNoticeAck
 
     context["notice_pending"] = not DataNoticeAck.objects.filter(user=user, version=DATA_NOTICE_VERSION).exists()

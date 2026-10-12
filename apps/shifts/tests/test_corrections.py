@@ -1,13 +1,12 @@
-"""Đính chính báo cáo cuối ca (GD-11), người duyệt dự phòng bắt buộc (GD-08), tách BO-01 khỏi ngưỡng."""
+"""Đính chính báo cáo cuối ca (GD-11), ca không còn Quản lý ca, tách BO-01 khỏi ngưỡng."""
 
 from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from apps.audit.models import AuditLog
 from apps.control import services as control
-from apps.core import params, periodic
+from apps.core import params
 from apps.orders import adjustments
 from apps.orders.models import AdjustmentRequest
 from apps.orders.tests.test_adjust_pay import Base, key
@@ -17,24 +16,24 @@ from apps.shifts.models import Discrepancy, Shift, ShiftReportCorrection
 
 class CorrectionTests(Base):
     def closed_with_report(self, counted):
-        shift_services.add_cash_entry(self.manager, key(), self.shift.pk, "dau_ca", 500000)
-        shift_services.close_shift(self.manager, self.shift.pk)
-        return shift_services.submit_report(self.manager, self.shift.pk, counted, 0)
+        shift_services.add_cash_entry(self.cashier, key(), self.shift.pk, "dau_ca", 500000)
+        shift_services.close_shift(self.cashier, self.shift.pk)
+        return shift_services.submit_report(self.cashier, self.shift.pk, counted, 0)
 
     def correct(self, counted, reason="Đếm sót một xấp 100.000"):
-        result, _ = shift_services.request_correction(self.manager, key(), self.shift.pk, counted, 0, 0, reason)
+        result, _ = shift_services.request_correction(self.cashier, key(), self.shift.pk, counted, 0, 0, reason)
         return ShiftReportCorrection.objects.get(pk=result["correction"])
 
     def test_correction_needs_reason_and_owner_then_re_reconciles_once(self):
         report = self.closed_with_report(400000)  # thiếu 100.000
         old = Discrepancy.objects.get()
-        shift_services.explain(self.manager, old.pk, "Chưa rõ")
+        shift_services.explain(self.cashier, old.pk, "Chưa rõ")
         with self.assertRaises(ValidationError):
-            shift_services.request_correction(self.manager, key(), self.shift.pk, 480000, 0, 0, "")
+            shift_services.request_correction(self.cashier, key(), self.shift.pk, 480000, 0, 0, "")
         c = self.correct(480000)
         self.assertEqual(c.status, ShiftReportCorrection.Status.PENDING)
-        with self.assertRaises(ValidationError):  # Quản lý ca không tự duyệt
-            shift_services.decide_correction(self.manager, c.pk, True)
+        with self.assertRaises(ValidationError):  # Thu ngân không tự duyệt
+            shift_services.decide_correction(self.cashier, c.pk, True)
         shift_services.decide_correction(self.d["owner"], c.pk, True)
         shift_services.decide_correction(self.d["owner"], c.pk, True)  # bấm lại
         report.refresh_from_db()
@@ -48,7 +47,7 @@ class CorrectionTests(Base):
         self.assertEqual(control.monthly_control(now.year, now.month)["in_process"], 20000)  # không cộng 100.000 cũ
         self.assertEqual(shift_services.accumulated_report(now.year, now.month)[0]["total"], 20000)
         with self.assertRaises(ValidationError):
-            shift_services.explain(self.manager, old.pk, "Giải trình bản cũ")
+            shift_services.explain(self.cashier, old.pk, "Giải trình bản cũ")
 
     def test_correction_to_exact_removes_discrepancy_and_rejected_changes_nothing(self):
         self.closed_with_report(400000)
@@ -69,31 +68,17 @@ class CorrectionTests(Base):
         self.assertFalse(ShiftReportCorrection.objects.exists())
 
 
-class BackupApproverTests(Base):
-    def test_shift_form_requires_backup(self):
-        shift = Shift(store=self.d["store"], name="Ca tối", starts_at=timezone.now(),
-                      ends_at=timezone.now() + timedelta(hours=4), approver=self.manager)
-        with self.assertRaises(ValidationError):
-            shift.full_clean()
+class NoShiftManagerTests(Base):
+    """Bỏ vai trò Quản lý ca (Chủ quán quyết định 12/10/2026): ca không cần người duyệt dự phòng."""
 
-    def test_missing_backup_reminded_once_and_direct_owner_logged(self):
-        Shift.objects.filter(pk=self.shift.pk).update(backup_approver=None)
-        self.assertEqual([s.pk for s in shift_services.shifts_missing_backup()], [self.shift.pk])
-        from unittest import mock
-        with mock.patch("apps.core.push.send_to_user", return_value=(1, "")) as send:
-            with self.captureOnCommitCallbacks(execute=True):
-                periodic.run_all()
-                periodic.run_all()
-        self.assertEqual(AuditLog.objects.filter(reason=periodic.MISSING_BACKUP_REASON).count(), 1)
-        # AC-113: Chủ quán nhận đúng một thông báo đẩy cho ca này
-        pushes = [c for c in send.call_args_list if c.args[1] == "Ca chưa có người duyệt dự phòng"]
-        self.assertEqual([c.args[0] for c in pushes], [self.d["owner"]])
+    def test_shift_without_backup_is_valid_and_owner_approves_directly(self):
+        shift = Shift(store=self.d["store"], name="Ca tối", starts_at=timezone.now(),
+                      ends_at=timezone.now() + timedelta(hours=4), approver=self.d["owner"])
+        shift.full_clean()
         order, line = self.order()
         req = self.request(self.d["waiter"], order, "huy_mon", line=line.pk, cups=1)
-        periodic.run_all(req.level_since + timedelta(minutes=3, seconds=1))
-        req.refresh_from_db()
         self.assertEqual(req.level, AdjustmentRequest.Level.OWNER)
-        self.assertTrue(AuditLog.objects.filter(reason=adjustments.SKIP_BACKUP_REASON).exists())
+        self.assertTrue(adjustments.can_decide(self.d["owner"], req))
 
 
 class TargetSeparationTests(Base):
@@ -111,7 +96,7 @@ class ScreenTests(Base):
         from apps.orders.tests.helpers import PASSWORD
 
         CorrectionTests.closed_with_report(self, 400000)
-        self.client.login(username=self.manager.username, password=PASSWORD)
+        self.client.login(username=self.cashier.username, password=PASSWORD)
         page = self.client.get(reverse("shifts:my_shift_detail", args=[self.shift.pk]))
         self.assertContains(page, "Đính chính báo cáo cuối ca")
         self.client.post(reverse("shifts:correction", args=[self.shift.pk]),

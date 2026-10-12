@@ -45,7 +45,7 @@
     <li class="discrepancy">
       <div class="row-between"><span>{{ d.shift }} · {{ d.get_method_display }} · {{ d.manager }}</span>
         <strong class="{% if d.difference < 0 %}text-warn{% endif %}">{{ d.difference|intcomma }} đ{% if d.over_threshold %} · vượt ngưỡng{% endif %}</strong></div>
-      {% if d.explanation %}<p>Giải trình: {{ d.explanation }}</p>{% elif d.over_threshold %}<p class="muted">Chờ Quản lý ca giải trình.</p>{% else %}<p class="muted">Dưới ngưỡng: đã lưu và cộng vào tích lũy nếu thiếu.</p>{% endif %}
+      {% if d.explanation %}<p>Giải trình: {{ d.explanation }}</p>{% elif d.over_threshold %}<p class="muted">Chờ người phụ trách ca giải trình.</p>{% else %}<p class="muted">Dưới ngưỡng: đã lưu và cộng vào tích lũy nếu thiếu.</p>{% endif %}
       {% if request.user.is_owner %}{% if d.explanation or not d.over_threshold %}
       <div class="approval-actions">
         <form method="post" action="{% url 'shifts:decide' d.pk %}" data-once>{% csrf_token %}<input type="hidden" name="decision" value="reject"><button class="btn btn-quiet" type="submit">Không chấp nhận</button></form>
@@ -61,7 +61,7 @@
   <h2 id="acc-title">Thiếu tiền chưa giải thích tích lũy tháng {{ month }}</h2>
   {% if accumulated %}
   <div class="table-wrap"><table class="data-table">
-    <thead><tr><th scope="col">Quản lý ca</th><th scope="col">Loại ca</th><th scope="col" class="num">Tích lũy</th></tr></thead>
+    <thead><tr><th scope="col">Người phụ trách</th><th scope="col">Loại ca</th><th scope="col" class="num">Tích lũy</th></tr></thead>
     <tbody>{% for r in accumulated %}<tr><th scope="row">{{ r.manager }}</th><td>{{ r.shift_type }}</td><td class="num">{{ r.total|intcomma }} đ</td></tr>{% endfor %}</tbody>
   </table></div>
   {% else %}<p class="muted">Chưa có khoản thiếu nào trong tháng.</p>{% endif %}
@@ -70,11 +70,11 @@
 <section class="panel" aria-labelledby="shift-title">
   <h2 id="shift-title">Các ca gần đây</h2>
   <div class="table-wrap"><table class="data-table">
-    <thead><tr><th scope="col">Ca</th><th scope="col">Quản lý ca</th><th scope="col">Kết ca</th><th scope="col">Báo cáo</th><th scope="col" class="num">Doanh thu</th><th scope="col">Cần chú ý</th><th scope="col"></th></tr></thead>
+    <thead><tr><th scope="col">Ca</th><th scope="col">Người phụ trách</th><th scope="col">Kết ca</th><th scope="col">Báo cáo</th><th scope="col" class="num">Doanh thu</th><th scope="col">Cần chú ý</th><th scope="col"></th></tr></thead>
     <tbody>
     {% for r in rows %}
     <tr>
-      <th scope="row">{{ r.shift }}</th><td>{{ r.shift.approver }}</td>
+      <th scope="row">{{ r.shift }}</th><td>{% if r.shift.report %}{{ r.shift.report.submitted_by }}{% else %}{{ r.shift.closed_by|default:'–' }}{% endif %}</td>
       <td>{% if r.closed %}Đã kết{% else %}Chưa{% endif %}</td><td>{% if r.has_report %}Đã gửi{% else %}Chưa{% endif %}</td>
       <td class="num">{{ r.figures.revenue_total|intcomma }} đ</td>
       <td>{% for i in r.issues %}<span class="flag-low">{{ i }}</span>{% empty %}<span class="muted">Đủ</span>{% endfor %}</td>

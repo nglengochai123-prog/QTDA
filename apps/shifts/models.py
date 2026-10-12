@@ -29,7 +29,7 @@ class Shift(StoreScopedModel):
     name = models.CharField("Tên ca", max_length=40, help_text="Ví dụ: Ca sáng, Ca chiều, Ca tối.")
     starts_at = models.DateTimeField("Bắt đầu")
     ends_at = models.DateTimeField("Kết thúc")
-    approver = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người duyệt trong ca (Quản lý ca)",
+    approver = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Chủ quán phụ trách ca",
                                  on_delete=models.PROTECT, related_name="+")
     backup_approver = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người duyệt dự phòng",
                                         on_delete=models.PROTECT, null=True, blank=True, related_name="+")
@@ -58,18 +58,11 @@ class Shift(StoreScopedModel):
     def clean(self):
         if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
             raise ValidationError({"ends_at": "Giờ kết thúc phải sau giờ bắt đầu."})
-        if not self.backup_approver_id:
-            # GD-08: ca phải có người duyệt dự phòng trước khi hoạt động (BRU-09, AC-113).
-            raise ValidationError({"backup_approver": "Chỉ định người duyệt dự phòng trước khi ca bắt đầu."})
-        if self.backup_approver_id == self.approver_id:
-            raise ValidationError({"backup_approver": "Người duyệt dự phòng phải khác người duyệt trong ca."})
 
     @property
     def missing_roles(self):
         """Nhắc Chủ quán khi ca chưa đủ người theo BRU-09 (AC-113)."""
         missing = []
-        if not self.backup_approver_id:
-            missing.append("người duyệt dự phòng")
         if not self.payment_authorizer_id:
             missing.append("người được ủy quyền thanh toán theo món thực nhận")
         return missing
@@ -240,11 +233,11 @@ class Discrepancy(StoreScopedModel):
     expected = models.BigIntegerField("Phải có")
     actual = models.BigIntegerField("Thực tế")
     difference = models.BigIntegerField("Chênh lệch (thực tế - phải có)")
-    manager = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Quản lý ca phụ trách",
+    manager = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người phụ trách ca",
                                 on_delete=models.PROTECT, related_name="+")
     over_threshold = models.BooleanField("Vượt ngưỡng", default=False)
     threshold = models.BigIntegerField("Ngưỡng đã áp dụng", null=True, blank=True)
-    explanation = models.TextField("Giải trình của Quản lý ca", blank=True)
+    explanation = models.TextField("Giải trình", blank=True)
     explained_at = models.DateTimeField("Giải trình lúc", null=True, blank=True)
     decision = models.CharField("Quyết định của Chủ quán", max_length=20, choices=Decision.choices, blank=True,
                                 default=Decision.NONE)

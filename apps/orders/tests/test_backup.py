@@ -170,7 +170,7 @@ class HistoricalSlipTests(BackupBase):
             shift_services.close_shift(self.manager, self.shift.pk)  # phiếu chờ xác nhận chặn kết ca
         slip = BackupSlip.objects.get()
         with self.assertRaises(ValidationError):
-            backup.confirm_slip(self.manager, key(), slip.pk, {1: 25000}, {1: self.d["v1"].pk})  # không phải Chủ quán
+            backup.confirm_slip(self.cashier, key(), slip.pk, {1: 25000}, {1: self.d["v1"].pk})  # không phải Chủ quán
         with self.assertRaises(ValidationError):
             backup.confirm_slip(self.d["owner"], key(), slip.pk, {1: 25000})  # còn thiếu định mức
         op = key()

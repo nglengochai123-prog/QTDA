@@ -34,9 +34,9 @@ class ScreenTests(Base):
         from apps.core import params
         self.assertEqual(params.get("cash_threshold"), 70000)
         self.assertEqual(self.client.get(reverse("control:adjustment_report", args=[self.shift.pk])).status_code, 200)
-        self.client.force_login(self.manager)
+        self.client.force_login(self.cashier)
         self.assertEqual(self.client.get(reverse("control:exceptions")).status_code, 403)
         self.assertEqual(self.client.get(reverse("control:parameters")).status_code, 403)
-        self.assertEqual(self.client.get(reverse("shifts:status")).status_code, 200)
+        self.assertEqual(self.client.get(reverse("shifts:status")).status_code, 403)
         self.client.force_login(self.d["waiter"])
         self.assertEqual(self.client.get(reverse("shifts:my_shift")).status_code, 403)

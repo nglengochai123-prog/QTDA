@@ -30,7 +30,7 @@ class AttendanceTests(TestCase):
     def setUp(self):
         self.d = build_menu()
         self.barista = self.d["barista"]
-        self.manager = User.objects.create_user("qlca", password=PASSWORD, role=Role.QUAN_LY_CA)
+        self.owner = self.d["owner"]
         self.yesterday = timezone.localdate() - timedelta(days=1)
 
     def test_clock_in_with_own_role_and_out_once(self):
@@ -61,10 +61,10 @@ class AttendanceTests(TestCase):
 
         self.assertEqual(AuditLog.objects.filter(reason=timekeeping.MISSING_OUT).count(), 1)
         with self.assertRaises(ValidationError):
-            timekeeping.supplement_clock_out(self.manager, att.pk, at(self.yesterday, 22), "")
+            timekeeping.supplement_clock_out(self.owner, att.pk, at(self.yesterday, 22), "")
         with self.assertRaises(ValidationError):
             timekeeping.supplement_clock_out(self.barista, att.pk, at(self.yesterday, 22), "Quên")
-        att = timekeeping.supplement_clock_out(self.manager, att.pk, at(self.yesterday, 22), "Quên thao tác")
+        att = timekeeping.supplement_clock_out(self.owner, att.pk, at(self.yesterday, 22), "Quên thao tác")
         self.assertEqual(timekeeping.valid_hours(att), Decimal("5.00"))
         self.assertFalse(timekeeping.missing_clock_out().exists())
 

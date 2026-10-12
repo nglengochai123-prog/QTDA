@@ -35,7 +35,7 @@ class ParameterHistoryTests(Base):
         with self.assertRaises(ValidationError):  # không lùi hiệu lực về quá khứ
             params.set_value("cash_threshold", 10000, owner, effective_from=timezone.now() - timedelta(hours=2))
         with self.assertRaises(ValidationError):
-            params.set_value("cash_threshold", 10000, self.manager)
+            params.set_value("cash_threshold", 10000, self.cashier)
         with self.assertRaises(ValueError):  # lịch sử không sửa được
             row = ParameterValue.objects.first()
             row.value = 1
@@ -46,18 +46,18 @@ class ParameterHistoryTests(Base):
         order, line = self.order()
         old = self.request(self.d["waiter"], order, "huy_mon", line=line.pk, cups=1)
         params.set_value("approval_level_minutes", 5, self.d["owner"])
-        self.assertEqual(old.effective_level(old.level_since + timedelta(minutes=3, seconds=1)), Level.BACKUP)
-        adjustments.decide(self.manager, key(), old.pk, False)
+        self.assertEqual(old.effective_level(old.level_since + timedelta(minutes=3, seconds=1)), Level.EXHAUSTED)
+        adjustments.decide(self.d["owner"], key(), old.pk, False)
         new = self.request(self.d["waiter"], order, "huy_mon", line=line.pk, cups=1)
         self.assertEqual(new.level_minutes, 5)
-        self.assertEqual(new.effective_level(new.level_since + timedelta(minutes=3, seconds=1)), Level.SHIFT)
-        self.assertEqual(new.effective_level(new.level_since + timedelta(minutes=5, seconds=1)), Level.BACKUP)
+        self.assertEqual(new.effective_level(new.level_since + timedelta(minutes=3, seconds=1)), Level.OWNER)
+        self.assertEqual(new.effective_level(new.level_since + timedelta(minutes=5, seconds=1)), Level.EXHAUSTED)
 
     def test_threshold_change_after_close_does_not_change_shift_result(self):
-        shift_services.add_cash_entry(self.manager, key(), self.shift.pk, "dau_ca", 500000)
-        shift_services.close_shift(self.manager, self.shift.pk)
+        shift_services.add_cash_entry(self.cashier, key(), self.shift.pk, "dau_ca", 500000)
+        shift_services.close_shift(self.cashier, self.shift.pk)
         params.set_value("cash_threshold", 10000, self.d["owner"])  # đổi sau khi ca đã kết
-        shift_services.submit_report(self.manager, self.shift.pk, 480000, 0)  # thiếu 20.000
+        shift_services.submit_report(self.cashier, self.shift.pk, 480000, 0)  # thiếu 20.000
         d = Discrepancy.objects.get()
         self.assertEqual((d.difference, d.threshold, d.over_threshold), (-20000, 50000, False))
 
@@ -67,16 +67,16 @@ class OverdueSeparationTests(Base):
         order, line = self.order()
         req = self.request(self.d["waiter"], order, "huy_mon", line=line.pk, cups=1)
         t = req.level_since + timedelta(minutes=3, seconds=1)
-        self.assertTrue(adjustments.can_decide(self.backup, req, now=t))
+        self.assertEqual(req.effective_level(t), Level.EXHAUSTED)
         req.refresh_from_db()
-        self.assertEqual(req.level, Level.SHIFT)  # đọc không ghi gì
+        self.assertEqual(req.level, Level.OWNER)  # đọc không ghi gì
         self.assertFalse(AuditLog.objects.filter(reason__startswith="Chuyển cấp").exists())
-        # Tác vụ định kỳ ghi lại chuyển cấp và nhật ký; chạy lại không ghi thêm.
+        # Tác vụ định kỳ ghi lại lần quá hạn và nhật ký; chạy lại không ghi thêm.
         periodic.run_all(req.level_since + timedelta(minutes=6, seconds=1))
         periodic.run_all(req.level_since + timedelta(minutes=6, seconds=1))
         req.refresh_from_db()
-        self.assertEqual(req.level, Level.OWNER)
-        self.assertEqual(AuditLog.objects.filter(reason__startswith="Chuyển cấp").count(), 2)
+        self.assertEqual(req.level, Level.EXHAUSTED)
+        self.assertEqual(AuditLog.objects.filter(reason__startswith="Chuyển cấp").count(), 1)
 
     def test_exhausted_request_detected_on_bill_without_periodic_task(self):
         order, line = self.order()

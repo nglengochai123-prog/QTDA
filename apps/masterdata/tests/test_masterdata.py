@@ -22,8 +22,7 @@ def dt(value):
 class MasterDataTests(TestCase):
     def setUp(self):
         self.d = build_menu()
-        self.manager = User.objects.create_user("qlca", password=PASSWORD, role=Role.QUAN_LY_CA)
-        self.backup = User.objects.create_user("duphong", password=PASSWORD, role=Role.QUAN_LY_CA)
+        self.manager = User.objects.create_user("thungan", password=PASSWORD, role=Role.THU_NGAN)
         self.client.login(username=self.d["owner"].username, password=PASSWORD)
 
     def url(self, key, pk=None, action=None):
@@ -37,26 +36,24 @@ class MasterDataTests(TestCase):
             self.assertEqual(self.client.get(reverse("masterdata:list", args=[key])).status_code, 200, key)
             self.assertEqual(self.client.get(self.url(key)).status_code, 200, key)
         self.assertEqual(self.client.get(reverse("masterdata:audit_log")).status_code, 200)
-        self.client.login(username="qlca", password=PASSWORD)
+        self.client.login(username="thungan", password=PASSWORD)
         self.assertEqual(self.client.get(reverse("masterdata:list", args=["mon"])).status_code, 403)
         self.assertEqual(self.client.post(self.url("ban"), {"code": "99", "seats": 2, "sort_order": 0}).status_code, 403)
         self.assertEqual(self.client.get(reverse("masterdata:audit_log")).status_code, 403)
 
-    def test_add_shift_requires_backup_approver_and_is_logged(self):
+    def test_add_shift_by_owner_is_logged(self):
+        # Không còn Quản lý ca: Chủ quán tạo ca là người phụ trách duyệt; không cần người duyệt dự phòng.
         start = timezone.now() + timedelta(days=1)
-        form = {"name": "Ca sáng", "starts_at": dt(start), "ends_at": dt(start + timedelta(hours=8)),
-                "approver": self.manager.pk}
+        form = {"name": "Ca sáng", "starts_at": dt(start), "ends_at": dt(start + timedelta(hours=8))}
+        r = self.client.post(self.url("ca"), {**form, "ends_at": dt(start - timedelta(hours=1))})
+        self.assertContains(r, "Giờ kết thúc phải sau giờ bắt đầu")
         r = self.client.post(self.url("ca"), form)
-        self.assertContains(r, "người duyệt dự phòng")
-        self.assertFalse(Shift.objects.exists())
-        r = self.client.post(self.url("ca"), {**form, "backup_approver": self.backup.pk})
         self.assertRedirects(r, reverse("masterdata:list", args=["ca"]))
         shift = Shift.objects.get()
-        self.assertEqual(shift.store, self.d["store"])
+        self.assertEqual((shift.store, shift.approver), (self.d["store"], self.d["owner"]))
         self.assertTrue(AuditLog.objects.filter(object_type="shifts.Shift", object_id=str(shift.pk), action="create").exists())
-        # Gợi ý ca kế tiếp: cùng tên, cùng người duyệt
         page = self.client.get(self.url("ca"))
-        self.assertContains(page, 'value="Ca sáng"')
+        self.assertContains(page, 'value="Ca sáng"')  # gợi ý ca kế tiếp
 
     def test_employee_account_password_and_quit_locks(self):
         r = self.client.post(self.url("nhan-vien"), {"full_name": "Lê Văn Bình", "phone": "0901234567",

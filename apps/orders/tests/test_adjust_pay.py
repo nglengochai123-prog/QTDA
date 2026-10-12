@@ -26,7 +26,7 @@ class Base(TestCase):
     def setUp(self):
         self.d = build_menu()
         mk = lambda name, role: User.objects.create_user(name, password=PASSWORD, role=role)  # noqa: E731
-        self.manager = mk("qlca", Role.QUAN_LY_CA)
+        self.manager = mk("qlca", Role.CHU_QUAN)  # Chủ quán trực ca duyệt (đã bỏ vai trò Quản lý ca)
         self.backup = mk("duphong", Role.PHUC_VU)
         self.cashier = mk("thungan", Role.THU_NGAN)
         self.authorizer = mk("uyquyen", Role.THU_NGAN)
@@ -94,16 +94,21 @@ class AdjustmentTests(Base):
         self.assertFalse(PostPrepCancellation.objects.exists())
 
     def test_requester_cannot_self_approve(self):
-        # AC-22
+        # AC-22 sau khi bỏ Quản lý ca (12/10/2026): một cấp duyệt là Chủ quán; nhân viên không tự duyệt.
         order, line = self.order()
-        req = self.request(self.manager, order, "chuyen_ban", target_table=self.other_table.pk)
-        self.assertEqual(req.level, AdjustmentRequest.Level.BACKUP)
-        self.assertFalse(adjustments.can_decide(self.manager, req))
+        req = self.request(self.cashier, order, "chuyen_ban", target_table=self.other_table.pk)
+        self.assertEqual(req.level, AdjustmentRequest.Level.OWNER)
+        self.assertFalse(adjustments.can_decide(self.cashier, req))
+        self.assertFalse(adjustments.can_decide(self.d["waiter"], req))
         with self.assertRaises(ValidationError):
-            adjustments.decide(self.manager, key(), req.pk, True)
-        adjustments.decide(self.backup, key(), req.pk, True)
+            adjustments.decide(self.cashier, key(), req.pk, True)
+        adjustments.decide(self.d["owner"], key(), req.pk, True)
         order.refresh_from_db()
         self.assertEqual(order.table, self.other_table)
+        # Chủ quán tự gửi yêu cầu thì tự duyệt được, có nhật ký người gửi và người duyệt.
+        order2, _ = self.order()
+        own = self.request(self.d["owner"], order2, "chuyen_ban", target_table=self.other_table.pk)
+        self.assertTrue(adjustments.can_decide(self.d["owner"], own))
 
     def test_paid_invoice_cancel_only_owner(self):
         # AC-23
@@ -112,30 +117,28 @@ class AdjustmentTests(Base):
         payments.pay_table(self.cashier, key(), order.table_id, "tien_mat")
         req = self.request(self.cashier, Order.objects.get(pk=order.pk), "huy_hoa_don")
         self.assertEqual(req.level, AdjustmentRequest.Level.OWNER)
-        self.assertFalse(adjustments.can_decide(self.manager, req))
+        self.assertFalse(adjustments.can_decide(self.cashier, req))
         adjustments.decide(self.d["owner"], key(), req.pk, True)
         order.refresh_from_db()
         self.assertEqual(order.status, Order.Status.CANCELLED)
         self.assertEqual(order.payment.status, Payment.Status.VOIDED)
 
     def test_escalation_every_level_logged(self):
-        # AC-24: 3 phút lên dự phòng, thêm 3 phút lên Chủ quán.
+        # AC-24 sau khi bỏ Quản lý ca: chờ Chủ quán ngay từ đầu; quá thời hạn thì ghi "quá hạn mọi cấp".
         order, line = self.order()
         req = self.request(self.d["waiter"], order, "huy_mon", line=line.pk, cups=1)
+        self.assertEqual(req.level, AdjustmentRequest.Level.OWNER)
         self.assertFalse(adjustments.can_decide(self.backup, req))
         start = req.level_since
-        adjustments.escalate_due(start + timedelta(minutes=3, seconds=1))
-        req.refresh_from_db()
-        self.assertEqual(req.level, AdjustmentRequest.Level.BACKUP)
-        self.assertTrue(adjustments.can_decide(self.backup, req))
-        adjustments.escalate_due(start + timedelta(minutes=6, seconds=1))
+        adjustments.escalate_due(start + timedelta(minutes=2))
         req.refresh_from_db()
         self.assertEqual(req.level, AdjustmentRequest.Level.OWNER)
-        adjustments.escalate_due(start + timedelta(minutes=9, seconds=1))
+        adjustments.escalate_due(start + timedelta(minutes=3, seconds=1))
         req.refresh_from_db()
         self.assertEqual(req.level, AdjustmentRequest.Level.EXHAUSTED)
+        self.assertTrue(adjustments.can_decide(self.d["owner"], req))
         self.assertEqual(AuditLog.objects.filter(object_type="orders.AdjustmentRequest",
-                                                 reason__startswith="Chuyển cấp").count(), 3)
+                                                 reason__startswith="Chuyển cấp").count(), 1)
 
     def test_change_item_and_reject(self):
         order, line = self.order()
@@ -196,7 +199,7 @@ class PaymentTests(Base):
         self.finish(line)
         self.request(self.d["waiter"], order, "chuyen_ban", target_table=self.other_table.pk)
         state = payments.bill(order.table)
-        self.assertIn("Người duyệt trong ca", state["blockers"][0])
+        self.assertIn("Chủ quán", state["blockers"][0])
         with self.assertRaises(ValidationError):
             payments.pay_table(self.cashier, key(), order.table_id, "tien_mat")
 

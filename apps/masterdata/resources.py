@@ -33,14 +33,11 @@ def _local(dt):
 
 def _shift_form(form, obj, request):
     people = User.objects.filter(is_active=True).order_by("first_name", "last_name")
-    for name in ("approver", "backup_approver", "payment_authorizer"):
-        if name in form.fields:
-            form.fields[name].queryset = people
+    if "payment_authorizer" in form.fields:
+        form.fields["payment_authorizer"].queryset = people
     if obj is None and not form.is_bound:
         last = Shift.objects.order_by("-starts_at").first()
-        if last is not None:  # gợi ý người duyệt theo ca gần nhất để thêm ca nhanh
-            form.initial.setdefault("approver", last.approver_id)
-            form.initial.setdefault("backup_approver", last.backup_approver_id)
+        if last is not None:  # gợi ý theo ca gần nhất để thêm ca nhanh
             form.initial.setdefault("payment_authorizer", last.payment_authorizer_id)
             # Gợi ý ca kế tiếp cùng giờ với ca gần nhất (không sớm hơn hôm nay).
             start, end = timezone.localtime(last.starts_at), timezone.localtime(last.ends_at)
@@ -51,14 +48,26 @@ def _shift_form(form, obj, request):
             form.initial.setdefault("ends_at", (end + shift_by).strftime("%Y-%m-%dT%H:%M"))
 
 
+def _save_shift(request, form, created):
+    shift = form.save(commit=False)
+    if created:
+        # Chủ quán trực tiếp quản lý ca (12/10/2026): người tạo ca là người phụ trách duyệt trong ca.
+        shift.approver = request.user
+        from apps.core.models import Store
+
+        shift.store = request.user.store or Store.get_default()
+    shift.save()
+    return shift
+
+
 register(Resource(
     key="ca", title="Ca làm việc", singular="Ca", model=Shift,
-    fields=["name", "starts_at", "ends_at", "approver", "backup_approver", "payment_authorizer"],
+    fields=["name", "starts_at", "ends_at", "payment_authorizer"],
     columns=[("Ca", "name"), ("Bắt đầu", lambda s: _local(s.starts_at)), ("Kết thúc", lambda s: _local(s.ends_at)),
-             ("Quản lý ca", "approver"), ("Duyệt dự phòng", lambda s: s.backup_approver or "Chưa có"),
-             ("Trạng thái", "status")],
+             ("Ủy quyền thanh toán theo món", lambda s: s.payment_authorizer or "Chưa có"), ("Trạng thái", "status")],
+    save=_save_shift,
     search=("name",), filters=[("trang-thai", "Trạng thái", "status", Shift.Status.choices)],
-    queryset=lambda: Shift.objects.select_related("approver", "backup_approver").order_by("-starts_at"),
+    queryset=lambda: Shift.objects.select_related("payment_authorizer").order_by("-starts_at"),
     editable=lambda s: s.status == Shift.Status.OPEN, prepare_form=_shift_form,
 ))
 

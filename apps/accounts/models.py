@@ -12,10 +12,14 @@ class Role(models.TextChoices):
     """Năm vai trò theo Bảng 5.3 của BRD."""
 
     CHU_QUAN = "chu_quan", "Chủ quán"
-    QUAN_LY_CA = "quan_ly_ca", "Quản lý ca"
+    QUAN_LY_CA = "quan_ly_ca", "Quản lý ca (đã bỏ)"
     THU_NGAN = "thu_ngan", "Thu ngân"
     PHUC_VU = "phuc_vu", "Phục vụ"
     PHA_CHE = "pha_che", "Pha chế"
+
+
+# Vai trò còn dùng: bỏ Quản lý ca theo quyết định của Chủ quán ngày 12/10/2026; giá trị cũ giữ cho dữ liệu lịch sử.
+ACTIVE_ROLES = [(v, l) for v, l in Role.choices if v != Role.QUAN_LY_CA]
 
 
 class User(AbstractUser):

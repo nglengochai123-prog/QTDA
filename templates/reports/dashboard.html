@@ -82,7 +82,7 @@
   <p><a href="{% url 'inventory:stock' %}">Xử lý ở trang Tồn kho</a></p>{% else %}<p class="muted">Không có báo Sắp hết chưa xử lý.</p>{% endif %}
 </section>
 <section class="panel" aria-labelledby="acc-title">
-  <h2 id="acc-title">Thiếu tiền chưa giải thích theo Quản lý ca</h2>
+  <h2 id="acc-title">Thiếu tiền chưa giải thích theo người phụ trách ca</h2>
   <p><strong>{{ accumulated|intcomma }} đ</strong> trong tháng.</p>
   {% if acc_chart %}
   <ul class="chart-legend"><li><span class="key key-1"></span>Tích lũy</li><li><span class="key key-target"></span>Ngưỡng {{ acc_limit|intcomma }} đ</li></ul>

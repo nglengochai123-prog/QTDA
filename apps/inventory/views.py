@@ -55,7 +55,7 @@ def quick_report(request):
                                                         p.get("level"), p.get("left") or None), "")
         if result:
             data, _ = result
-            messages.success(request, "Đã báo. Quản lý ca nhận được ngay." +
+            messages.success(request, "Đã báo. Chủ quán nhận được ngay." +
                              (" Đã ghi một trường hợp thiếu nguyên liệu hôm nay." if data["shortage_recorded"] else ""))
         return redirect("inventory:quick_report")
     items = list(_ingredients())
