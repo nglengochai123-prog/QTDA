@@ -2,8 +2,8 @@
 {% load humanize %}
 {% block title %}Đơn đang mở · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<h1>Đơn đang mở</h1>
-<p class="lead-muted">Đơn đã gửi pha chế bị khóa. Cần hủy món, đổi món hay chuyển bàn thì gửi yêu cầu điều chỉnh có lý do.</p>
+<header class="page-head"><h1>Đơn đang mở</h1></header>
+<details class="help-tip"><summary>Giải thích</summary><p>Đơn đã gửi pha chế bị khóa. Cần hủy món, đổi món hay chuyển bàn thì gửi yêu cầu điều chỉnh có lý do.</p></details>
 {% if orders %}
 <div class="order-list">
   {% for order in orders %}

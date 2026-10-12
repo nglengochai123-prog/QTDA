@@ -2,8 +2,8 @@
 {% load humanize %}
 {% block title %}Tham số · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<h1>Tham số quản trị</h1>
-<p class="lead-muted">Mỗi lần lưu là một giá trị mới có thời điểm hiệu lực; giá trị cũ được giữ để các ca, yêu cầu và báo cáo đã chốt không bị tính lại. Để trống “Hiệu lực từ” nghĩa là áp dụng ngay.</p>
+<header class="page-head"><h1>Tham số quản trị</h1></header>
+<details class="help-tip"><summary>Giải thích</summary><p>Mỗi lần lưu là một giá trị mới có thời điểm hiệu lực; giá trị cũ được giữ để các ca, yêu cầu và báo cáo đã chốt không bị tính lại. Để trống “Hiệu lực từ” nghĩa là áp dụng ngay.</p></details>
 <ul class="ruled-list">
   {% for p in rows %}
   <li class="param-row">

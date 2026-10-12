@@ -3,7 +3,7 @@
 {% block content %}
 <p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
 <h1>Ghi hao hụt xuất kho</h1>
-<p class="lead-muted">Nguyên liệu hư, hết hạn, đổ vỡ hoặc pha hỏng trước khi bấm Xong. Món đã pha rồi bị hủy thì không ghi ở đây; hệ thống tự ghi khi yêu cầu hủy được duyệt.</p>
+<details class="help-tip"><summary>Giải thích</summary><p>Nguyên liệu hư, hết hạn, đổ vỡ hoặc pha hỏng trước khi bấm Xong. Món đã pha rồi bị hủy thì không ghi ở đây; hệ thống tự ghi khi yêu cầu hủy được duyệt.</p></details>
 <form data-draft="hao-hut" method="post" class="mini-form narrow" data-once>{% csrf_token %}
   <input type="hidden" name="operation_key" value="{{ operation_key }}">
   <div class="field"><label for="w-ing">Nguyên vật liệu</label><select class="input" id="w-ing" name="ingredient" required>

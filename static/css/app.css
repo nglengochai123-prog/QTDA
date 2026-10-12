@@ -714,3 +714,9 @@ select.input { appearance: auto; }
 .shortcut .icon { width: 26px; height: 26px; color: var(--primary); stroke-width: 1.6; }
 .shortcut:hover { border-color: var(--primary); background: var(--primary-soft); text-decoration: none; }
 @media (max-width: 899px) { .widget-grid { grid-template-columns: 1fr; } }
+.help-tip { margin: 0 0 1rem; font-size: var(--text-sm); color: var(--fg-2); }
+.help-tip summary { display: inline-flex; align-items: center; gap: 0.25rem; cursor: pointer; color: var(--fg-3); list-style: none; }
+.help-tip summary::-webkit-details-marker { display: none; }
+.help-tip summary::before { content: "i"; display: inline-grid; place-items: center; width: 16px; height: 16px; border: 1px solid currentColor; border-radius: 50%; font-size: 11px; font-style: italic; font-weight: 700; }
+.help-tip[open] summary { color: var(--primary); }
+.help-tip p { margin: 0.375rem 0 0; max-width: 75ch; padding: 0.625rem 0.875rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }

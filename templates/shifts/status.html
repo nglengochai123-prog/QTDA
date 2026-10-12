@@ -2,7 +2,7 @@
 {% load humanize %}
 {% block title %}Tình trạng ca · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<h1>Tình trạng ca và đối soát</h1>
+<header class="page-head"><h1>Tình trạng ca và đối soát</h1></header>
 
 {% if control %}
 <section class="panel" aria-labelledby="ctrl-title">
@@ -15,7 +15,7 @@
     <div><dt>Đã thu hồi</dt><dd>{{ control.recovered|intcomma }} đ</dd></div>
     <div><dt>Đã xác minh còn lại</dt><dd>{{ control.verified_remaining|intcomma }} đ</dd></div>
   </dl>
-  <p class="muted">Cập nhật {{ control.updated_at|date:"H:i d/m" }} · {{ control.open_cases }} vụ việc chưa kết luận. Đây là số tổng hợp để theo dõi, không phải kết luận toàn bộ số đã thất thoát. Mục tiêu BO-01 là chỉ tiêu dự án; ngưỡng cảnh báo thiếu tiền tích lũy toàn quán ({{ store_threshold|intcomma }} đ/tháng) là tham số riêng.</p>
+  <details class="help-tip"><summary>Giải thích</summary><p>Cập nhật {{ control.updated_at|date:"H:i d/m" }} · {{ control.open_cases }} vụ việc chưa kết luận. Đây là số tổng hợp để theo dõi, không phải kết luận toàn bộ số đã thất thoát. Mục tiêu BO-01 là chỉ tiêu dự án; ngưỡng cảnh báo thiếu tiền tích lũy toàn quán ({{ store_threshold|intcomma }} đ/tháng) là tham số riêng.</p></details>
 </section>
 {% endif %}
 

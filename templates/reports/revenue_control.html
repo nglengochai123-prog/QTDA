@@ -2,7 +2,7 @@
 {% load humanize %}
 {% block title %}Báo cáo kiểm soát doanh thu · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<h1>Báo cáo kiểm soát doanh thu</h1>
+<header class="page-head"><h1>Báo cáo kiểm soát doanh thu</h1></header>
 <form method="get" class="inline-form" aria-label="Chọn kỳ">
   <label for="p-from">Từ</label><input class="input input-sm" id="p-from" type="date" name="tu" value="{{ start|date:'Y-m-d' }}">
   <label for="p-to">đến</label><input class="input input-sm" id="p-to" type="date" name="den" value="{{ end|date:'Y-m-d' }}">
@@ -18,7 +18,7 @@
     <div><dt>Đã thu hồi</dt><dd>{{ control.recovered|intcomma }} đ</dd></div>
     <div><dt>Đã xác minh còn lại</dt><dd>{{ control.verified_remaining|intcomma }} đ</dd></div>
   </dl>
-  <p class="muted">Cập nhật {{ control.updated_at|date:"H:i d/m" }} · {{ control.open_cases }} vụ việc chưa kết luận. Khoản thiếu khi được xác minh chuyển nhóm và chỉ tính một lần. Hành vi không gây mất tiền và chênh lệch tiêu hao chưa xác minh không cộng vào chỉ tiêu.</p>
+  <details class="help-tip"><summary>Giải thích</summary><p>Cập nhật {{ control.updated_at|date:"H:i d/m" }} · {{ control.open_cases }} vụ việc chưa kết luận. Khoản thiếu khi được xác minh chuyển nhóm và chỉ tính một lần. Hành vi không gây mất tiền và chênh lệch tiêu hao chưa xác minh không cộng vào chỉ tiêu.</p></details>
 </section>
 <section class="panel" aria-labelledby="cases-title"><h2 id="cases-title">Vụ việc tổn thất</h2>
   {% if cases %}<ul class="ruled-list compact">{% for c in cases %}<li class="row-between"><span><a href="{% url 'control:case_detail' c.pk %}">{{ c.code }}</a> · {{ c.title }} · {{ c.get_status_display }}</span><span>xác minh {{ c.verified_amount|default_if_none:"–"|intcomma }} đ · thu hồi {{ c.recovered_amount|intcomma }} đ</span></li>{% endfor %}</ul>

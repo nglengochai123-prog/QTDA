@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Báo cáo nguyên vật liệu · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<h1>Báo cáo nguyên vật liệu theo kỳ</h1>
+<header class="page-head"><h1>Báo cáo nguyên vật liệu theo kỳ</h1></header>
 <form method="get" class="inline-form" aria-label="Chọn kỳ">
   <label for="p-from">Từ</label><input class="input input-sm" id="p-from" type="date" name="tu" value="{{ start|date:'Y-m-d' }}">
   <label for="p-to">đến</label><input class="input input-sm" id="p-to" type="date" name="den" value="{{ end|date:'Y-m-d' }}">
   <button class="btn btn-quiet" type="submit">Xem</button>
 </form>
-<p class="muted">Tồn đầu + nhập − tiêu hao theo món − hao hụt ± điều chỉnh kiểm kê = tồn cuối. Hủy sau pha chế là một phần của tiêu hao theo món, không trừ lần hai. Trường hợp thiếu nguyên liệu trong kỳ: <strong>{{ shortages }}</strong> (mục tiêu BO-02 không quá {{ bo02_target }} mỗi tháng). Bấm tên hoặc số liệu để xem các dòng sổ kho tạo nên số đó. Cột nhu cầu ước tính chờ logic dự báo.</p>
+<details class="help-tip"><summary>Giải thích</summary><p>Tồn đầu + nhập − tiêu hao theo món − hao hụt ± điều chỉnh kiểm kê = tồn cuối. Hủy sau pha chế là một phần của tiêu hao theo món, không trừ lần hai. Trường hợp thiếu nguyên liệu trong kỳ: <strong>{{ shortages }}</strong> (mục tiêu BO-02 không quá {{ bo02_target }} mỗi tháng). Bấm tên hoặc số liệu để xem các dòng sổ kho tạo nên số đó. Cột nhu cầu ước tính chờ logic dự báo.</p></details>
 <div class="table-wrap"><table class="data-table">
   <thead><tr><th scope="col">Nguyên liệu</th><th scope="col" class="num">Tồn đầu</th><th scope="col" class="num">Nhập</th><th scope="col" class="num">Tiêu hao theo món</th><th scope="col" class="num">Trong đó hủy sau pha chế</th><th scope="col" class="num">Hao hụt</th><th scope="col" class="num">Kiểm kê ±</th><th scope="col" class="num">Tồn cuối</th><th scope="col" class="num">Thiếu</th><th scope="col">Nhu cầu ước tính</th></tr></thead>
   <tbody>{% for r in rows %}<tr>{% with base=r.ingredient.pk|stringformat:"d" %}<th scope="row"><a href="{% url 'inventory:ledger' %}?nvl={{ base }}&amp;tu={{ start|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}">{{ r.ingredient.name }}</a> <span class="muted">({{ r.ingredient.get_unit_display }})</span></th>
