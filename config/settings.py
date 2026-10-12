@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     "apps.orders",
     "apps.control",
     "apps.reports",
+    "apps.masterdata.apps.MasterdataConfig",
 ]
 
 MIDDLEWARE = [

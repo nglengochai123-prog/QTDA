@@ -8,6 +8,12 @@ def site(request):
     return {"STORE_NAME": settings.LAM_STORE_NAME}
 
 
+# Biểu tượng và nhãn ngắn của từng phân hệ trên thanh biểu tượng bên trái (kiểu ServiceDesk Plus).
+GROUP_ICONS = {"Tổng quan": "home", "Bán hàng": "order", "Ca và nhân sự": "shift", "Kho": "stock",
+               "Kiểm soát": "control_report", "Báo cáo": "revenue", "Quản trị": "params"}
+GROUP_SHORT = {"Tổng quan": "Trang chủ", "Ca và nhân sự": "Ca, nhân sự"}
+
+
 def navigation(request):
     """Mục điều hướng theo quyền. Chỉ liệt kê màn hình đã có; màn hình mới thêm vào đây kèm quyền."""
     user = getattr(request, "user", None)
@@ -15,7 +21,9 @@ def navigation(request):
         return {}
     # Mục đánh dấu desktop chỉ hiện trên máy tính (thanh dưới điện thoại giữ tối đa 4 mục).
     desktop_only = {"bar", "data", "log", "cashier", "status", "exceptions", "cases", "params", "backup", "workload",
-                    "revenue", "control_report", "materials", "dashboard", "lookup", "ledger"}
+                    "revenue", "control_report", "materials", "dashboard", "lookup", "ledger"} | {
+        "md_ca", "md_nhan-vien", "md_mon", "md_nhom-mon", "md_tuy-chon", "md_ban", "md_nguyen-lieu", "md_dinh-muc",
+        "md_nha-cung-cap", "md_ly-do"}
     # Nhóm điều hướng theo nghiệp vụ (DESIGN.md: bố cục quản trị); trên điện thoại chỉ hiện tối đa 5 mục.
     groups = [
         (None, [("home", "Trang chủ", reverse("core:home"), None),
@@ -47,8 +55,17 @@ def navigation(request):
             ("materials", "Nguyên vật liệu", reverse("reports:materials"), Cap.VIEW_DASHBOARD)]),
         ("Quản trị", [
             ("params", "Tham số", reverse("control:parameters"), Cap.MASTER_DATA),
-            ("data", "Dữ liệu nền", reverse("admin:index"), Cap.MASTER_DATA),
-            ("log", "Nhật ký", reverse("admin:audit_auditlog_changelist"), Cap.AUDIT_LOG)]),
+            ("md_ca", "Ca làm việc", reverse("masterdata:list", args=["ca"]), Cap.MASTER_DATA),
+            ("md_nhan-vien", "Nhân viên", reverse("masterdata:list", args=["nhan-vien"]), Cap.MASTER_DATA),
+            ("md_mon", "Món và giá", reverse("masterdata:list", args=["mon"]), Cap.MASTER_DATA),
+            ("md_nhom-mon", "Nhóm món", reverse("masterdata:list", args=["nhom-mon"]), Cap.MASTER_DATA),
+            ("md_tuy-chon", "Tùy chọn", reverse("masterdata:list", args=["tuy-chon"]), Cap.MASTER_DATA),
+            ("md_ban", "Bàn", reverse("masterdata:list", args=["ban"]), Cap.MASTER_DATA),
+            ("md_nguyen-lieu", "Nguyên vật liệu", reverse("masterdata:list", args=["nguyen-lieu"]), Cap.MASTER_INVENTORY),
+            ("md_dinh-muc", "Định mức", reverse("masterdata:list", args=["dinh-muc"]), Cap.MASTER_INVENTORY),
+            ("md_nha-cung-cap", "Nhà cung cấp", reverse("masterdata:list", args=["nha-cung-cap"]), Cap.MASTER_INVENTORY),
+            ("md_ly-do", "Lý do điều chỉnh", reverse("masterdata:list", args=["ly-do"]), Cap.MASTER_DATA),
+            ("log", "Nhật ký", reverse("masterdata:audit_log"), Cap.AUDIT_LOG)]),
     ]
     items = [(key, label, url, cap, group) for group, entries in groups for key, label, url, cap in entries]
     path = request.path
@@ -78,13 +95,20 @@ def navigation(request):
     for item in nav:
         label = item["group"] or "Tổng quan"
         if not nav_groups or nav_groups[-1]["label"] != label:
-            nav_groups.append({"label": label, "url": item["url"], "items": [], "active": False})
+            nav_groups.append({"label": label, "url": item["url"], "items": [], "active": False,
+                               "icon": GROUP_ICONS.get(label, "home"), "short": GROUP_SHORT.get(label, label)})
         nav_groups[-1]["items"].append(item)
         nav_groups[-1]["active"] = nav_groups[-1]["active"] or item["active"]
     active_group = next((g for g in nav_groups if g["active"]), None)
     can_order = user_can(user, Cap.ORDER_CREATE)
     # Bảng điều khiển không nằm ở thanh dưới điện thoại; Trang chủ có lối vào (AC-100: Chủ quán mở trên điện thoại).
-    return {"NAV_ITEMS": nav, "NAV_GROUPS": nav_groups, "NAV_ACTIVE_GROUP": active_group, "APPROVALS_COUNT_URL": reverse("orders:approvals_count"),
+    header = {
+        "alerts": reverse("control:alerts") if user_can(user, Cap.HANDLE_ALERTS) else "",
+        "approvals": reverse("orders:approvals") if user_can(user, Cap.ORDER_ADJUST_APPROVE) else "",
+        "settings": reverse("control:parameters") if user_can(user, Cap.MASTER_DATA) else "",
+        "initial": (user.given_name or user.username or "?")[:1].upper(),
+    }
+    return {"NAV_ITEMS": nav, "HEADER": header, "NAV_GROUPS": nav_groups, "NAV_ACTIVE_GROUP": active_group, "APPROVALS_COUNT_URL": reverse("orders:approvals_count"),
             "QUICK_REPORT_COUNT_URL": reverse("inventory:quick_report_count") if user_can(user, Cap.VIEW_WORKLOAD) else "",
             "STOCK_URL": reverse("inventory:stock"),
             "APPROVALS_URL": reverse("orders:approvals"), "READY_COUNT_URL": reverse("orders:ready_count") if can_order else "",
