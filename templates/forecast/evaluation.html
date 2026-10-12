@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Đánh giá dự báo · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head"><h1>Đánh giá dự báo</h1>
+  <span class="muted">{{ result.eligible }} ngày đủ điều kiện / {{ result.days }} ngày</span></header>
+<details class="help-tip"><summary>Giải thích</summary><p>Đánh giá cuốn chiếu: tại mỗi mốc chỉ dùng dữ liệu trước mốc để dự báo 1, 3 và 7 ngày sau, rồi so với số bán thực. Hệ số thích nghi của mô hình được chọn trên nửa đầu các mốc; số liệu dưới đây chỉ tính trên nửa sau (giai đoạn kiểm tra), trên cùng các ngày mà cả ba cách đều có dự báo. CRPS đo độ khớp của cả phân phối dự báo, càng nhỏ càng tốt. "Trong khoảng" là tỷ lệ số bán thực nằm trong khoảng 10%–90% (lý tưởng gần 80%); khoảng quá rộng thì dễ đạt nhưng ít hữu ích. MAE là số ly lệch trung bình của trung vị dự báo; lệch dương là dự báo dư. Đánh giá thử có ý nghĩa từ khoảng {{ result.min_history }} ngày dữ liệu (8 tuần). Kết luận chỉ áp dụng cho từng món; mô hình chỉ được dùng cho đặt hàng khi Chủ quán xác nhận.</p></details>
+{% if result.eligible < result.min_history %}<div class="notice notice-warn" role="status"><div>Mới có {{ result.eligible }} ngày dữ liệu đủ điều kiện; kết quả dưới đây chỉ để kiểm tra phần mềm, chưa đủ căn cứ chọn cách tính.</div></div>{% endif %}
+{% for r in result.rows %}
+<section class="panel">
+  <h2>{{ r.size.item.name }} {{ r.size.name }}</h2>
+  <p class="page-note">Đang dùng cho đặt hàng: <strong>{{ r.current_label }}</strong>
+    · hệ số thích nghi chọn được {{ r.delta }} · {{ r.eligible_days }} ngày học{% if not r.has_prior %} · chưa có nhận định Chủ quán{% endif %}
+    · Kết luận: {% if r.verdict == "mo_hinh_tot_hon" %}<span class="status-ok">mô hình tốt hơn cả hai cách đối chứng ở mọi thời hạn</span>{% elif r.verdict == "chua_tot_hon" %}<span class="status-warn">mô hình chưa tốt hơn</span>{% else %}chưa đủ ngày kiểm tra{% endif %}</p>
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr><th scope="col">Thời hạn</th><th scope="col">Cách</th><th scope="col" class="num">Số ngày kiểm tra</th><th scope="col" class="num">CRPS</th><th scope="col" class="num">MAE</th><th scope="col" class="num">Lệch</th><th scope="col" class="num">Trong khoảng</th><th scope="col" class="num">Độ rộng khoảng</th></tr></thead>
+    <tbody>{% for h, row in r.horizons.items %}{% for label, m in row.items %}<tr>
+      {% if forloop.first %}<th scope="rowgroup" rowspan="3">{{ h }} ngày</th>{% endif %}
+      <td>{% if label == "model" %}Mô hình Bayes động{% elif label == "owner" %}Ước tính ban đầu{% else %}Cùng thứ tuần trước{% endif %}</td>
+      {% if m %}<td class="num">{{ m.n }}</td><td class="num">{{ m.crps }}</td><td class="num">{{ m.mae }}</td><td class="num">{{ m.bias }}</td><td class="num">{{ m.coverage }}%</td><td class="num">{{ m.width }}</td>
+      {% else %}<td class="num" colspan="6"><span class="muted">{% if label == "owner" and not r.has_prior %}Chưa có nhận định của Chủ quán{% else %}Chưa đủ ngày để so{% endif %}</span></td>{% endif %}
+    </tr>{% endfor %}{% endfor %}</tbody>
+  </table></div>
+  <form method="post" action="{% url 'forecast:choose_method' r.size.pk %}" class="inline-action" data-once>{% csrf_token %}
+    <div class="field"><label for="note-{{ r.size.pk }}">Ghi chú quyết định</label><input class="input" id="note-{{ r.size.pk }}" name="note" placeholder="Bắt buộc nếu dùng mô hình khi chưa tốt hơn"></div>
+    <button class="btn btn-primary" name="method" value="bayes" type="submit">Dùng mô hình cho đặt hàng</button>
+    <button class="btn btn-quiet" name="method" value="uoc_tinh" type="submit">Giữ ước tính ban đầu</button>
+  </form>
+</section>
+{% empty %}
+<div class="empty"><p><strong>Chưa có dữ liệu để đánh giá.</strong></p></div>
+{% endfor %}
+{% if weekly %}
+<section class="panel"><h2>Đối chiếu hằng tuần nhu cầu nguyên liệu với tiêu hao thực tế</h2>
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr><th scope="col">Nguyên liệu</th><th scope="col">Tuần từ</th><th scope="col" class="num">Tiêu hao thực tế</th><th scope="col" class="num">Ước tính ban đầu</th><th scope="col" class="num">Sai số</th><th scope="col" class="num">Mô hình (trước 1 ngày)</th><th scope="col" class="num">Sai số</th></tr></thead>
+    <tbody>{% for w in weekly %}<tr><th scope="row">{{ w.name }}</th><td>{{ w.week|date:"d/m/Y" }}</td><td class="num">{{ w.actual|floatformat:"-1g" }}</td>
+      <td class="num">{{ w.owner|default_if_none:"–" }}</td><td class="num">{% if w.owner_err is not None %}{{ w.owner_err }}%{% else %}–{% endif %}</td>
+      <td class="num">{{ w.model|floatformat:"-1g" }}</td><td class="num">{% if w.model_err is not None %}{{ w.model_err }}%{% else %}–{% endif %}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="page-note">Chỉ tính trên các ngày đủ điều kiện. Tiêu hao thực tế lấy theo món đã pha trong sổ kho; hao hụt và hủy sau pha theo dõi riêng.</p>
+</section>
+{% endif %}
+{% endblock %}

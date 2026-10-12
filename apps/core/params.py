@@ -42,11 +42,19 @@ DEFAULTS = {
     "count_threshold_percent": (5, "%", "Ngưỡng chênh lệch kiểm kê từng lần cần Chủ quán xác nhận", "BRU-25"),
     "open_hour": (6, "giờ", "Giờ mở cửa (tính trường hợp thiếu nguyên liệu)", "BRU-26"),
     "close_hour": (22, "giờ", "Giờ đóng cửa (tính trường hợp thiếu nguyên liệu)", "BRU-26"),
+    # Dự báo nhu cầu theo khung lý thuyết Bayes động của dự án (12/10/2026)
+    "forecast_horizon_days": (14, "ngày", "Độ dài chân trời dự báo", "Khung dự báo 4.2"),
+    "forecast_delta_level_percent": (95, "%", "Hệ số chiết khấu mức nền (càng nhỏ càng thích nghi nhanh)", "Khung dự báo 3.1"),
+    "forecast_delta_season_percent": (99, "%", "Hệ số chiết khấu hiệu ứng thứ trong tuần", "Khung dự báo 3.1"),
+    "forecast_prior_max_days": (7, "ngày", "Sức nặng tối đa của nhận định Chủ quán (số ngày quan sát tương đương)", "Khung dự báo 2.1"),
+    "forecast_min_history_days": (56, "ngày", "Số ngày dữ liệu đủ điều kiện để bắt đầu đánh giá có ý nghĩa", "Khung dự báo 5.3"),
+    "forecast_paths": (1000, "đường", "Số đường mô phỏng khi tính tổng nhu cầu nhiều ngày", "Khung dự báo 4.2"),
 }
 
 
 # Căn cứ của giá trị mặc định: BRD nêu rõ, lấy từ ví dụ trong tiêu chí nghiệm thu, hay dự án tự đặt.
 BRD, AC_EXAMPLE, ASSUMPTION = "Theo BRD", "Theo ví dụ trong tiêu chí nghiệm thu", "Giả định chờ Chủ quán xác nhận"
+FRAMEWORK = "Theo khung lý thuyết dự báo"
 BASIS = {
     "approval_level_minutes": (BRD, "Bảng 5.2: mặc định 3 phút"),
     "shift_report_hours": (BRD, "Bảng 5.2: mặc định 2 giờ"),
@@ -71,6 +79,14 @@ BASIS = {
     "consumption_tolerance_percent": (AC_EXAMPLE, "AC-32 dùng mức cho phép 5%"),
     "open_hour": (ASSUMPTION, "BRD chưa nêu giờ mở cửa; tạm đặt 6 giờ"),
     "close_hour": (AC_EXAMPLE, "AC-62: quán đóng cửa lúc 22 giờ"),
+    "forecast_horizon_days": (FRAMEWORK, "Mục 4.2: dự báo từng ngày trong 14 ngày tới, cho phép cấu hình"),
+    "forecast_delta_level_percent": (ASSUMPTION, "Mục 3.1: phải chọn qua đánh giá theo thời gian; tạm dùng 95% (mức thường dùng "
+                                                 "trong West và Harrison 1997) đến khi đánh giá cuốn chiếu chọn lại"),
+    "forecast_delta_season_percent": (ASSUMPTION, "Tạm dùng 99% để hiệu ứng thứ thay đổi chậm; chọn lại qua đánh giá"),
+    "forecast_prior_max_days": (ASSUMPTION, "Mục 2.1: không tạo độ chắc chắn giả từ một ước lượng; tạm giới hạn 7 ngày, "
+                                            "cần kiểm tra độ nhạy"),
+    "forecast_min_history_days": (FRAMEWORK, "Mục 5.3: 8 đến 12 tuần dữ liệu ngày làm mốc khởi đầu đánh giá thử"),
+    "forecast_paths": (ASSUMPTION, "Số đường mô phỏng đủ ổn định phân vị; chỉ ảnh hưởng độ mượt, không đổi phương pháp"),
 }
 
 

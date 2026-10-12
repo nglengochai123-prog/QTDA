@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Đặt hàng đề xuất · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <h1>Đặt hàng đề xuất</h1>
+  {% if rel %}<span class="muted">Theo dự báo phát hành {{ rel.issued_at|date:"H:i d/m/Y" }}</span>{% endif %}
+</header>
+<details class="help-tip"><summary>Giải thích</summary><p>Tồn dự kiến khi hàng về = tồn có thể dùng + lô đã đặt về kịp trước khi hàng của lần đặt mới đến − nhu cầu ước tính trong thời gian giao (BRU-22). Lô giao chậm không được tính. Cần đặt khi tồn dự kiến thấp hơn tồn an toàn. Đề xuất = nhu cầu từ khi hàng về đến lần nhận kế tiếp theo chu kỳ đặt + tồn an toàn − tồn dự kiến, làm tròn lên theo quy cách, không vượt nhu cầu trong thời hạn sử dụng và sức chứa (BRU-24). Nhu cầu quy từ dự báo số ly qua định mức đang áp dụng; cột "90%" là mức nhu cầu trong thời gian giao chỉ bị vượt khoảng 1 trong 10 lần, để tham khảo. Chủ quán quyết định số thực đặt; cả số đề xuất và số thực đặt được lưu.</p></details>
+{% if not rel %}<div class="empty"><p><strong>Chưa có dự báo.</strong></p><p>Phát hành dự báo ở trang <a href="{% url 'forecast:overview' %}">Dự báo nhu cầu</a>.</p></div>{% endif %}
+{% for supplier, items in groups.items %}
+<section class="panel">
+  <h2>{{ supplier }}</h2>
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr><th scope="col">Nguyên liệu</th><th scope="col" class="num">Tồn có thể dùng</th><th scope="col" class="num">Lô về kịp</th>
+      <th scope="col" class="num">Nhu cầu trong thời gian giao</th><th scope="col" class="num">Tồn dự kiến khi hàng về</th><th scope="col" class="num">Tồn an toàn</th>
+      <th scope="col">Đặt muộn nhất</th><th scope="col" class="num">Đề xuất</th></tr></thead>
+    <tbody>{% for st in items %}{% with ing=st.ingredient unit=st.ingredient.get_unit_display sug=st.suggestion %}
+    <tr>
+      <th scope="row">{{ ing.name }}{% if st.need_order %} <span class="flag-low">Cần đặt</span>{% endif %}</th>
+      <td class="num">{{ st.available|floatformat:"-1g" }} {{ unit }}</td>
+      <td class="num">{{ st.lots_by_arrival|floatformat:"-1g" }}</td>
+      <td class="num">{{ st.lead_demand|floatformat:"-1g" }} <span class="muted">({{ st.lead }} ngày{% if st.lead_demand_q90 %}; 90%: {{ st.lead_demand_q90|floatformat:"-1g" }}{% endif %})</span></td>
+      <td class="num{% if st.need_order %} text-danger{% endif %}">{{ st.projected|floatformat:"-1g" }}</td>
+      <td class="num">{{ st.safety|floatformat:"-1g" }}</td>
+      <td>{% if st.latest_order_date %}{{ st.latest_order_date|date:"d/m/Y" }}{% else %}Sau {{ rel.horizon_days }} ngày{% endif %}</td>
+      <td class="num">{% if sug.quantity is not None %}<strong>{{ sug.quantity|floatformat:"-2g" }}</strong> {{ unit }}{% if sug.components.packs %} <span class="muted">({{ sug.components.packs|floatformat:"-2g" }} {{ ing.pack_label|default:"gói" }})</span>{% endif %}
+        {% if sug.components.limited_by %}<br><span class="text-warn">Giới hạn bởi {{ sug.components.limited_by }}</span>{% endif %}
+        <details class="help-tip"><summary>Thành phần</summary><p>Nhu cầu {{ sug.components.cycle }} ngày chu kỳ: {{ sug.components.cycle_demand|floatformat:"-1g" }}{% if sug.components.shelf_demand is not None %}; trong {{ sug.components.shelf }} ngày hạn dùng: {{ sug.components.shelf_demand|floatformat:"-1g" }}{% endif %}; + tồn an toàn {{ sug.components.safety|floatformat:"-1g" }}; − tồn dự kiến {{ sug.components.projected|floatformat:"-1g" }}; làm tròn theo quy cách {{ sug.components.pack|floatformat:"-1g" }}{% if sug.components.capacity %}; sức chứa {{ sug.components.capacity|floatformat:"-1g" }}{% endif %}.</p></details>
+        {% elif sug.components.missing %}<span class="muted">{{ sug.components.missing }}</span>{% else %}–{% endif %}</td>
+
+    </tr>
+    {% if sug.quantity is not None %}<tr class="sub-row"><td colspan="8"><form method="post" class="order-form" data-once data-online-only>{% csrf_token %}
+        <input type="hidden" name="operation_key" value="{{ operation_key }}-{{ ing.pk }}"><input type="hidden" name="ingredient" value="{{ ing.pk }}">
+        <input class="input input-sm" name="quantity" value="{{ sug.quantity|floatformat:'-2' }}" inputmode="decimal" aria-label="Số lượng đặt {{ ing.name }}">
+        <input class="input input-sm" type="date" name="expected_date" value="{{ st.expected_date|date:'Y-m-d' }}" aria-label="Ngày giao dự kiến">
+        <input class="input input-sm" name="note" placeholder="Lý do nếu khác đề xuất" aria-label="Lý do">
+        <button class="btn btn-quiet" type="submit">Ghi lần đặt {{ ing.name }}</button></form></td></tr>{% endif %}{% endwith %}{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endfor %}
+{% if recent %}
+<section class="panel"><h2>Lần đặt gần đây từ đề xuất</h2>
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr><th scope="col">Lúc</th><th scope="col">Nguyên liệu</th><th scope="col" class="num">Đề xuất</th><th scope="col" class="num">Thực đặt</th><th scope="col">Lý do</th><th scope="col">Người quyết định</th></tr></thead>
+    <tbody>{% for r in recent %}<tr><td>{{ r.created_at|date:"H:i d/m" }}</td><th scope="row">{{ r.ingredient.name }}</th><td class="num">{{ r.suggested_quantity|floatformat:"-2g" }}</td><td class="num">{{ r.final_quantity|floatformat:"-2g" }}</td><td>{{ r.decision_note }}</td><td>{{ r.decided_by }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endif %}
+{% endblock %}

@@ -252,3 +252,53 @@ register(Resource(
     ],
     note="Mỗi dòng chọn đúng một: kích cỡ hoặc tùy chọn.",
 ))
+
+
+# ---------- Dự báo: nhận định của Chủ quán (mục 2.1 khung lý thuyết) ----------
+
+def _save_judgement(request, form, created):
+    from apps.core.models import Store
+    from apps.forecast.models import ExpertJudgement
+
+    j = form.save(commit=False)
+    j.store = request.user.store or Store.get_default()
+    j.provided_by = request.user
+    # Chỉ thêm: nhận định mới thay nhận định đang dùng cùng món và loại ngày; bản cũ giữ để truy vết.
+    ExpertJudgement.objects.filter(size=j.size, day_type=j.day_type, superseded_at__isnull=True).update(
+        superseded_at=timezone.now())
+    j.save()
+    return j
+
+
+def _judgement_form(form, obj, request):
+    from apps.catalog.models import ItemSize, MenuItem
+
+    if "size" in form.fields:
+        form.fields["size"].queryset = (ItemSize.objects.filter(is_active=True, item__status=MenuItem.Status.ON_SALE)
+                                        .select_related("item").order_by("item__name", "sort_order"))
+        form.fields["size"].label_from_instance = lambda s: f"{s.item.name} {s.name}"
+
+
+def _judgement_resource():
+    from apps.forecast.models import DayType, ExpertJudgement
+
+    return Resource(
+        key="nhan-dinh", title="Nhận định Chủ quán", singular="Nhận định", model=ExpertJudgement, cap=Cap.FORECASTS,
+        fields=["size", "day_type", "typical", "low", "high", "basis", "context", "based_on_system_history"],
+        columns=[("Món", lambda j: f"{j.size.item.name} {j.size.name}"), ("Loại ngày", "day_type"),
+                 ("Điển hình", "typical"), ("Ít", "low"), ("Nhiều", "high"),
+                 ("Ghi nhận", lambda j: f"{_local(j.created_at)} · {j.provided_by}"),
+                 ("Đang dùng", lambda j: j.superseded_at is None)],
+        search=("size__item__name", "basis"),
+        filters=[("loai-ngay", "Loại ngày", "day_type", DayType.choices),
+                 ("dang-dung", "Đang dùng", "superseded_at__isnull", YES_NO)],
+        queryset=lambda: ExpertJudgement.objects.select_related("size", "size__item", "provided_by")
+        .order_by("superseded_at", "size__item__name", "size__sort_order", "day_type", "-created_at"),
+        editable=lambda j: False,  # không sửa nhận định đã ghi; muốn đổi thì thêm nhận định mới
+        prepare_form=_judgement_form, save=_save_judgement,
+        note="Mỗi món và loại ngày: số ly một ngày điển hình, một ngày bán ít và một ngày bán nhiều (khoảng 1 trong 10 "
+             "ngày ngoài mỗi mức). Ghi căn cứ. Nhận định mới thay bản cũ, bản cũ vẫn được giữ.",
+    )
+
+
+register(_judgement_resource())

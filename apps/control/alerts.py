@@ -168,6 +168,22 @@ def _late_count(now):
                    "link": "/kho/kiem-ke/", "escalate": True}
 
 
+def _order_needed(now):
+    """FR-29, BRU-22, AC-66, AC-67: tồn dự kiến khi hàng về thấp hơn tồn an toàn; tự đóng khi đã đặt đủ."""
+    from apps.forecast.services import orders_needed
+
+    for st in orders_needed(now):
+        ing = st["ingredient"]
+        unit = ing.get_unit_display()
+        latest = st["latest_order_date"]
+        detail = (f"Tồn có thể dùng {st['available']:,.0f} {unit}, hàng đang về kịp {st['lots_by_arrival']:,.0f}, "
+                  f"nhu cầu ước tính {st['lead'] } ngày giao hàng {st['lead_demand']:,.0f}; tồn dự kiến khi hàng về "
+                  f"{st['projected']:,.0f} dưới tồn an toàn {st['safety']:,.0f}. Đặt muộn nhất {latest:%d/%m/%Y}.").replace(",", ".")
+        yield {"subject": f"dat-{ing.pk}", "title": f"Cần đặt hàng: {ing.name}", "detail": detail, "assignee": None,
+               "role": OWNER, "severity": Alert.Severity.IMPORTANT, "due": _end_of_day(latest),
+               "link": "/du-bao/dat-hang/", "escalate": False, "kind": Alert.Kind.ORDER_NEEDED}
+
+
 COLLECTORS = [
     (Alert.Kind.OUT_OF_STOCK, _out_of_stock),
     (Alert.Kind.BACKUP_PENDING, _backup_pending),
@@ -175,6 +191,7 @@ COLLECTORS = [
     (Alert.Kind.DISCREPANCY, _discrepancy),
     (Alert.Kind.EXCEPTION, _exceptions),
     (None, _inventory_owner),
+    (Alert.Kind.ORDER_NEEDED, _order_needed),
     (Alert.Kind.RECOUNT, _recount),
     (Alert.Kind.LATE_COUNT, _late_count),
 ]

@@ -17,8 +17,17 @@ def run_all(now=None):
         "chuyen_cap_yeu_cau": adjustments.escalate_due(now),
         "dat_hang_giao_cham": [po.pk for po in inventory_ops.refresh_late(timezone.localdate(now))],
         "nhac_thieu_gio_ra": _remind_missing_out(now),
+        "du_bao": _daily_forecast(now),
         "canh_bao": _sync_alerts(now),
     }
+
+
+def _daily_forecast(now):
+    """Mỗi ngày phát hành dự báo một lần sau khi dữ liệu ngày trước đã chốt (mục 6.1 khung dự báo)."""
+    from apps.forecast.services import ensure_today_release
+
+    rel = ensure_today_release(now)
+    return rel.pk if rel else None
 
 
 def _sync_alerts(now):
