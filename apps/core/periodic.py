@@ -36,8 +36,10 @@ def _remind_missing_out(now):
 
 def remind_missing_backup(now=None):
     """GD-08: ghi nhắc Chủ quán một lần cho mỗi ca chưa có người duyệt dự phòng (màn hình Trang chủ luôn hiện)."""
+    from apps.accounts.models import User
     from apps.audit.models import Action, AuditLog
     from apps.audit.services import record
+    from apps.core.push import notify_later
     from apps.shifts.services import shifts_missing_backup
 
     reminded = []
@@ -48,6 +50,11 @@ def remind_missing_backup(now=None):
         record(Action.STATUS_CHANGE, obj=shift, object_type="shifts.Shift", actor_label="hệ thống",
                after={"con_thieu": "người duyệt dự phòng"}, reason=MISSING_BACKUP_REASON)
         reminded.append(shift.pk)
+        # AC-113: nhắc cả trên điện thoại Chủ quán, một lần mỗi ca (cùng điều kiện với dòng nhật ký ở trên).
+        notify_later([u.pk for u in User.objects.filter(is_active=True) if u.is_owner],
+                     "Ca chưa có người duyệt dự phòng",
+                     f"{shift} bắt đầu {timezone.localtime(shift.starts_at):%H:%M %d/%m}: bổ sung người duyệt dự phòng.",
+                     "/")
     return reminded
 
 

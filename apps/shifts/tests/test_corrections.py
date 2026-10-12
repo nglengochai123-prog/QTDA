@@ -79,9 +79,15 @@ class BackupApproverTests(Base):
     def test_missing_backup_reminded_once_and_direct_owner_logged(self):
         Shift.objects.filter(pk=self.shift.pk).update(backup_approver=None)
         self.assertEqual([s.pk for s in shift_services.shifts_missing_backup()], [self.shift.pk])
-        periodic.run_all()
-        periodic.run_all()
+        from unittest import mock
+        with mock.patch("apps.core.push.send_to_user", return_value=(1, "")) as send:
+            with self.captureOnCommitCallbacks(execute=True):
+                periodic.run_all()
+                periodic.run_all()
         self.assertEqual(AuditLog.objects.filter(reason=periodic.MISSING_BACKUP_REASON).count(), 1)
+        # AC-113: Chủ quán nhận đúng một thông báo đẩy cho ca này
+        pushes = [c for c in send.call_args_list if c.args[1] == "Ca chưa có người duyệt dự phòng"]
+        self.assertEqual([c.args[0] for c in pushes], [self.d["owner"]])
         order, line = self.order()
         req = self.request(self.d["waiter"], order, "huy_mon", line=line.pk, cups=1)
         periodic.run_all(req.level_since + timedelta(minutes=3, seconds=1))
