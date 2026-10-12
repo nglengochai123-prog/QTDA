@@ -5,7 +5,7 @@ from apps.accounts.permissions import Cap, user_can
 
 
 def site(request):
-    return {"STORE_NAME": settings.LAM_STORE_NAME}
+    return {"STORE_NAME": settings.LAM_STORE_NAME, "FORECAST_SIMULATED": settings.LAM_FORECAST_INCLUDE_SIMULATED}
 
 
 # Biểu tượng và nhãn ngắn của từng phân hệ trên thanh biểu tượng bên trái (kiểu ServiceDesk Plus).

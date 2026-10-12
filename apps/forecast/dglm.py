@@ -34,9 +34,30 @@ def trigamma(x):
     return result + 1 / x + f / 2 + f / x * (1 / 6 - f * (1 / 30 - f * (1 / 42 - f / 30)))
 
 
+def tetragamma(x):
+    """ψ''(x): truy hồi về x ≥ 6 rồi dùng chuỗi tiệm cận."""
+    result = 0.0
+    while x < 6:
+        result -= 2 / (x ** 3)
+        x += 1
+    x2 = x * x
+    return result - 1 / x2 - 1 / (x2 * x) - 1 / (2 * x2 * x2) + 1 / (6 * x2 ** 3) - 1 / (6 * x2 ** 4) + 3 / (10 * x2 ** 5)
+
+
 def alpha_from_q(q):
-    """Nghiệm α của ψ'(α) = q; ψ' giảm ngặt nên chia đôi trên log α là đủ chắc chắn."""
+    """Nghiệm α của ψ'(α) = q: Newton trên log α từ điểm đầu α ≈ 1/q + 1/2 (hội tụ trong vài bước); dự phòng chia đôi."""
     q = max(q, 1e-9)
+    a = 1 / q + 0.5
+    for _ in range(30):
+        t = trigamma(a) - q
+        if abs(t) <= 1e-12 * q:
+            return a
+        d = tetragamma(a) * a  # đạo hàm theo log α
+        step = t / d
+        new = a * math.exp(-max(min(step, 2), -2))
+        if abs(new - a) <= 1e-13 * a:
+            return new
+        a = new
     lo, hi = math.log(1e-8), math.log(1e9)
     for _ in range(200):
         mid = (lo + hi) / 2

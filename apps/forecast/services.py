@@ -129,7 +129,7 @@ def imported_history(include_simulated=False):
     return days, cups
 
 
-def history(today=None, days=None, include_simulated=False):
+def history(today=None, days=None, include_simulated=None):
     """Chuỗi quan sát của mọi món-kích cỡ: (danh sách ngày theo thứ tự, trạng thái ngày, số ly, cờ thiếu hàng).
 
     Gộp dữ liệu hệ thống với lịch sử bán nhập từ tệp. Ngày có ca trên hệ thống dùng dữ liệu hệ thống; ngày chỉ có
@@ -137,7 +137,11 @@ def history(today=None, days=None, include_simulated=False):
     """
     from apps.shifts.models import Shift
 
+    from django.conf import settings
+
     today = today or timezone.localdate()
+    if include_simulated is None:
+        include_simulated = settings.LAM_FORECAST_INCLUDE_SIMULATED
     imp_days, imp_cups = imported_history(include_simulated)
     first = Shift.objects.order_by("starts_at").values_list("starts_at", flat=True).first()
     starts = ([_local_day(first)] if first else []) + ([min(imp_days)] if imp_days else [])
@@ -682,9 +686,14 @@ def _parse_day(value):
         except ValueError:
             continue
     try:
-        return datetime.fromisoformat(value).date()
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
     except ValueError:
-        return None
+        pass
+    from apps.core.xlsx_read import excel_date
+
+    if value.replace(".", "", 1).isdigit():
+        return excel_date(value)  # ô ngày trong Excel lưu dạng số ngày
+    return None
 
 
 @transaction.atomic
@@ -704,25 +713,45 @@ def import_history(fileobj, file_name, kind, user, note=""):
     from .models import HistoricalDay, HistoricalSale, HistoryBatch
 
     raw = fileobj.read()
-    text = raw.decode("utf-8-sig") if isinstance(raw, bytes) else raw
-    try:
-        dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t")
-    except csv.Error:
-        dialect = csv.excel
-    reader = csv.reader(io.StringIO(text), dialect)
-    header = next(reader, None)
-    if not header:
-        raise ValueError("Tệp trống.")
 
     def norm(x):
         return unicodedata.normalize("NFC", (x or "").strip().lower())
 
-    cols = {}
-    for key, names in HEADERS.items():
-        for i, h in enumerate(header):
-            if norm(h) in names:
-                cols[key] = i
+    def columns(header):
+        cols = {}
+        for key, names in HEADERS.items():
+            for i, h in enumerate(header):
+                if norm(h) in names:
+                    cols[key] = i
+                    break
+        return cols
+
+    sheet_name = ""
+    if isinstance(raw, bytes) and raw[:2] == b"PK":
+        # Tệp Excel: chọn sheet nhỏ nhất có cột ngày, món và số ly (bảng tổng theo ngày thay vì từng dòng hóa đơn)
+        from apps.core import xlsx_read
+
+        found = None
+        for entry in sorted(xlsx_read.sheets(io.BytesIO(raw)), key=xlsx_read.part_size):
+            it = xlsx_read.rows(entry)
+            header = next(it, None)
+            if header and {"date", "item", "qty"} <= set(columns(header)):
+                found = (entry[0], header, it)
                 break
+        if found is None:
+            raise ValueError("Không có sheet nào có đủ cột ngày, món và số ly.")
+        sheet_name, header, reader = found
+    else:
+        text = raw.decode("utf-8-sig") if isinstance(raw, bytes) else raw
+        try:
+            dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;" + chr(9))
+        except csv.Error:
+            dialect = csv.excel
+        reader = csv.reader(io.StringIO(text), dialect)
+        header = next(reader, None)
+        if not header:
+            raise ValueError("Tệp trống.")
+    cols = columns(header)
     if "date" not in cols or "item" not in cols:
         raise ValueError("Không tìm thấy cột ngày và cột món trong dòng tiêu đề.")
     sizes = {}
@@ -731,7 +760,7 @@ def import_history(fileobj, file_name, kind, user, note=""):
         sizes.setdefault((norm(s.item.name), ""), s)
     totals, day_map, unmatched, bad_rows = defaultdict(int), {}, defaultdict(int), 0
     for row in reader:
-        if not any(c.strip() for c in row):
+        if not any(str(c).strip() for c in row):
             continue
 
         def get(k):
@@ -769,7 +798,7 @@ def import_history(fileobj, file_name, kind, user, note=""):
                      "to": str(days[-1]) if days else "", "sizes": len({sid for _, sid in totals}),
                      "unmatched": dict(sorted(unmatched.items(), key=lambda x: -x[1])[:30]), "bad_rows": bad_rows,
                      "closed": sum(1 for v in day_map.values() if v == "dong_cua"),
-                     "short": sum(1 for v in day_map.values() if v == "thieu_hang")}
+                     "short": sum(1 for v in day_map.values() if v == "thieu_hang"), "sheet": sheet_name}
     batch.save(update_fields=["summary"])
     record(Action.CREATE, actor=user, obj=batch, object_type="forecast.HistoryBatch", after=batch.summary)
     return batch

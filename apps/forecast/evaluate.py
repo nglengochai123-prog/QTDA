@@ -171,19 +171,34 @@ def _r(x):
     return None if x is None else round(x, 2)
 
 
-def evaluate(today=None):
+def evaluate(today=None, include_simulated=None):
+    """include_simulated: gộp cả dữ liệu mô phỏng đã nhập, chỉ để kiểm tra phần mềm (mục 5.1)."""
+    import hashlib
+
+    from django.core.cache import cache
+
     today = today or timezone.localdate()
-    dates, status, cups, flags = history(today)
+    dates, status, cups, flags = history(today, include_simulated=include_simulated)
     judgements = current_judgements()
     max_days = params.get("forecast_prior_max_days")
     ds = params.get("forecast_delta_season_percent") / 100
+    # Kết quả chỉ đổi khi dữ liệu, nhận định hoặc tham số đổi: lưu tạm để mở trang không phải tính lại
+    digest = hashlib.sha256(repr((today, sorted(status.items()), sorted((k, sorted(v.items())) for k, v in cups.items()),
+                                  sorted((str(k), sorted(v)) for k, v in flags.items()),
+                                  sorted((k, j.pk) for k, j in judgements.items()), max_days, ds,
+                                  params.get("forecast_delta_level_percent"), [s.pk for s in _sizes()])).encode()).hexdigest()
+    cached = cache.get(f"danh-gia-du-bao:{digest}")
+    if cached is not None:
+        return cached
     out = []
     for size in _sizes():
         r = evaluate_series(size, dates, status, cups, flags, judgements, max_days, ds)
         if r:
             out.append(r)
-    return {"rows": out, "days": len(dates), "eligible": sum(1 for d in dates if status[d] == "du_dieu_kien"),
-            "min_history": params.get("forecast_min_history_days")}
+    result = {"rows": out, "days": len(dates), "eligible": sum(1 for d in dates if status[d] == "du_dieu_kien"),
+              "min_history": params.get("forecast_min_history_days")}
+    cache.set(f"danh-gia-du-bao:{digest}", result, 3600)
+    return result
 
 
 def ingredient_weekly(today=None, weeks=8):

@@ -12,3 +12,4 @@ media/
 backups/
 .secrets/
 logs/
+thu_du_bao.sqlite3*

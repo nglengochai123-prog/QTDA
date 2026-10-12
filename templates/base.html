@@ -41,6 +41,7 @@
   </nav>
   {% endif %}
   {% include "partials/offline_banner.html" %}
+  {% if FORECAST_SIMULATED %}<div class="sim-banner" role="status">Cơ sở dữ liệu chạy thử: dự báo đang dùng cả dữ liệu mô phỏng. Kết quả chỉ để kiểm tra phần mềm, không phải độ chính xác tại quán.</div>{% endif %}
   {% if QUICK_REPORT_COUNT_URL %}
   <a class="ready-banner stock-banner" id="stock-banner" href="{{ STOCK_URL }}" hidden>
     <svg class="icon" aria-hidden="true"><use href="#i-exceptions"/></svg><span data-text></span>

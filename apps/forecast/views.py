@@ -113,7 +113,10 @@ def _jsonable(st, sug):
 
 @capability_required(Cap.FORECASTS)
 def evaluation(request):
-    result = ev.evaluate()
+    from django.conf import settings
+
+    simulated = request.GET.get("mo_phong") == "1" or settings.LAM_FORECAST_INCLUDE_SIMULATED
+    result = ev.evaluate(include_simulated=simulated)
     from apps.inventory.models import Ingredient
 
     names = dict(Ingredient.objects.values_list("pk", "name"))
@@ -126,6 +129,9 @@ def evaluation(request):
         r["current_label"] = MethodDecision.Method(current[r["size"].pk]).label
     return render(request, "forecast/evaluation.html", {"result": result, "weekly": weekly, "current": current,
                                                         "accuracy": services.release_accuracy(),
+                                                        "simulated": simulated,
+                                                        "has_simulated": HistoryBatch.objects.filter(
+                                                            kind=HistoryBatch.Kind.SIMULATED, active=True).exists(),
                                                         "methods": dict(MethodDecision.Method.choices),
                                                         "horizons": ev.HORIZONS})
 

@@ -4,6 +4,8 @@
 <header class="page-head"><h1>Đánh giá dự báo</h1>
   <span class="muted">{{ result.eligible }} ngày đủ điều kiện / {{ result.days }} ngày</span></header>
 <details class="help-tip"><summary>Giải thích</summary><p>Đánh giá cuốn chiếu: tại mỗi mốc chỉ dùng dữ liệu trước mốc để dự báo 1, 3 và 7 ngày sau, rồi so với số bán thực. Hệ số thích nghi của mô hình được chọn trên nửa đầu các mốc; số liệu dưới đây chỉ tính trên nửa sau (giai đoạn kiểm tra), trên cùng các ngày mà cả ba cách đều có dự báo. CRPS đo độ khớp của cả phân phối dự báo, càng nhỏ càng tốt. "Trong khoảng" là tỷ lệ số bán thực nằm trong khoảng 10%–90% (lý tưởng gần 80%); khoảng quá rộng thì dễ đạt nhưng ít hữu ích. MAE là số ly lệch trung bình của trung vị dự báo; lệch dương là dự báo dư. Đánh giá thử có ý nghĩa từ khoảng {{ result.min_history }} ngày dữ liệu (8 tuần). Kết luận chỉ áp dụng cho từng món; mô hình chỉ được dùng cho đặt hàng khi Chủ quán xác nhận.</p></details>
+{% if simulated %}<div class="notice notice-warn" role="status"><div><strong>Đang đánh giá có gộp dữ liệu mô phỏng.</strong> Kết quả chỉ để kiểm tra phần mềm và quy trình, không phải bằng chứng độ chính xác tại quán (mục 5.1). <a href="{% url 'forecast:evaluation' %}">Chỉ dùng dữ liệu thật</a></div></div>
+{% elif has_simulated %}<p class="page-note">Có dữ liệu mô phỏng đã nhập. <a href="?mo_phong=1">Chạy thử đánh giá trên dữ liệu mô phỏng</a></p>{% endif %}
 {% if result.eligible < result.min_history %}<div class="notice notice-warn" role="status"><div>Mới có {{ result.eligible }} ngày dữ liệu đủ điều kiện; kết quả dưới đây chỉ để kiểm tra phần mềm, chưa đủ căn cứ chọn cách tính.</div></div>{% endif %}
 {% for r in result.rows %}
 <section class="panel">
