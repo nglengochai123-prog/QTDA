@@ -55,6 +55,33 @@ def _key(line, dim):
     }[dim]
 
 
+def _filter(line, dim):
+    """Tham số lọc ở trang Tra cứu đơn tương ứng với một dòng báo cáo (truy vết tới đơn gốc, NFR-19)."""
+    order = line.order
+    return {
+        "ngay": ("ngay", f"{timezone.localtime(order.payment.created_at):%Y-%m-%d}"),
+        "khung_gio": ("gio", str(timezone.localtime(order.created_at).hour)),
+        "ca": ("ca", str(order.shift_id)) if order.shift_id else None, "nhom_mon": ("nhom", str(line.item.group_id)),
+        "mon": ("mon", str(line.size_id)), "nhan_vien": ("nhan_vien", str(order.created_by_id)),
+        "phuong_thuc": ("phuong_thuc", order.payment.method),
+    }[dim]
+
+
+def revenue_link(start_day, end_day, row_filter):
+    """Chuỗi tham số cho Tra cứu đơn cùng phạm vi báo cáo: đơn đã thu tiền, theo ngày thanh toán."""
+    from urllib.parse import urlencode
+
+    if row_filter is None:
+        return ""
+    params = {"da_thu": "1", "theo": "thanh_toan", "tu": start_day.isoformat(), "den": end_day.isoformat()}
+    name, value = row_filter
+    if name == "ngay":
+        params["tu"] = params["den"] = value
+    else:
+        params[name] = value
+    return urlencode(params)
+
+
 def revenue(start_day, end_day, dim="ngay"):
     """Doanh thu theo chiều `dim` = giá trị món tính tiền của các đơn đã thu tiền trong kỳ (AC-105); hoàn tiền trừ ở doanh thu thuần."""
     from apps.shifts.models import Refund
@@ -64,7 +91,8 @@ def revenue(start_day, end_day, dim="ngay"):
     for line in _paid_lines(start, end):
         value = line.unit_price * line.billable_quantity
         key = _key(line, dim)
-        row = rows.setdefault(key, {"key": key, "revenue": 0, "cups": 0, "orders": set()})
+        row = rows.setdefault(key, {"key": key, "revenue": 0, "cups": 0, "orders": set(), "filters": set()})
+        row["filters"].add(_filter(line, dim))
         row["revenue"] += value
         row["cups"] += line.billable_quantity
         row["orders"].add(line.order_id)
@@ -73,6 +101,9 @@ def revenue(start_day, end_day, dim="ngay"):
     result = sorted(rows.values(), key=lambda r: r["key"])
     for r in result:
         r["orders"] = len(r["orders"])
+        filters = r.pop("filters")
+        # Một dòng gộp từ nhiều giá trị lọc (ví dụ món đổi tên) thì không gắn liên kết để tránh lệch số đơn.
+        r["link"] = revenue_link(start_day, end_day, next(iter(filters))) if len(filters) == 1 else ""
     refunds = (Refund.objects.filter(status=Refund.Status.PAID, paid_at__gte=start, paid_at__lt=end)
                .aggregate(s=Sum("amount"))["s"] or 0)
     length = (end_day - start_day).days + 1
@@ -116,14 +147,14 @@ def revenue_control(start_day, end_day):
     exc_rows = {}
     for exc in exceptions:
         review = exc.effective_review()
-        key = (exc.get_kind_display(), review.get_result_display() if review else "Chưa xem xét")
+        key = (exc.get_kind_display(), review.get_result_display() if review else "Chưa xem xét", exc.kind)
         exc_rows[key] = exc_rows.get(key, 0) + 1
     discrepancies = (Discrepancy.objects.current().filter(shift__starts_at__gte=start, shift__starts_at__lt=end)
                      .select_related("shift", "manager").order_by("shift__starts_at"))
     control = monthly_control(start_day.year, start_day.month)
     return {
         "requests_total": requests.count(), "by_reason": by_reason,
-        "exceptions": [{"kind": k[0], "result": k[1], "n": n} for k, n in sorted(exc_rows.items())],
+        "exceptions": [{"kind": k[0], "result": k[1], "value": k[2], "n": n} for k, n in sorted(exc_rows.items())],
         "discrepancies": discrepancies, "accumulated": accumulated_report(start_day.year, start_day.month),
         "cases": LossCase.objects.filter(created_at__gte=start, created_at__lt=end)
         .prefetch_related("verifications", "recoveries"),
@@ -247,7 +278,12 @@ def dashboard(today=None, month=None):
     bo01_chart = charts.stacked([("Tổn thất đã xác minh", control["verified"], 1),
                                  ("Thiếu tiền đang xử lý", control["in_process"], 2)], BO01_MONTHLY_TARGET)
     open_alerts = Alert.objects.filter(status__in=Alert.OPEN)
+    from apps.inventory.models import QuickReport
+    # Bảng 5.4: báo Sắp hết là thông tin, không chuyển cấp, hiển thị trên bảng điều khiển đến khi được xử lý.
+    running_low = (QuickReport.objects.filter(level=QuickReport.Level.LOW, acknowledged_at__isnull=True)
+                   .select_related("ingredient", "reporter").order_by("-created_at"))
     return {
+        "running_low": running_low,
         "today": today, "month": first, "first": first, "end": end, "control": control,
         "bo01_target": BO01_MONTHLY_TARGET, "bo01_met": control["control_value"] < BO01_MONTHLY_TARGET,
         "bo01_chart": bo01_chart,
@@ -258,6 +294,6 @@ def dashboard(today=None, month=None):
         "alerts": {"khan": open_alerts.filter(severity="khan").count(),
                    "quan_trong": open_alerts.filter(severity="quan_trong").count(),
                    "overdue": open_alerts.filter(due_at__lt=timezone.now()).count()},
-        "exceptions": {label: ExceptionCase.objects.filter(status=ExceptionCase.Status.OPEN, severity=value).count()
-                       for value, label in ExceptionCase.Severity.choices},
+        "exceptions": [(value, label, ExceptionCase.objects.filter(status=ExceptionCase.Status.OPEN, severity=value).count())
+                       for value, label in ExceptionCase.Severity.choices],
     }

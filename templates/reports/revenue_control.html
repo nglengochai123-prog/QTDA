@@ -25,7 +25,7 @@
   {% else %}<p class="muted">Không có vụ việc trong kỳ.</p>{% endif %}</section>
 <section class="panel" aria-labelledby="d-title"><h2 id="d-title">Chênh lệch tiền theo ca</h2>
   {% if discrepancies %}<div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">Ca</th><th scope="col">Phương thức</th><th scope="col">Quản lý ca</th><th scope="col" class="num">Chênh lệch</th><th scope="col">Tình trạng</th></tr></thead>
-  <tbody>{% for d in discrepancies %}<tr><th scope="row">{{ d.shift }}</th><td>{{ d.get_method_display }}</td><td>{{ d.manager }}</td><td class="num">{{ d.difference|intcomma }} đ</td><td>{% if d.decision %}{{ d.get_decision_display }}{% elif d.explanation %}Đã giải trình{% else %}Chưa giải thích{% endif %}{% if d.over_threshold %} · vượt ngưỡng{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+  <tbody>{% for d in discrepancies %}<tr><th scope="row"><a href="{% url 'shifts:my_shift_detail' d.shift_id %}">{{ d.shift }}</a></th><td>{{ d.get_method_display }}</td><td>{{ d.manager }}</td><td class="num">{{ d.difference|intcomma }} đ</td><td>{% if d.decision %}{{ d.get_decision_display }}{% elif d.explanation %}Đã giải trình{% else %}Chưa giải thích{% endif %}{% if d.over_threshold %} · vượt ngưỡng{% endif %}</td></tr>{% endfor %}</tbody></table></div>
   {% else %}<p class="muted">Không có chênh lệch trong kỳ.</p>{% endif %}
   {% if accumulated %}<h3>Thiếu chưa giải thích tích lũy tháng</h3><ul class="ruled-list compact">{% for r in accumulated %}<li class="row-between"><span>{{ r.manager }} · {{ r.shift_type }}</span><span>{{ r.total|intcomma }} đ</span></li>{% endfor %}</ul>{% endif %}
 </section>
@@ -33,6 +33,6 @@
 <section class="panel" aria-labelledby="r-title"><h2 id="r-title">Yêu cầu điều chỉnh ({{ requests_total }})</h2>
   {% if by_reason %}<ul class="ruled-list compact">{% for r in by_reason %}<li class="row-between"><span>{{ r.reason__name }} · {{ r.status_label }}</span><span>{{ r.n }}</span></li>{% endfor %}</ul>{% else %}<p class="muted">Không có.</p>{% endif %}</section>
 <section class="panel" aria-labelledby="e-title"><h2 id="e-title">Ngoại lệ theo nguồn và kết quả</h2>
-  {% if exceptions %}<ul class="ruled-list compact">{% for e in exceptions %}<li class="row-between"><span>{{ e.kind }} · {{ e.result }}</span><span>{{ e.n }}</span></li>{% endfor %}</ul>{% else %}<p class="muted">Không có.</p>{% endif %}</section>
+  {% if exceptions %}<ul class="ruled-list compact">{% for e in exceptions %}<li class="row-between"><span><a href="{% url 'control:exceptions' %}?trang-thai=tat-ca&amp;loai={{ e.value }}&amp;tu={{ start|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}">{{ e.kind }}</a> · {{ e.result }}</span><span>{{ e.n }}</span></li>{% endfor %}</ul>{% else %}<p class="muted">Không có.</p>{% endif %}</section>
 </div>
 {% endblock %}

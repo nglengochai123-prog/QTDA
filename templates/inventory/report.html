@@ -2,7 +2,8 @@
 {% block title %}Báo cáo nguyên vật liệu · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
-<h1>Báo cáo nguyên vật liệu tháng {{ month }}</h1>
+<header class="page-head"><h1>Báo cáo nguyên vật liệu tháng {{ month }}</h1>
+  <form method="get" class="inline-form filter-row" aria-label="Bộ lọc"><label for="f-month">Tháng</label><input class="input input-sm" id="f-month" type="month" name="thang" value="{{ month_value }}"><button class="btn btn-quiet" type="submit">Xem</button></form></header>
 <dl class="figure-grid"><div class="figure-key"><dt>Trường hợp thiếu nguyên liệu</dt><dd>{{ shortage_total }}</dd></div><div><dt>Mục tiêu</dt><dd class="dd-text">không quá 1 mỗi tháng</dd></div></dl>
 
 <section class="panel"><h2>Trường hợp thiếu theo nguyên liệu</h2>

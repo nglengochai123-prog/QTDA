@@ -32,7 +32,7 @@
       <span class="kpi-value">{{ control.control_value|intcomma }} đ</span>
       <span class="kpi-note">Mục tiêu dưới {{ bo01_target|intcomma }} đ · {% if bo01_met %}<span class="status-ok">Đang đạt</span>{% else %}<span class="status-warn">Chưa đạt</span>{% endif %}</span></div>
     <div class="kpi"><span class="kpi-label">BO-02 · Trường hợp thiếu nguyên liệu</span>
-      <span class="kpi-value">{{ shortages }}</span>
+      <span class="kpi-value"><a href="{% url 'inventory:report' %}?thang={{ month|date:'Y-m' }}">{{ shortages }}</a></span>
       <span class="kpi-note">Mục tiêu không quá {{ bo02_target }} · {% if bo02_met %}<span class="status-ok">Đang đạt</span>{% else %}<span class="status-warn">Chưa đạt</span>{% endif %}</span></div>
   </div>
   <figure class="chart" aria-labelledby="bo01-cap">
@@ -64,7 +64,7 @@
   </figure>
   <details class="chart-table"><summary>Xem bảng số liệu</summary>
     <div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">Ngày</th><th scope="col" class="num">Doanh thu</th><th scope="col" class="num">Số đơn</th></tr></thead>
-    <tbody>{% for d in days %}<tr><th scope="row">{{ d.day|date:"d/m/Y" }}</th><td class="num">{{ d.revenue|intcomma }} đ</td><td class="num">{{ d.orders }}</td></tr>{% endfor %}</tbody></table></div>
+    <tbody>{% for d in days %}<tr><th scope="row">{{ d.day|date:"d/m/Y" }}</th><td class="num">{{ d.revenue|intcomma }} đ</td><td class="num">{% if d.orders %}<a href="{% url 'orders:lookup' %}?da_thu=1&amp;theo=thanh_toan&amp;tu={{ d.day|date:'Y-m-d' }}&amp;den={{ d.day|date:'Y-m-d' }}">{{ d.orders }}</a>{% else %}0{% endif %}</td></tr>{% endfor %}</tbody></table></div>
   </details>
   <p class="muted">Cùng số liệu với <a href="{% url 'reports:revenue' %}?tu={{ first|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}">báo cáo doanh thu</a> của kỳ này.</p>
   {% else %}<p class="chart-empty">Chưa có đơn đã thanh toán trong tháng này.</p>{% endif %}
@@ -75,7 +75,11 @@
   {% if stock_chart %}
   <ul class="chart-legend"><li><span class="key key-1"></span>Có thể dùng</li><li><span class="key key-target"></span>Tồn an toàn</li></ul>
   {% include "reports/_hbars.html" with c=stock_chart warn_label="Dưới tồn an toàn" %}
+  <p class="muted">Sổ kho từng nguyên liệu: {% for c in critical %}<a href="{% url 'inventory:ledger' %}?nvl={{ c.ingredient.pk }}">{{ c.ingredient.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}.</p>
   {% else %}<p class="chart-empty">Chưa đánh dấu nguyên liệu nào thuộc nhóm trọng yếu.</p>{% endif %}
+  <h3>Nguyên liệu báo Sắp hết</h3>
+  {% if running_low %}<ul class="ruled-list compact">{% for r in running_low %}<li class="row-between"><span><strong>{{ r.ingredient.name }}</strong>{% if r.estimated_left is not None %} · còn khoảng {{ r.estimated_left|floatformat:"-2g" }} {{ r.ingredient.get_unit_display }}{% endif %}</span><span class="muted">{{ r.reporter }} · {{ r.created_at|date:"H:i d/m" }}</span></li>{% endfor %}</ul>
+  <p><a href="{% url 'inventory:stock' %}">Xử lý ở trang Tồn kho</a></p>{% else %}<p class="muted">Không có báo Sắp hết chưa xử lý.</p>{% endif %}
 </section>
 <section class="panel" aria-labelledby="acc-title">
   <h2 id="acc-title">Thiếu tiền chưa giải thích theo Quản lý ca</h2>
@@ -90,10 +94,10 @@
 <section class="panel" aria-labelledby="al-title">
   <h2 id="al-title">Cảnh báo và ngoại lệ đang mở</h2>
   <dl class="figure-grid">
-    <div><dt>Cảnh báo khẩn</dt><dd>{{ alerts.khan }}</dd></div>
-    <div><dt>Cảnh báo quan trọng</dt><dd>{{ alerts.quan_trong }}</dd></div>
-    <div><dt>Cảnh báo quá hạn</dt><dd>{{ alerts.overdue }}</dd></div>
-    {% for label, n in exceptions.items %}<div><dt>Ngoại lệ {{ label|lower }}</dt><dd>{{ n }}</dd></div>{% endfor %}
+    <div><dt>Cảnh báo khẩn</dt><dd><a href="{% url 'control:alerts' %}">{{ alerts.khan }}</a></dd></div>
+    <div><dt>Cảnh báo quan trọng</dt><dd><a href="{% url 'control:alerts' %}">{{ alerts.quan_trong }}</a></dd></div>
+    <div><dt>Cảnh báo quá hạn</dt><dd><a href="{% url 'control:alerts' %}">{{ alerts.overdue }}</a></dd></div>
+    {% for value, label, n in exceptions %}<div><dt>Ngoại lệ {{ label|lower }}</dt><dd>{% if can_review %}<a href="{% url 'control:exceptions' %}?muc={{ value }}">{{ n }}</a>{% else %}{{ n }}{% endif %}</dd></div>{% endfor %}
   </dl>
   <p><a href="{% url 'control:alerts' %}">Mở trung tâm cảnh báo</a></p>
 </section>

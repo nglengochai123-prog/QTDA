@@ -190,7 +190,11 @@ def report(request):
     """Báo cáo nguyên vật liệu: hao hụt theo lý do, hủy sau pha chế, kiểm kê, trường hợp thiếu (FR-26, FR-27)."""
     from apps.orders.models import PostPrepCancellation
 
-    now = timezone.localtime()
+    now = timezone.localdate()
+    try:  # ?thang=YYYY-MM để khớp tháng đang xem ở bảng điều khiển
+        now = date.fromisoformat(request.GET.get("thang", "") + "-01")
+    except ValueError:
+        pass
     month = {"created_at__year": now.year, "created_at__month": now.month}
     waste = (Waste.objects.filter(**month).values("ingredient__name", "ingredient__unit", "reason")
              .annotate(total=Sum("quantity")).order_by("ingredient__name"))
@@ -204,7 +208,7 @@ def report(request):
             post_prep[int(ing_id)] = post_prep.get(int(ing_id), 0) + float(qty)
     shortage_month = ShortageCase.objects.filter(day__year=now.year, day__month=now.month)
     return render(request, "inventory/report.html", {
-        "month": f"{now:%m/%Y}", "waste": waste,
+        "month": f"{now:%m/%Y}", "month_value": f"{now:%Y-%m}", "waste": waste,
         "post_prep": [(names[k], v) for k, v in sorted(post_prep.items()) if k in names],
         "counts": StockCount.objects.filter(**month).select_related("ingredient", "counter")[:50],
         "shortage_total": shortage_month.count(),

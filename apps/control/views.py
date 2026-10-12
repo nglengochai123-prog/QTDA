@@ -39,6 +39,8 @@ def exception_list(request):
     if status in ExceptionCase.Status.values:
         items = items.filter(status=status)
     g = request.GET
+    if g.get("muc") in ExceptionCase.Severity.values:
+        items = items.filter(severity=g["muc"])
     if g.get("loai") in ExceptionCase.Kind.values:
         items = items.filter(kind=g["loai"])
     for key, field in (("nhan_vien", "employee_id"), ("ca", "shift_id")):

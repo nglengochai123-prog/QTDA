@@ -7,7 +7,7 @@ from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
-from apps.accounts.permissions import Cap, capability_required
+from apps.accounts.permissions import Cap, capability_required, user_can
 
 from . import services
 
@@ -37,6 +37,7 @@ def dashboard(request):
     context = services.dashboard(month=month)
     context["ops"] = services.shift_panel(request.user)
     context["is_owner"] = request.user.is_owner
+    context["can_review"] = user_can(request.user, Cap.EXCEPTION_REVIEW)
     return render(request, "reports/dashboard.html", context)
 
 
