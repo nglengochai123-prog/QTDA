@@ -41,12 +41,18 @@ self.addEventListener("fetch", (event) => {
 self.addEventListener("push", (event) => {
   let data = { title: "LAM Coffee", body: "", url: "/canh-bao/" };
   try { data = Object.assign(data, event.data ? event.data.json() : {}); } catch (e) { /* nội dung không phải JSON */ }
-  event.waitUntil(self.registration.showNotification(data.title, { body: data.body, data: { url: data.url }, tag: data.url }));
+  event.waitUntil(
+    self.registration.showNotification(data.title, { body: data.body, data: data, tag: data.id || data.url })
+      // Báo máy chủ: điện thoại đã thực sự hiện thông báo (khác với dịch vụ đẩy đã nhận).
+      .then(() => data.receipt ? fetch(data.receipt, { method: "POST" }).catch(() => {}) : null)
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || "/";
+  const info = event.notification.data || {};
+  const url = info.url || "/";
+  if (info.opened) fetch(info.opened, { method: "POST" }).catch(() => {});
   event.waitUntil(clients.matchAll({ type: "window" }).then((list) => {
     for (const client of list) { if ("focus" in client) { client.navigate(url); return client.focus(); } }
     return clients.openWindow(url);

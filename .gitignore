@@ -10,3 +10,4 @@ staticfiles/
 media/
 .idea/workspace.xml
 backups/
+.secrets/

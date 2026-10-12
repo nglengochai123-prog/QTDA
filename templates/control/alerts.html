@@ -1,14 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Cảnh báo · {{ STORE_NAME }}{% endblock %}
-{% block scripts %}{% load static %}<script src="{% static 'js/push.js' %}" defer></script>{% endblock %}
 {% block content %}
 <h1>Cảnh báo của bạn</h1>
 <p class="lead-muted">Mỗi cảnh báo có người xử lý chính và thời hạn theo Bảng 5.4. Quá hạn thì chuyển Chủ quán hoặc nhắc lại. Cảnh báo tự đóng khi điều kiện không còn; đóng tay phải ghi kết quả.</p>
-<div class="notice notice-info" data-push data-status-url="{% url 'core:push_status' %}" data-subscribe-url="{% url 'core:push_subscribe' %}" data-csrf="{{ csrf_token }}">
-  <svg class="icon" aria-hidden="true"><use href="#i-alerts"/></svg>
-  <div><strong>Thông báo đẩy trên điện thoại.</strong> <span data-push-text>Đang kiểm tra…</span>
-    <button class="btn btn-quiet" type="button" hidden>Bật thông báo trên thiết bị này</button></div>
-</div>
+<section class="panel" aria-labelledby="push-title" data-push data-status-url="{% url 'core:push_status' %}" data-subscribe-url="{% url 'core:push_subscribe' %}" data-test-url="{% url 'core:push_test' %}" data-log-url="{% url 'core:push_log' %}" data-csrf="{{ csrf_token }}">
+  <h2 id="push-title">Thông báo đẩy trên điện thoại</h2>
+  <p data-push-text>Đang kiểm tra…</p>
+  <div class="action-row">
+    <button class="btn btn-primary" type="button" data-push-enable hidden>Bật thông báo trên thiết bị này</button>
+    <button class="btn btn-quiet" type="button" data-push-test hidden>Gửi thử đến thiết bị của tôi</button>
+  </div>
+  <div class="table-wrap" data-push-log hidden><table class="data-table">
+    <thead><tr><th scope="col">Thông báo</th><th scope="col">Máy chủ gửi lúc</th><th scope="col">Dịch vụ đẩy đã nhận</th><th scope="col">Điện thoại đã hiện</th><th scope="col">Đã chạm mở</th></tr></thead>
+    <tbody></tbody></table></div>
+  <p class="hint">"Dịch vụ đẩy đã nhận" chỉ nghĩa là máy chủ gửi thành công tới dịch vụ của Google hoặc Apple. "Điện thoại đã hiện" do chính điện thoại báo về khi thông báo xuất hiện.</p>
+</section>
 {% if stats %}<p class="muted">7 ngày qua: {{ stats.total }} cảnh báo, {{ stats.to_owner }} đến Chủ quán, {{ stats.escalated }} bị chuyển cấp{% if stats.avg_minutes is not None %}, xử lý trung bình {{ stats.avg_minutes }} phút{% endif %}.</p>{% endif %}
 {% if open %}
 <ul class="ruled-list">

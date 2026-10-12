@@ -24,6 +24,8 @@ def _load_env_file(path):
 
 
 _load_env_file(BASE_DIR / ".env")
+if os.environ.get("LAM_ENV_FILE"):  # tệp cấu hình riêng cho một lần chạy (ví dụ thử thông báo qua đường hầm)
+    _load_env_file(BASE_DIR / os.environ["LAM_ENV_FILE"])
 
 
 def env(key, default=None):
@@ -207,12 +209,14 @@ LAM_STORE_NAME = env("LAM_STORE_NAME", "LAM Coffee")
 
 # --- Triển khai thật ----------------------------------------------------------------
 
-if not DEBUG:
+if not DEBUG and env_bool("DJANGO_STATIC_MANIFEST", True):
     # Tên tệp tĩnh có mã băm để điện thoại luôn tải bản mới sau mỗi lần cập nhật.
     STORAGES = {
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
         "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"},
     }
+
+if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True

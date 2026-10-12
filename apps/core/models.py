@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 
@@ -124,3 +126,25 @@ class PushSubscription(models.Model):
     class Meta:
         verbose_name = "Thiết bị nhận thông báo"
         verbose_name_plural = "Thiết bị nhận thông báo"
+
+
+class PushMessage(models.Model):
+    """Một lần gửi thông báo đẩy; tách mốc dịch vụ đẩy đã nhận với mốc điện thoại thực sự hiện thông báo."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người nhận", on_delete=models.CASCADE,
+                             related_name="push_messages")
+    kind = models.CharField("Loại", max_length=20, default="canh_bao")
+    title = models.CharField("Tiêu đề", max_length=120)
+    body = models.CharField("Nội dung", max_length=255, blank=True)
+    url = models.CharField("Màn hình mở", max_length=200, blank=True)
+    created_at = models.DateTimeField("Gửi lúc", auto_now_add=True)
+    accepted_count = models.PositiveSmallIntegerField("Số thiết bị dịch vụ đẩy đã nhận", default=0)
+    service_results = models.JSONField("Phản hồi của dịch vụ đẩy", default=list, blank=True)
+    received_at = models.DateTimeField("Điện thoại hiện thông báo lúc", null=True, blank=True)
+    opened_at = models.DateTimeField("Người dùng chạm mở lúc", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Thông báo đã gửi"
+        verbose_name_plural = "Thông báo đã gửi"
+        ordering = ["-created_at"]

@@ -10,7 +10,7 @@ Mỗi phần là một lát cắt chạy được từ đầu đến cuối, là
 
 ## Trạng thái nghiệm thu (cập nhật 12/10/2026)
 
-Kiểm thử tự động: 169 bài, OK cả 169 (`.venv\Scripts\python.exe manage.py test`). Số bài kiểm thử không phải bằng chứng hoàn thành. "Đã nghiệm thu" dưới đây là **nghiệm thu nội bộ**: đạt kiểm thử nghiệm thu xuyên suốt qua giao diện web theo 5 vai trò (`apps/core/tests/test_acceptance.py`) và đã thao tác trên trình duyệt; vẫn chờ Hai tự nghiệm thu theo `docs/VAN_HANH.md` mục 1. Đối chiếu từng chức năng với báo cáo ở `docs/DOI_CHIEU_YEU_CAU.md`.
+Kiểm thử tự động: 176 bài, đạt cả trên SQLite và PostgreSQL 16 (`.venv\Scripts\python.exe manage.py test`). Số bài kiểm thử không phải bằng chứng hoàn thành. "Đã nghiệm thu" dưới đây là **nghiệm thu nội bộ**: đạt kiểm thử nghiệm thu xuyên suốt qua giao diện web theo 5 vai trò (`apps/core/tests/test_acceptance.py`) và đã thao tác trên trình duyệt; vẫn chờ Hai tự nghiệm thu theo `docs/VAN_HANH.md` mục 1. Đối chiếu từng chức năng với báo cáo ở `docs/DOI_CHIEU_YEU_CAU.md`.
 
 ### Đã nghiệm thu nội bộ
 
@@ -21,16 +21,16 @@ Kiểm thử tự động: 169 bài, OK cả 169 (`.venv\Scripts\python.exe mana
 - Phiếu dự phòng: cấp dãy, nhập bù có kích cỡ và tùy chọn, liên kết đơn có sẵn, gửi lại không ghi trùng — tự động; trang /du-phong/ đã xem trên trình duyệt
 - Bảng điều khiển (phần ca cho Quản lý ca, chỉ tiêu cho Chủ quán), biểu đồ, lọc tháng, chú thích khi rê chuột, số liệu khớp báo cáo doanh thu — tự động và trình duyệt trên bộ dữ liệu nghiệm thu 14 ngày
 - Đối chiếu chéo đơn, sổ kho, quỹ ca, doanh thu, ngoại lệ, nhật ký và `kiem_tra_toan_ven` không báo sai lệch — tự động và trên bộ dữ liệu nghiệm thu
+- Kiểm thử đồng thời trên PostgreSQL 16 (5 tình huống) và toàn bộ kiểm thử trên PostgreSQL — đạt 12/10/2026 sau khi sửa 2 lỗi
+- Đính chính báo cáo cuối ca, chấm công và bổ sung giờ ra, trung tâm cảnh báo, xuất Excel (Excel mở được, số khớp) — trình duyệt và Excel 12/10/2026
+- Nhập bù phiếu chờ Chủ quán xác nhận giá, định mức — trình duyệt
 
 ### Đã làm nhưng chưa nghiệm thu
 
-- Nhập bù cần Chủ quán xác nhận giá hoặc định mức khi thiếu lịch sử: có kiểm thử, chưa thao tác trên trình duyệt
-- Đính chính báo cáo cuối ca, giải trình và quyết định chênh lệch, vụ việc tổn thất, ngoại lệ và xem xét: có kiểm thử, chưa thao tác lại sau đổi giao diện
-- Đối chiếu tiêu hao trọng yếu, chấm công và bổ sung giờ ra, tải theo khung giờ, trung tâm cảnh báo: có kiểm thử, mới xem trang, chưa thao tác đủ luồng trên trình duyệt
-- Báo cáo doanh thu xuất Excel: kiểm thử đọc được tệp; chưa mở bằng Excel
-- Thông báo đẩy: đã có đăng ký thiết bị, service worker, gửi khi giao và chuyển cấp; **chưa gửi thật** vì chưa cài `pywebpush` và chưa có HTTPS (chờ Hai)
+- Giải trình và quyết định chênh lệch, vụ việc tổn thất, ngoại lệ và xem xét: có kiểm thử, chưa thao tác lại sau đổi giao diện
+- Đối chiếu tiêu hao trọng yếu, tải theo khung giờ: có kiểm thử, mới xem trang
+- Thông báo đẩy: máy chủ sẵn sàng (pywebpush, khóa VAPID, đường hầm HTTPS tạm thời); ghi riêng mốc dịch vụ đẩy nhận và điện thoại hiện; **chờ Hai thử trên điện thoại thật** (`docs/VAN_HANH.md` mục 3)
 - Tác vụ định kỳ: lệnh chạy được; **chưa lên lịch** trên máy vận hành (hướng dẫn ở `docs/VAN_HANH.md` mục 2)
-- Kiểm thử đồng thời: đạt trên SQLite; **chưa xác minh trên PostgreSQL** (chờ Hai cho phép cài, phương án ở `docs/VAN_HANH.md` mục 4)
 
 ### Chưa làm
 

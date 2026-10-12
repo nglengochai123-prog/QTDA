@@ -175,5 +175,5 @@ Chủ quán trả lời ngày 11/10/2026. Cột "Đã làm" ghi cách hệ thố
 | GD-23 | Doanh thu tính theo thời điểm thanh toán; "nhân viên" là người tạo đơn; khung giờ theo giờ gửi pha chế | Quyết định cách đọc báo cáo doanh thu | Giữ | Không |
 | GD-25 (sửa lỗi) | Báo cáo doanh thu trước đây loại đơn đã hủy sau thanh toán **và** trừ thêm khoản hoàn, nên khoản hoàn bị trừ hai lần. Đã sửa: doanh thu là số khách đã trả, hoàn tiền trừ một lần ở doanh thu thuần, khớp BRU-10 và quỹ ca | Số doanh thu thuần trước 12/10 trên báo cáo bị thấp hơn thực tế | Đã sửa, có kiểm thử | Không |
 | GD-26 (sửa lỗi) | Nhật ký từ chối quyền bị mất khi giao dịch của yêu cầu bị hủy; người không đúng cấp bấm duyệt chỉ nhận thông báo lỗi, không bị từ chối và ghi nhật ký | AC-111 không đạt trên trình duyệt thật | Đã sửa, có kiểm thử qua giao diện web | Không |
-| GD-13 | PostgreSQL chưa cài | Chưa kết luận an toàn đồng thời trên CSDL vận hành | Cài theo `docs/VAN_HANH.md` mục 4 | **Có**: cho phép cài |
-| NFR-17 | Thông báo đẩy chưa gửi thật | Cảnh báo chỉ thấy khi mở ứng dụng | Cài `pywebpush`, tạo khóa VAPID, có HTTPS | **Có**: cho phép cài thư viện và chọn cách có HTTPS cho điện thoại |
+| GD-13 | Đã cài PostgreSQL 16 riêng để kiểm thử (12/10/2026); kiểm thử đồng thời và toàn bộ kiểm thử đạt | Đã xác minh trên PostgreSQL | Giữ | Không |
+| NFR-17 | Máy chủ sẵn sàng gửi; thử qua đường hầm HTTPS tạm thời | Chờ xác nhận điện thoại thật nhận được | Khi vận hành thật cần HTTPS cố định | Chờ Hai thử trên điện thoại |

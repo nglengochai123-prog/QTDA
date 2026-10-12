@@ -1,79 +1,169 @@
 # Vận hành, nghiệm thu và kiểm tra kỹ thuật
 
-Cập nhật 12/10/2026.
+Cập nhật 12/10/2026. Mọi lệnh chạy trong PowerShell, tại thư mục `D:\QTDA`.
 
-## 1. Tự nghiệm thu trên localhost
+## 0. Trạng thái kiểm chứng
 
-Bộ dữ liệu nghiệm thu có 14 ngày vận hành mẫu: nhập hàng, mở ca, đơn, pha, phục vụ, thu tiền, hủy hóa đơn và hoàn tiền, phiếu dự phòng, kiểm kê, kết ca, báo cáo cuối ca. Nó nằm ở tệp riêng `nghiem_thu.sqlite3`, không đụng `db.sqlite3` đang dùng. Đây là dữ liệu mẫu, không phải số liệu thật.
+| Hạng mục | Kết quả | Kiểm chứng bằng |
+|---|---|---|
+| Kiểm thử tự động trên SQLite | 176 bài đạt | `manage.py test` |
+| Kiểm thử tự động trên PostgreSQL 16.10 | 176 bài đạt (sau khi sửa 2 lỗi chỉ lộ ra trên PostgreSQL) | `manage.py test` với cấu hình PostgreSQL |
+| Đồng thời trên PostgreSQL: hai đơn tranh phần tồn cuối, gửi lại cùng mã, hoàn thành một món nhiều lần, thanh toán cùng lúc, hai người duyệt một yêu cầu | Đạt: không âm kho, không ghi trùng tiền, không hiệu lực hai lần, `kiem_tra_toan_ven` sạch | `apps/core/tests/test_concurrency.py`, 6 luồng chạy cùng lúc |
+| Bộ dữ liệu 14 ngày trên PostgreSQL | Tạo được, `kiem_tra_toan_ven` không báo sai lệch | Lệnh mục 4 |
+| Đính chính báo cáo cuối ca | Đạt trên trình duyệt: Quản lý ca gửi, Chủ quán duyệt, chênh lệch 20.000 đ hết hiệu lực, giá trị kiểm soát giảm từ 40.000 xuống 20.000 đ, không cộng trùng | Trình duyệt, bộ dữ liệu mẫu |
+| Chấm công | Đạt trên trình duyệt: ra ca, vào ca, lượt quên ra ca được nhắc rồi bổ sung có lý do | Trình duyệt |
+| Cảnh báo | Đạt trên trình duyệt: báo Đã hết tạo cảnh báo Khẩn giao Quản lý ca, nhận xử lý, đóng không ghi kết quả bị từ chối, đóng có kết quả được | Trình duyệt |
+| Xuất Excel | Đạt: Microsoft Excel mở được tệp, 7 trang, hàm SUM của Excel trên mỗi trang bằng 8.485.000 đ, khớp hệ thống; hoàn 64.000 đ; thuần 8.421.000 đ | Excel mở qua tự động hóa, đối chiếu với báo cáo |
+| Thông báo đẩy: máy chủ | Sẵn sàng: đã cài pywebpush, có khóa VAPID, trang Cảnh báo báo "sẵn sàng" | Trình duyệt trên máy tính |
+| Thông báo đẩy: điện thoại thật nhận được | **Chờ Hai thử** theo mục 3 | |
 
-Tạo lại từ đầu (PowerShell, trong `D:\QTDA`):
+## 1. Bộ dữ liệu mẫu để tự nghiệm thu
+
+Tạo lại từ đầu (xóa tệp mẫu cũ, không đụng `db.sqlite3` đang dùng):
 
 ```powershell
 Remove-Item nghiem_thu.sqlite3 -ErrorAction SilentlyContinue
 $env:SQLITE_NAME = "nghiem_thu.sqlite3"
 .venv\Scripts\python.exe manage.py migrate
 .venv\Scripts\python.exe manage.py tao_du_lieu_nghiem_thu
+```
+
+Chạy máy chủ cho bộ dữ liệu mẫu (cửa sổ PowerShell để mở, `Ctrl+C` để dừng):
+
+```powershell
+$env:SQLITE_NAME = "nghiem_thu.sqlite3"
 .venv\Scripts\python.exe manage.py runserver 127.0.0.1:8766
 ```
 
-Mở http://127.0.0.1:8766. Mật khẩu chung: `demo-lam-2026`.
+Mở http://127.0.0.1:8766. Mật khẩu chung `demo-lam-2026`:
 
 | Vai trò | Tài khoản | Nên thử |
 |---|---|---|
-| Chủ quán | `demo_chuquan` | /bang-dieu-khien/ (chỉ tiêu BO-01, BO-02, biểu đồ, lọc tháng), /bao-cao/doanh-thu/ (xuất Excel), /bao-cao/kiem-soat/, /bao-cao/nguyen-lieu/, /canh-bao/, /kiem-soat/ngoai-le/, /tham-so/, /quan-tri/ |
-| Quản lý ca | `demo_quanlyca` | /ca/ (quỹ ca, kết ca, báo cáo cuối ca, đính chính), /duyet/, /du-phong/ (phiếu dự phòng), /cham-cong/ (bổ sung giờ ra), /tai/, /bang-dieu-khien/ (phần ca) |
+| Chủ quán | `demo_chuquan` | /bang-dieu-khien/, /bao-cao/doanh-thu/ (Xuất file Excel), /bao-cao/kiem-soat/, /bao-cao/nguyen-lieu/, /ca/tinh-trang/ (duyệt đính chính), /canh-bao/, /du-phong/ (xác nhận giá phiếu chờ), /tham-so/, /quan-tri/ |
+| Quản lý ca | `demo_quanlyca` | /ca/ và /ca/<số>/ (đính chính báo cáo), /duyet/, /du-phong/, /cham-cong/ (bổ sung giờ ra), /tai/, /canh-bao/ |
 | Thu ngân | `demo_thungan` | /thu-ngan/, /ca/ (xác nhận đã hoàn tiền) |
-| Phục vụ | `demo_phucvu` | /don/moi/ trên điện thoại, /don/san-sang/, /don/dang-mo/ (gửi điều chỉnh) |
-| Pha chế | `demo_phache` | /quay/, /kho/ (báo nhanh, phiếu nhập, kiểm kê, hao hụt), /cham-cong/ |
+| Phục vụ | `demo_phucvu` | /don/moi/ trên điện thoại, /don/san-sang/, /don/dang-mo/ |
+| Pha chế | `demo_phache` | /quay/, /kho/, /cham-cong/ |
 
-Thử quyền: đăng nhập phục vụ rồi mở /thu-ngan/ hoặc /bang-dieu-khien/ sẽ gặp trang "Bạn không có quyền", và lần đó được ghi vào nhật ký (Chủ quán xem ở /quan-tri/ › Nhật ký).
+Mở /thu-ngan/ bằng tài khoản phục vụ sẽ gặp trang "Bạn không có quyền"; lần đó được ghi nhật ký.
+
+Bản sao lưu dữ liệu trước đợt kiểm thử nằm ở `D:\QTDA\backups\` (`db-20261012-101625.sqlite3`, `nghiem_thu-20261012-101625.sqlite3`).
 
 ## 2. Tác vụ định kỳ
 
-Lệnh `chay_dinh_ky` ghi chuyển cấp yêu cầu điều chỉnh, giao chậm, nhắc ca thiếu người duyệt dự phòng, nhắc thiếu giờ ra, và tạo, đóng, chuyển cấp cảnh báo kèm thông báo đẩy. Màn hình vẫn tính đúng khi đọc, nhưng cảnh báo và nhật ký chuyển cấp chỉ cập nhật khi lệnh chạy, nên khi vận hành thật lệnh phải chạy mỗi phút.
+Lệnh `chay_dinh_ky` ghi chuyển cấp yêu cầu điều chỉnh, giao chậm, nhắc ca thiếu người duyệt dự phòng, nhắc thiếu giờ ra, tạo, đóng, chuyển cấp cảnh báo và gửi thông báo đẩy. Phải chạy mỗi phút khi vận hành.
 
-**Windows (máy chủ đặt ở quán):** tạo một tác vụ chạy mỗi phút bằng Task Scheduler:
+Chạy tay một lần (để kiểm tra):
+
+```powershell
+.venv\Scripts\python.exe manage.py chay_dinh_ky
+```
+
+Chạy lặp mỗi 60 giây trong một cửa sổ riêng (`Ctrl+C` để dừng):
+
+```powershell
+.venv\Scripts\python.exe manage.py chay_dinh_ky --lap 60
+```
+
+Lên lịch bằng Task Scheduler (chạy cả khi chưa đăng nhập; cần PowerShell mở bằng "Run as administrator"):
 
 ```powershell
 schtasks /Create /TN "LAM Coffee - kiem tra dinh ky" /SC MINUTE /MO 1 /TR "D:\QTDA\.venv\Scripts\python.exe D:\QTDA\manage.py chay_dinh_ky" /RU SYSTEM
 ```
 
-Hoặc chạy một tiến trình lặp: `.venv\Scripts\python.exe manage.py chay_dinh_ky --lap 60` (cần tự khởi động lại khi máy khởi động).
+Dừng hoặc xóa lịch:
 
-**Linux (nếu thuê máy chủ):** dòng cron `* * * * * cd /srv/qtda && .venv/bin/python manage.py chay_dinh_ky`.
+```powershell
+schtasks /End /TN "LAM Coffee - kiem tra dinh ky"
+schtasks /Delete /TN "LAM Coffee - kiem tra dinh ky" /F
+```
 
-Kiểm tra: chạy tay một lần, lệnh in số yêu cầu chuyển cấp, số lần đặt giao chậm, số cảnh báo tạo, đóng, chuyển cấp.
+Với bộ dữ liệu mẫu, đặt `$env:SQLITE_NAME = "nghiem_thu.sqlite3"` trước khi chạy lệnh.
 
-## 3. Thông báo đẩy (NFR-17)
+## 3. Thử thông báo đẩy trên điện thoại thật
 
-Đã làm: lưu đăng ký thiết bị, nút "Bật thông báo trên thiết bị này" ở trang Cảnh báo, service worker hiện thông báo và mở đúng màn hình khi chạm, gửi khi cảnh báo được giao hoặc chuyển cấp (Bảng 5.4, không gửi mức Thông tin).
+### Đã chuẩn bị
 
-Chưa gửi được vì còn thiếu, cần Chủ quán cho phép:
+- Thư viện `pywebpush` đã cài trong `.venv`; cặp khóa VAPID ở `D:\QTDA\.secrets\` (không đưa lên Git).
+- Máy chủ thử chạy bộ dữ liệu mẫu ở chế độ vận hành (không hiện lỗi chi tiết), cấu hình ở `.secrets\thu_thong_bao.env`.
+- Đường hầm HTTPS tạm thời miễn phí qua localhost.run, không cần tài khoản. Chỉ mở bộ dữ liệu mẫu, vẫn phải đăng nhập. Đường hầm tự tắt sau 4 giờ.
+- Mỗi lần gửi ghi ba mốc riêng ở trang Cảnh báo: **Máy chủ gửi lúc**, **Dịch vụ đẩy đã nhận** (Google hoặc Apple trả mã 201, nghĩa là máy chủ gửi thành công, chưa chắc điện thoại đã nhận), **Điện thoại đã hiện** (chính điện thoại báo về khi thông báo xuất hiện), và **Đã chạm mở**.
 
-1. Cài thư viện gửi: `.venv\Scripts\python.exe -m pip install pywebpush` (kéo theo `cryptography`, `py-vapid`).
-2. Tạo cặp khóa VAPID một lần: `.venv\Scripts\vapid.exe --gen` rồi `vapid --applicationServerKey`; đặt biến môi trường `WEBPUSH_VAPID_PUBLIC_KEY`, `WEBPUSH_VAPID_PRIVATE_KEY` (đường dẫn tệp private_key.pem hoặc nội dung khóa), `WEBPUSH_CONTACT=mailto:<email của quán>`.
+### Mở lại khi cần (hai cửa sổ PowerShell)
 
-Điều kiện thử trên điện thoại:
+Cửa sổ 1, máy chủ thử:
 
-- Trình duyệt chỉ cho đăng ký thông báo khi trang mở qua **HTTPS** (riêng `localhost` trên chính máy tính thì được). Điện thoại trong quán vào máy tính qua địa chỉ LAN (http://192.168.x.x) sẽ không bật được; cần tên miền có chứng chỉ, hoặc một đường hầm HTTPS. Việc chọn cách nào là quyết định của quán vì liên quan dịch vụ bên ngoài.
-- Android: Chrome bản mới, cho phép thông báo khi được hỏi.
-- iPhone: iOS 16.4 trở lên, mở bằng Safari, chọn "Thêm vào màn hình chính", mở ứng dụng từ biểu tượng đó rồi mới bật thông báo.
-- Cách thử: đăng nhập Quản lý ca trên điện thoại, vào /canh-bao/, bấm bật; ở máy tính tạo một báo nhanh "Đã hết" trong giờ mở cửa rồi chạy `chay_dinh_ky`; điện thoại phải nhận thông báo kể cả khi đã đóng ứng dụng.
+```powershell
+$env:LAM_ENV_FILE = ".secrets/thu_thong_bao.env"
+.venv\Scripts\python.exe manage.py runserver 127.0.0.1:8767 --insecure
+```
 
-## 4. Kiểm thử đồng thời trên PostgreSQL (chờ cho phép cài)
+Cửa sổ 2, đường hầm (in ra địa chỉ dạng `https://xxxx.lhr.life`):
 
-Hiện mới kiểm trên SQLite. **Chưa được coi là đã xác minh trên PostgreSQL.**
+```powershell
+ssh -o StrictHostKeyChecking=accept-new -R 80:127.0.0.1:8767 nokey@localhost.run
+```
 
-Mã đã sẵn sàng cho PostgreSQL: cấu hình đọc biến môi trường, trigger chỉ-thêm-mới có bản PostgreSQL, kiểm thử đồng thời tự dùng đúng câu lệnh theo loại CSDL.
+Địa chỉ đường hầm đổi mỗi lần mở; cấu hình đã cho phép mọi địa chỉ `*.lhr.life`.
 
-Các bước khi được phép:
+### Các bước trên điện thoại
 
-1. Cài PostgreSQL 16 cho Windows (trình cài đặt chính thức), tạo người dùng và CSDL:
-   `CREATE USER lamcoffee WITH PASSWORD '<mật khẩu>' CREATEDB; CREATE DATABASE lamcoffee OWNER lamcoffee;`
-   (`CREATEDB` để Django tạo CSDL kiểm thử riêng.)
-2. Cài trình kết nối: `.venv\Scripts\python.exe -m pip install "psycopg[binary]"`.
-3. Đặt biến môi trường: `DB_ENGINE=postgresql`, `DB_NAME=lamcoffee`, `DB_USER=lamcoffee`, `DB_PASSWORD=...`, `DB_HOST=localhost`.
-4. Chạy: `manage.py migrate`, rồi `manage.py test apps.orders.tests.test_flow.ConcurrentOrderTests` (hai đơn tranh phần tồn cuối), rồi toàn bộ `manage.py test`.
-5. Chạy thêm một lần với nhiều luồng hơn (đề xuất 8 luồng, 20 lượt) bằng biến thể của kiểm thử trên, đối chiếu `kiem_tra_toan_ven` sau khi chạy.
+**Android (Chrome):**
+1. Mở địa chỉ `https://xxxx.lhr.life` bằng Chrome, đăng nhập `demo_quanlyca` / `demo-lam-2026`.
+2. Vào **Cảnh báo** (thanh dưới). Ở khối "Thông báo đẩy trên điện thoại", bấm **Bật thông báo trên thiết bị này**.
+3. Chrome hỏi quyền: chọn **Cho phép**. Nếu lỡ chặn: chạm biểu tượng ổ khóa cạnh địa chỉ › **Quyền** › **Thông báo** › **Cho phép**, rồi tải lại trang.
+4. Kiểm tra cài đặt điện thoại: **Cài đặt › Ứng dụng › Chrome › Thông báo** đang bật; tắt chế độ **Không làm phiền**.
+5. Bấm **Gửi thử đến thiết bị của tôi**. Rồi **thoát Chrome về màn hình chính** (hoặc khóa máy) để thử khi ứng dụng không mở.
+6. Thông báo "Thử thông báo LAM Coffee" phải hiện. Chạm vào nó; Chrome mở trang Cảnh báo.
+7. Ở bảng bên dưới nút, cột **Điện thoại đã hiện** và **Đã chạm mở** phải có giờ.
 
-Tiêu chí đạt: đúng một đơn được nhận khi chỉ đủ một ly; không có tồn âm hay giữ chỗ lệch (`kiem_tra_toan_ven` không báo sai lệch); toàn bộ kiểm thử đạt trên PostgreSQL.
+**iPhone (cần iOS 16.4 trở lên):**
+1. Mở địa chỉ bằng **Safari** (không dùng Chrome trên iPhone), đăng nhập.
+2. Chạm nút **Chia sẻ** › **Thêm vào Màn hình chính** › **Thêm**.
+3. **Đóng Safari**, mở ứng dụng LAM Coffee từ biểu tượng vừa thêm (bắt buộc; iPhone chỉ cho thông báo khi mở theo cách này). Đăng nhập lại nếu được hỏi.
+4. Vào **Cảnh báo** › **Bật thông báo trên thiết bị này** › chọn **Cho phép**.
+5. Nếu lỡ chặn: **Cài đặt › Thông báo › LAM Coffee › Cho phép thông báo**.
+6. Bấm **Gửi thử**, về màn hình chính, chờ thông báo, chạm mở, rồi xem bảng như bước 7 của Android.
+
+**Thử với cảnh báo thật:** trên máy tính đăng nhập Pha chế, ở /kho/bao-nhanh/ bấm **Đã hết** một nguyên liệu (trong giờ 6–22), rồi chạy `chay_dinh_ky` với bộ dữ liệu mẫu; điện thoại của Quản lý ca phải nhận thông báo "Khẩn: ... đã hết".
+
+**Đọc kết quả:** "Dịch vụ đẩy đã nhận: Có (mã 201)" mà "Điện thoại đã hiện: Chưa" nghĩa là máy chủ đã gửi đúng nhưng điện thoại chưa hiện (thường do quyền thông báo, Không làm phiền, tiết kiệm pin hoặc điện thoại mất mạng). Cả hai có giờ là đạt.
+
+### Tắt sau khi thử
+
+Trong cửa sổ đường hầm và cửa sổ máy chủ, bấm `Ctrl+C`. Nếu đã đóng cửa sổ mà tiến trình còn chạy:
+
+```powershell
+Get-NetTCPConnection -LocalPort 8767 -State Listen | ForEach-Object { Stop-Process -Id $_.OwningProcess }
+Get-CimInstance Win32_Process -Filter "Name='ssh.exe'" | Where-Object { $_.CommandLine -like "*localhost.run*" } | ForEach-Object { Stop-Process -Id $_.ProcessId }
+```
+
+Sau khi tắt, địa chỉ `*.lhr.life` không còn truy cập được.
+
+## 4. PostgreSQL để kiểm thử
+
+Cài dạng gói rời (không dịch vụ Windows, không cần quyền quản trị) tại `C:\Users\HP\lam-postgres\`: PostgreSQL 16.10, cổng **5433**, chỉ nghe trên máy này. CSDL kiểm thử `lamcoffee_test`, người dùng `lamcoffee_test`; mật khẩu nằm trong `C:\Users\HP\lam-postgres\lam-test.env` (ngoài kho mã). Dữ liệu SQLite không bị đụng tới.
+
+Bật và tắt PostgreSQL:
+
+```powershell
+C:\Users\HP\lam-postgres\pgsql\bin\pg_ctl.exe -D C:\Users\HP\lam-postgres\data -o "-p 5433 -c listen_addresses=localhost" -l C:\Users\HP\lam-postgres\pg.log start
+C:\Users\HP\lam-postgres\pgsql\bin\pg_ctl.exe -D C:\Users\HP\lam-postgres\data stop
+```
+
+Chạy kiểm thử trên PostgreSQL (trong cùng cửa sổ, sau khi bật):
+
+```powershell
+Get-Content C:\Users\HP\lam-postgres\lam-test.env | ForEach-Object { $k, $v = $_ -split "=", 2; Set-Item "env:$k" $v }
+.venv\Scripts\python.exe manage.py test apps.core.tests.test_concurrency --noinput
+.venv\Scripts\python.exe manage.py test --noinput
+```
+
+Đóng cửa sổ để bỏ các biến môi trường (các cửa sổ khác vẫn dùng SQLite).
+
+Gỡ hẳn khi không cần: tắt PostgreSQL rồi xóa thư mục `C:\Users\HP\lam-postgres\`.
+
+### Lỗi đã tìm và sửa nhờ PostgreSQL
+
+- Gửi lại cùng mã nghiệp vụ đúng lúc yêu cầu đầu còn đang xử lý: trên PostgreSQL yêu cầu sau chạy lại nghiệp vụ và báo lỗi sai (ví dụ "thiếu nguyên liệu") dù không ghi trùng. Đã sửa: giữ chỗ mã trước khi làm, yêu cầu sau chờ rồi nhận đúng kết quả của yêu cầu đầu.
+- Chuyển cấp yêu cầu điều chỉnh khóa cả dòng của bảng liên kết có thể rỗng, PostgreSQL từ chối. Đã sửa để chỉ khóa dòng của yêu cầu.

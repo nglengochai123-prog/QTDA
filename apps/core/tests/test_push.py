@@ -28,3 +28,41 @@ class PushTests(TestCase):
         if not ready:
             self.assertEqual((sent, why), (0, reason))
         self.assertEqual(self.client.post(reverse("core:push_subscribe"), "x", content_type="application/json").status_code, 400)
+
+
+class PushDeliveryTests(TestCase):
+    """Tách mốc: dịch vụ đẩy đã nhận (máy chủ gửi được) với điện thoại thực sự hiện thông báo."""
+
+    def setUp(self):
+        self.user = User.objects.create_user("qlca", password="matkhau-thu-123", role=Role.QUAN_LY_CA)
+        PushSubscription.objects.create(user=self.user, endpoint="https://push.example/1", p256dh="k", auth="a")
+
+    def test_service_accepted_is_not_device_received(self):
+        from unittest import mock
+
+        from apps.core.models import PushMessage
+
+        class Accepted:
+            status_code = 201
+
+        env = {"WEBPUSH_VAPID_PUBLIC_KEY": "BPub", "WEBPUSH_VAPID_PRIVATE_KEY": "khoa"}
+        with mock.patch.dict("os.environ", env), mock.patch("pywebpush.webpush", return_value=Accepted()) as sent:
+            accepted, reason = push.send_to_user(self.user, "Thử", "Nội dung")
+        self.assertEqual((accepted, reason), (1, ""))
+        payload = json.loads(sent.call_args.kwargs["data"])
+        message = PushMessage.objects.get()
+        self.assertEqual((message.accepted_count, message.received_at), (1, None))  # chưa biết điện thoại có hiện
+        self.client.post(payload["receipt"])  # service worker báo đã hiện
+        self.client.post(payload["opened"])
+        message.refresh_from_db()
+        self.assertIsNotNone(message.received_at)
+        self.assertIsNotNone(message.opened_at)
+
+
+class AlertPageTests(TestCase):
+    def test_alert_page_renders_push_panel(self):
+        User.objects.create_user("qlca", password="matkhau-thu-123", role=Role.QUAN_LY_CA)
+        self.client.login(username="qlca", password="matkhau-thu-123")
+        page = self.client.get(reverse("control:alerts"))
+        self.assertContains(page, "Thông báo đẩy trên điện thoại")
+        self.assertContains(page, "js/push.js")

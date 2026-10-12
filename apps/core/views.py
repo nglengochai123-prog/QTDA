@@ -3,6 +3,7 @@ from django.db import connection
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.cache import never_cache
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 
@@ -98,3 +99,48 @@ def push_status(request):
     ready, reason = push.status()
     return JsonResponse({"ready": ready, "reason": reason, "public_key": push.public_key(),
                          "devices": request.user.push_subscriptions.filter(is_active=True).count()})
+
+
+@csrf_exempt
+@require_POST
+def push_receipt(request, message_id, stage):
+    """Service worker báo điện thoại đã hiện (nhan) hoặc người dùng đã chạm mở (mo) một thông báo.
+
+    Mã thông báo là UUID ngẫu nhiên chỉ có trong nội dung đã gửi tới thiết bị, nên không cần phiên đăng nhập.
+    """
+    from django.utils import timezone
+
+    from .models import PushMessage
+
+    field = {"nhan": "received_at", "mo": "opened_at"}.get(stage)
+    if field is None:
+        return JsonResponse({"ok": False}, status=400)
+    PushMessage.objects.filter(pk=message_id, **{f"{field}__isnull": True}).update(**{field: timezone.now()})
+    if stage == "mo":
+        PushMessage.objects.filter(pk=message_id, received_at__isnull=True).update(received_at=timezone.now())
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+def push_test(request):
+    """Gửi một thông báo thử đến các thiết bị của chính người đang đăng nhập."""
+    from . import push
+
+    sent, reason = push.send_to_user(request.user, "Thử thông báo LAM Coffee",
+                                     "Nếu bạn thấy dòng này trên điện thoại, thông báo đẩy đã hoạt động.",
+                                     "/canh-bao/", kind="thu")
+    return JsonResponse({"ok": bool(sent), "accepted": sent, "reason": reason})
+
+
+@login_required
+@require_GET
+def push_log(request):
+    from .models import PushMessage
+
+    rows = [{"title": m.title, "sent": m.created_at.isoformat(), "accepted": m.accepted_count,
+             "codes": [r.get("ma") for r in m.service_results],
+             "received": m.received_at.isoformat() if m.received_at else None,
+             "opened": m.opened_at.isoformat() if m.opened_at else None}
+            for m in PushMessage.objects.filter(user=request.user)[:5]]
+    return JsonResponse({"messages": rows})
