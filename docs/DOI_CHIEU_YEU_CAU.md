@@ -1,6 +1,6 @@
-# Đối chiếu Phần 1–3 với báo cáo yêu cầu
+# Đối chiếu mã nguồn với báo cáo yêu cầu
 
-Cập nhật 11/10/2026, sau đợt rà soát tích hợp và sau khi Chủ quán trả lời các quyết định GD-01 đến GD-13. Bảng này so mã nguồn trong `D:\QTDA` với báo cáo yêu cầu đã chỉnh sửa (`BAO CAO SPRINT 1.docx`). Số bài kiểm thử không được dùng làm bằng chứng hoàn thành; mỗi dòng ghi rõ đã kiểm tra bằng gì.
+Cập nhật 12/10/2026 (bảng cuối cùng ở mục 9). Bản đầu lập 11/10/2026, sau đợt rà soát tích hợp và sau khi Chủ quán trả lời các quyết định GD-01 đến GD-13. Bảng này so mã nguồn trong `D:\QTDA` với báo cáo yêu cầu đã chỉnh sửa (`BAO CAO SPRINT 1.docx`). Số bài kiểm thử không được dùng làm bằng chứng hoàn thành; mỗi dòng ghi rõ đã kiểm tra bằng gì.
 
 ## 1. Bộ tài liệu chuẩn
 
@@ -39,15 +39,15 @@ Trạng thái: **Đúng** là làm đủ theo BRD và có kiểm thử; **Một 
 
 | Mã | Nội dung | Trạng thái | Ghi chú, bằng chứng |
 |---|---|---|---|
-| FR-01 | Tạo đơn trên điện thoại | Đúng | AC-01, AC-02, AC-04: `orders/tests/test_flow.py`. AC-03: kiểm kê nhanh đi qua màn Kiểm kê, chưa có lối tắt từ màn tạo đơn |
-| FR-02 | Gửi quầy pha chế, in phiếu | Đúng | Giữ chỗ cả đơn trong một giao dịch; hai đơn đồng thời chỉ kiểm trên SQLite (xem mục 4) |
+| FR-01 | Tạo đơn trên điện thoại | Đúng | AC-01 đến AC-04: `orders/tests/test_flow.py`, `inventory/tests/test_recount.py`. AC-03: từ màn tạo đơn bấm "Đề nghị pha chế kiểm kê lại", cảnh báo giao Pha chế, quá hạn chuyển Quản lý ca, tự đóng khi kiểm kê xong |
+| FR-02 | Gửi quầy pha chế, in phiếu | Đúng | Giữ chỗ cả đơn trong một giao dịch; đồng thời đã kiểm trên PostgreSQL. Phiếu in /quay/phieu/<đơn>/ đã xem trên trình duyệt, nút In ẩn khi in; **in trên máy in thật của quầy chờ Hai thử** (NFR-11) |
 | FR-03 | Vòng đời đơn | Đúng | AC-06, AC-07 |
 | FR-04 | Thanh toán theo bàn | Đúng | AC-08, AC-09, AC-10; trạng thái chờ duyệt và quá hạn mọi cấp tính khi đọc |
 | FR-05 | In hóa đơn | Chưa làm | Could, Giai đoạn 3 theo BRD |
 | FR-06 | Bán hàng dự phòng, nhập bù | Đúng | AC-12, AC-13 (`orders/tests/test_backup.py`): kích cỡ và tùy chọn; giá theo lịch sử giá, định mức theo phiên bản tại thời điểm bán; thiếu lịch sử thì chờ Chủ quán xác nhận có nhật ký; cấp dãy theo ca có người nhận; nhập bù có mã nghiệp vụ thì liên kết đơn đã lưu và chỉ bổ sung phần thiếu; phiếu không mã tạo đơn theo định mức lúc bán; gửi lại không ghi thêm; nháp gửi lại trả đơn đã nhập bù; số trùng, ngoài dãy, quá hạn, hủy tạo ngoại lệ; kết ca bị chặn khi còn số chưa xử lý. Màn hình /du-phong/ |
 | FR-07 | Quỹ tiền mặt ca | Đúng | AC-14, AC-15 |
-| FR-08 | Kết ca, báo cáo cuối ca | Một phần | AC-16, AC-17 đúng; đính chính báo cáo có lý do và người duyệt (GD-11); "Chủ quán nhận thông báo" mới là thông báo trong ứng dụng, chưa có Web Push |
-| FR-09 | Tình trạng dữ liệu ca | Một phần | Có chưa kết ca, thiếu báo cáo quá hạn (AC-18). Chưa có: kiểm kê nhóm trọng yếu trước giờ mở cửa hôm sau, nhập bù (Phần 4), cảnh báo chuyển Chủ quán khi quá hạn xử lý (cùng FR-51) |
+| FR-08 | Kết ca, báo cáo cuối ca | Đúng | AC-16, AC-17; đính chính có lý do và người duyệt (GD-11); Chủ quán nhận thông báo đẩy khi có báo cáo (`core/tests/test_push.py`), nhận trên điện thoại thật chờ Hai thử |
+| FR-09 | Tình trạng dữ liệu ca | Đúng | AC-18; nhập bù phiếu dự phòng; kiểm kê nhóm trọng yếu trước giờ mở cửa hôm sau (thiếu thì báo ở ca cuối ngày và tạo cảnh báo kiểm kê trễ); quá hạn chuyển cấp qua trung tâm cảnh báo. `inventory/tests/test_recount.py` |
 | FR-10 | Khóa đơn, yêu cầu điều chỉnh | Đúng | AC-19, AC-20; Chủ quán sửa được danh mục lý do trong trang dữ liệu nền |
 | FR-11 | Phê duyệt và chuyển cấp | Đúng | AC-21 đến AC-24; cấp hiện hành tính khi đọc nên không phụ thuộc ai mở màn hình; nhật ký chuyển cấp ghi khi chạy `chay_dinh_ky` |
 | FR-12 | Đối soát doanh thu ca | Đúng | AC-25, AC-26, AC-27; lưu ngưỡng đã áp dụng vào từng khoản chênh lệch |
@@ -69,17 +69,19 @@ Trạng thái: **Đúng** là làm đủ theo BRD và có kiểm thử; **Một 
 | FR-35 | Chấm công vào ca, ra ca | Đúng | AC-76, AC-77, AC-78 (`staff/tests/test_timekeeping.py`): vào ca chọn vai trò mình đảm nhận; thiếu giờ ra không tính giờ công, nhắc Quản lý ca qua lệnh định kỳ; bổ sung giờ ra phải có lý do, ghi nhật ký. Chưa có lịch ca nên giờ công tính theo giờ vào, ra (BRU-31 khi chưa có lịch). Màn hình /cham-cong/ |
 | FR-36 | Tải và chất lượng phục vụ | Đúng | AC-79: tải theo hệ số nhóm món, thời gian chờ trung vị từ gửi pha chế đến mang ra, món tồn quầy cuối khung, đánh dấu quá tải, số người có mặt theo vai trò. Màn hình /tai/ |
 | FR-30 | Đặt hàng, theo dõi giao | Đúng | AC-68, AC-69; Giao chậm tính khi đọc |
-| FR-51 | Trung tâm cảnh báo | Một phần | AC-102, AC-103 (`control/tests/test_alerts.py`): các loại ở Bảng 5.4 trừ "Cần đặt hàng" (chờ dự báo) và "Kiểm kê lại sau khi pha chế xác nhận còn hàng"; giao người xử lý chính, thời hạn là tham số, trạng thái Mới, Đang xử lý, Đã đóng; tự đóng khi điều kiện không còn; đóng tay phải có ghi chú; quá hạn chuyển Chủ quán hoặc nhắc lại hằng ngày; thống kê tuần theo NFR-23. Chưa có thông báo đẩy. Màn hình /canh-bao/ |
-| FR-50 | Bảng điều khiển | Đúng | AC-100, AC-101: BO-01 với từng khoản cấu thành và liên kết sang báo cáo kiểm soát, BO-02, doanh thu và số đơn theo ngày, chênh lệch tích lũy, tồn nguyên liệu trọng yếu, cảnh báo và ngoại lệ đang mở theo mức. Chưa có BO-03 và lợi nhuận (Giai đoạn 2). Màn hình /bang-dieu-khien/ |
+| FR-51 | Trung tâm cảnh báo | Một phần (chờ dự báo) | AC-102, AC-103 (`control/tests/test_alerts.py`): mọi loại ở Bảng 5.4 gồm kiểm kê lại và kiểm kê trễ, **trừ "Cần đặt hàng" chờ logic dự báo**; giao người xử lý chính, thời hạn là tham số, Mới, Đang xử lý, Đã đóng; tự đóng khi điều kiện không còn; đóng tay phải ghi kết quả; quá hạn chuyển cấp hoặc nhắc lại; thống kê tuần (NFR-23); thông báo đẩy cho Khẩn và Quan trọng. /canh-bao/ |
+| FR-50 | Bảng điều khiển | Đúng | AC-100, AC-101: BO-01 và khoản cấu thành, BO-02, doanh thu và số đơn theo ngày, chênh lệch tích lũy, tồn nguyên liệu trọng yếu, danh sách báo Sắp hết (Bảng 5.4), cảnh báo và ngoại lệ đang mở theo mức. Mỗi số mở được danh sách cấu thành (NFR-19): số đơn từng ngày sang Tra cứu đơn, BO-02 sang báo cáo tháng đó, nguyên liệu sang Sổ kho, ngoại lệ theo mức. BO-03 và lợi nhuận thuộc Giai đoạn 2. /bang-dieu-khien/ |
 | FR-52 | Báo cáo kiểm soát doanh thu | Đúng | AC-104 (`reports/tests/test_reports.py`): điều chỉnh theo lý do và kết quả, ngoại lệ theo nguồn và kết quả xem xét, chênh lệch theo ca và tích lũy, vụ việc, giá trị kiểm soát tách nhóm không tính trùng. Chỉ Chủ quán. /bao-cao/kiem-soat/ |
-| FR-53 | Báo cáo doanh thu | Đúng | AC-105: theo ngày, khung giờ, ca, nhóm món, món, nhân viên, phương thức; so với kỳ trước; xuất Excel (.xlsx, mỗi chiều một trang). /bao-cao/doanh-thu/ |
-| FR-54 | Báo cáo nguyên vật liệu | Một phần | AC-106: tồn đầu, nhập, tiêu hao theo món (gồm hủy sau pha chế, không trừ lần hai), hao hụt, kiểm kê, tồn cuối khớp sổ kho, trường hợp thiếu. Cột nhu cầu ước tính chờ logic dự báo. /bao-cao/nguyen-lieu/ |
-| FR-59 | Tài khoản, phân quyền | Một phần | AC-111, AC-112 phần đã có màn hình; AC-113: bắt buộc người duyệt dự phòng khi khai báo ca, nhắc trên trang chủ và trong lệnh định kỳ; chưa có thông báo đẩy |
+| FR-53 | Báo cáo doanh thu | Đúng | AC-105: theo ngày, khung giờ, ca, nhóm món, món, nhân viên, phương thức; so với kỳ trước; xuất Excel (Excel mở được, số khớp). Bấm số đơn của mỗi dòng mở đúng các đơn gốc: trên bộ dữ liệu 14 ngày, 64/64 dòng ở 7 chiều khớp số đơn (`reports/tests/test_drilldown.py` và trình duyệt) |
+| FR-54 | Báo cáo nguyên vật liệu | Một phần (chờ dự báo) | AC-106: tồn đầu, nhập, tiêu hao theo món (gồm hủy sau pha chế, không trừ lần hai), hao hụt, kiểm kê, tồn cuối, trường hợp thiếu. Mỗi số mở Sổ kho đã lọc; 11/11 số khác 0 khớp tổng sổ kho trên bộ dữ liệu 14 ngày. **Cột nhu cầu ước tính chờ logic dự báo** |
+| FR-59 | Tài khoản, phân quyền | Đúng | AC-111, AC-112 (kiểm thử qua giao diện 5 vai trò); AC-113: bắt buộc người duyệt dự phòng khi khai báo ca, nhắc trên trang chủ và một thông báo đẩy cho Chủ quán mỗi ca thiếu (`shifts/tests/test_corrections.py`) |
 | FR-60 | Danh mục món, bảng giá | Đúng | AC-114 |
 | FR-61 | Nhật ký thao tác | Đúng | AC-115; chỉ thêm, chặn sửa xóa cả ở CSDL |
 | NFR-04 | Không ghi trùng | Đúng | Mọi thao tác tạo dữ liệu có mã nghiệp vụ; kiểm thử gửi lại trong `core/tests/test_end_to_end.py` |
 | NFR-14 | Tham số sửa trên ứng dụng | Đúng | Có lịch sử và thời điểm hiệu lực; xem mục 5 |
-| NFR-17 | Web Push | Chưa làm | Hiện báo trong ứng dụng khi đang mở |
+| FR-34 | Hồ sơ nhân viên | Đúng | AC-74, AC-75: số điện thoại không trùng, vai trò, đơn giá lương giờ, tài khoản liên kết; Nghỉ việc khóa tài khoản ngay. Quản lý ở trang Dữ liệu nền (chỉ Chủ quán) |
+
+Màn hình tra cứu bổ sung 12/10/2026: Tra cứu đơn (/don/tra-cuu/, lọc theo mã, ngày tạo hoặc ngày thu, trạng thái, phương thức, bàn, ca, nhân viên, món, nhóm, khung giờ; phân trang giữ bộ lọc), Chi tiết đơn (món, điều chỉnh, hoàn tiền, phiếu dự phòng, nhật ký), Sổ kho (/kho/so-kho/, lọc nguyên liệu, loại, ngày, có tổng và liên kết sang đơn), lọc và phân trang Ngoại lệ, Vụ việc.
 
 Luồng xuyên suốt nhập hàng → tạo đơn → pha một phần → điều chỉnh → phục vụ → thanh toán → hủy hóa đơn có hoàn tiền → kết ca → đối soát → giải trình → xác minh → báo cáo được kiểm trong `apps/core/tests/test_end_to_end.py`, đối chiếu cùng lúc trạng thái đơn, sổ kho, giao dịch tiền, báo cáo điều chỉnh, giá trị kiểm soát tháng và nhật ký.
 
@@ -90,7 +92,7 @@ Luồng xuyên suốt nhập hàng → tạo đơn → pha một phần → đi�
 | Ca làm việc | Lịch ca từ đăng ký và lập lịch (FR-38, FR-39, Giai đoạn 2) | Chủ quán khai báo ca tối thiểu: giờ, người duyệt, dự phòng, người ủy quyền | Đơn, thanh toán, đối soát cần gắn ca ngay từ Phần 1 |
 | Trang tham số | Mục công nghệ ghi tham số nằm trong Django admin | Trang Kiểm soát › Tham số | Cần hiện căn cứ, lịch sử, thời điểm hiệu lực và dùng được trên điện thoại |
 | Tự chuyển cấp | "Tự chuyển" khi quá hạn | Cấp đúng ngay khi đọc; ghi nhật ký chuyển cấp khi lệnh `chay_dinh_ky` chạy | Không để việc mở màn hình quyết định dữ liệu. Khi triển khai cần lên lịch lệnh mỗi phút (Task Scheduler hoặc `--lap 60`) |
-| Kiểm thử đồng thời | Hệ thống chạy PostgreSQL | Chỉ kiểm trên SQLite; chưa kết luận đạt trên PostgreSQL | Chờ Chủ quán cho phép cài PostgreSQL (GD-13) |
+| Kiểm thử đồng thời | Hệ thống chạy PostgreSQL | Đã kiểm trên PostgreSQL 16 (12/10/2026), 5 tình huống đạt | Hết khác biệt |
 | Cảnh báo theo Bảng 5.4 | Hệ thống tự giao và tự chuyển cấp | Trung tâm cảnh báo cập nhật khi lệnh `chay_dinh_ky` chạy (nên lên lịch mỗi phút) | Tách kiểm tra quá hạn khỏi việc mở màn hình theo yêu cầu của Chủ quán |
 
 ## 5. Tham số: căn cứ và quy tắc hiệu lực
@@ -176,4 +178,44 @@ Chủ quán trả lời ngày 11/10/2026. Cột "Đã làm" ghi cách hệ thố
 | GD-25 (sửa lỗi) | Báo cáo doanh thu trước đây loại đơn đã hủy sau thanh toán **và** trừ thêm khoản hoàn, nên khoản hoàn bị trừ hai lần. Đã sửa: doanh thu là số khách đã trả, hoàn tiền trừ một lần ở doanh thu thuần, khớp BRU-10 và quỹ ca | Số doanh thu thuần trước 12/10 trên báo cáo bị thấp hơn thực tế | Đã sửa, có kiểm thử | Không |
 | GD-26 (sửa lỗi) | Nhật ký từ chối quyền bị mất khi giao dịch của yêu cầu bị hủy; người không đúng cấp bấm duyệt chỉ nhận thông báo lỗi, không bị từ chối và ghi nhật ký | AC-111 không đạt trên trình duyệt thật | Đã sửa, có kiểm thử qua giao diện web | Không |
 | GD-13 | Đã cài PostgreSQL 16 riêng để kiểm thử (12/10/2026); kiểm thử đồng thời và toàn bộ kiểm thử đạt | Đã xác minh trên PostgreSQL | Giữ | Không |
-| NFR-17 | Máy chủ sẵn sàng gửi; thử qua đường hầm HTTPS tạm thời | Chờ xác nhận điện thoại thật nhận được | Khi vận hành thật cần HTTPS cố định | Chờ Hai thử trên điện thoại |
+| NFR-17 | Máy chủ sẵn sàng gửi; thử qua đường hầm HTTPS tạm thời | Chờ xác nhận điện thoại thật nhận được | Khi vận hành thật cần HTTPS cố định | Tạm hoãn theo yêu cầu của Hai (12/10/2026), đường hầm đã tắt; chờ Hai nghiệm thu |
+
+## 9. Bảng đối chiếu cuối cùng (12/10/2026)
+
+Phạm vi làm: mọi yêu cầu mức Must của BRD. Các mục Should, Could thuộc Giai đoạn 2, 3 theo Bảng 9.1 (FR-05, FR-19, FR-31 đến FR-33, FR-37 đến FR-49, FR-55 đến FR-58, NFR-18, NFR-20, NFR-21) không làm trong đợt này theo chỉ đạo không mở rộng phạm vi.
+
+**Chức năng Must:** FR-01 đến FR-04, FR-06 đến FR-18, FR-20 đến FR-27, FR-30, FR-34 đến FR-36, FR-50, FR-52, FR-53, FR-59 đến FR-61 là **Đúng** (chi tiết mục 3). Còn lại:
+
+| Mã | Trạng thái | Phần còn thiếu | Lý do |
+|---|---|---|---|
+| FR-28 | Chưa làm | Ước tính nhu cầu nguyên vật liệu | Chờ Hai hướng dẫn logic dự báo; dữ liệu đầu vào đã sẵn (mục 7) |
+| FR-29 | Chưa làm | Cảnh báo Cần đặt hàng | Phụ thuộc FR-28 |
+| FR-51 | Một phần | Loại cảnh báo Cần đặt hàng | Phụ thuộc FR-29; mọi loại khác đã có |
+| FR-54 | Một phần | Cột nhu cầu ước tính | Phụ thuộc FR-28 |
+
+**Phi chức năng Must:**
+
+| Mã | Trạng thái | Bằng chứng, phần còn chờ |
+|---|---|---|
+| NFR-01 Hiệu năng báo cáo | Đạt trên dữ liệu thử | Bộ dữ liệu 14 ngày, máy cá nhân: bảng điều khiển tối đa 173 ms, báo cáo doanh thu kỳ 1 tháng tối đa 96 ms (5 lần mỗi trang). Kỳ 12 tháng chưa đo được vì chưa có dữ liệu 12 tháng |
+| NFR-02 Hiệu năng bán hàng | Chờ chạy thử | Đo trên mạng và máy in thật của quán với 30 đơn mỗi giờ |
+| NFR-03 Độ trễ thông tin | Đúng | Tồn, bảng điều khiển, báo cáo tính khi đọc nên cập nhật ngay; cảnh báo cập nhật mỗi lần `chay_dinh_ky` chạy (lên lịch mỗi phút, VAN_HANH mục 2) |
+| NFR-04 Độ chính xác | Đúng | Mã nghiệp vụ chống ghi trùng; `kiem_tra_toan_ven` sạch trên SQLite, PostgreSQL và bản phục hồi |
+| NFR-05 Tính sẵn sàng | Chờ triển khai | Đo trên máy chủ thật |
+| NFR-06 Bảo mật | Đúng phần mã | Băm mật khẩu, tối thiểu 8 ký tự, tự đăng xuất 15 phút, khóa sau nhiều lần sai; HTTPS và cookie an toàn bật khi `DJANGO_DEBUG=false` (cần chứng chỉ khi triển khai) |
+| NFR-07 Phân quyền dữ liệu | Đúng | Kiểm quyền ở máy chủ cho mọi màn hình kể cả màn hình mới (kiểm thử 403); lương, chi phí chỉ Chủ quán |
+| NFR-08 Toàn vẹn | Đúng | Nhật ký chỉ thêm, chặn sửa xóa ở CSDL; đính chính giữ bản cũ |
+| NFR-09 Sao lưu, phục hồi | Đúng phần mã | `sao_luu`, `phuc_hoi` đã thử trên SQLite và PostgreSQL, phục hồi vào CSDL riêng đạt kiểm tra, CSDL đang chạy không bị đụng. **Lên lịch hằng ngày và chọn nơi lưu ngoài máy chủ chờ Hai** |
+| NFR-10 Khả năng sử dụng | Chờ chạy thử | Thao tác đã rút gọn theo AC; đo thời gian thật ở buổi đào tạo |
+| NFR-11 Tương thích | Chờ Hai thử | Chrome, Edge trên máy tính đã dùng; Android, iPhone và máy in quầy cần thiết bị thật |
+| NFR-12 Bản địa hóa | Đúng | Tiếng Việt, tiền có dấu chấm, giờ UTC+7 |
+| NFR-13 Pháp lý | Đúng phần mã | Thông báo xử lý dữ liệu cá nhân có xác nhận theo phiên bản; **nội dung dự thảo chờ Hai rà soát pháp lý** |
+| NFR-14 Cấu hình | Đúng | Tham số có lịch sử và thời điểm hiệu lực |
+| NFR-15 Giao diện đáp ứng | Đúng | 24 trang chính ở bề rộng 375 px không có cuộn ngang (trình duyệt, bộ dữ liệu mẫu); máy tính từ 1366 px |
+| NFR-16 Kết nối không ổn định | Đúng phần mã | Báo mất kết nối trong 10 giây; nháp biểu mẫu lưu trên thiết bị kèm mã nghiệp vụ và khôi phục sau tải lại (đã thử trên trình duyệt); thanh toán, phê duyệt, xem xét bị chặn khi mất mạng (đã thử). Diễn tập mất mạng thật ở tuần chạy thử |
+| NFR-17 Thông báo tức thời | Chờ Hai nghiệm thu | Máy chủ gửi được (dịch vụ đẩy nhận mã 201); thử trên điện thoại thật đang tạm hoãn theo yêu cầu của Hai |
+| NFR-19 Khả năng giải thích | Đúng, trừ phần dự báo | Cảnh báo và ngoại lệ hiện quy tắc và liên kết đơn gốc; mọi số trên bảng điều khiển và báo cáo mở được dữ liệu cấu thành. Phần ước tính và đề xuất chờ dự báo |
+| NFR-22 Quyết định thuộc con người | Đúng | Không có thao tác quản trị tự động; mọi kết luận cần người xác nhận |
+| NFR-23 Tải xử lý của Chủ quán | Đúng | Mọi loại cảnh báo có người xử lý chính, thời hạn, cấp chuyển; mức Thông tin không đẩy; thống kê tuần |
+
+**Kết luận:** toàn bộ phạm vi Must làm được mà không cần logic dự báo đã có trong mã nguồn. Phần còn lại chia ba nhóm: chờ logic dự báo (FR-28, FR-29, loại cảnh báo Cần đặt hàng, cột nhu cầu ước tính), chờ Hai nghiệm thu hoặc thử trên thiết bị thật (NFR-11, NFR-13, NFR-17, in phiếu), và đo khi chạy thử hoặc triển khai (NFR-02, NFR-05, lên lịch NFR-09, NFR-10).

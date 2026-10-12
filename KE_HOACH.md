@@ -8,35 +8,40 @@ Mỗi phần là một lát cắt chạy được từ đầu đến cuối, là
 > **BẢN HIỆN HÀNH.** Đây là bản kế hoạch và tiến độ đúng, nằm tại `D:\QTDA\KE_HOACH.md` cùng mã nguồn.
 > Mọi bản `KE_HOACH*.md` khác trong thư viện dự án là bản cũ; bản `KE_HOACH.md` gốc đánh dấu sai Phần 1 đã xong. Không dùng chúng để đọc tiến độ.
 
-## Trạng thái nghiệm thu (cập nhật 12/10/2026)
+## Trạng thái nghiệm thu (cập nhật 12/10/2026, cuối ngày)
 
-Kiểm thử tự động: 176 bài, đạt cả trên SQLite và PostgreSQL 16 (`.venv\Scripts\python.exe manage.py test`). Số bài kiểm thử không phải bằng chứng hoàn thành. "Đã nghiệm thu" dưới đây là **nghiệm thu nội bộ**: đạt kiểm thử nghiệm thu xuyên suốt qua giao diện web theo 5 vai trò (`apps/core/tests/test_acceptance.py`) và đã thao tác trên trình duyệt; vẫn chờ Hai tự nghiệm thu theo `docs/VAN_HANH.md` mục 1. Đối chiếu từng chức năng với báo cáo ở `docs/DOI_CHIEU_YEU_CAU.md`.
+Ba trạng thái: **đã nghiệm thu nội bộ** (đã thao tác qua giao diện hoặc đối chiếu trên bộ dữ liệu nghiệm thu, không chỉ dựa vào kiểm thử tự động), **đã làm, chờ Hai nghiệm thu** (cần thiết bị, quyết định hoặc rà soát của Hai), **chưa làm** (kèm lý do). Kiểm thử tự động: 188 bài, đạt trên SQLite và PostgreSQL 16 (một bài chỉ chạy trên SQLite). Số bài kiểm thử không phải bằng chứng hoàn thành. Bảng đối chiếu cuối cùng theo từng yêu cầu ở `docs/DOI_CHIEU_YEU_CAU.md` mục 9.
 
 ### Đã nghiệm thu nội bộ
 
-- Đăng nhập, đăng xuất, phân quyền 5 vai trò, trang 403 và nhật ký từ chối quyền (đã sửa lỗi nhật ký bị mất khi giao dịch yêu cầu hủy) — tự động và trình duyệt
-- Nhận đơn trên điện thoại, quầy pha chế (pha một phần, pha xong), món sẵn sàng, thu ngân thu tiền — tự động và trình duyệt
-- Điều chỉnh đơn và duyệt (từ chối người không đúng cấp), hủy hóa đơn đã thanh toán, duyệt hoàn và xác nhận đã hoàn — tự động
-- Nhập hàng có ảnh hóa đơn, kiểm kê, quỹ ca, kết ca bị chặn khi còn đơn, chuyển đơn sang ca sau, báo cáo cuối ca và đối soát — tự động
-- Phiếu dự phòng: cấp dãy, nhập bù có kích cỡ và tùy chọn, liên kết đơn có sẵn, gửi lại không ghi trùng — tự động; trang /du-phong/ đã xem trên trình duyệt
-- Bảng điều khiển (phần ca cho Quản lý ca, chỉ tiêu cho Chủ quán), biểu đồ, lọc tháng, chú thích khi rê chuột, số liệu khớp báo cáo doanh thu — tự động và trình duyệt trên bộ dữ liệu nghiệm thu 14 ngày
-- Đối chiếu chéo đơn, sổ kho, quỹ ca, doanh thu, ngoại lệ, nhật ký và `kiem_tra_toan_ven` không báo sai lệch — tự động và trên bộ dữ liệu nghiệm thu
-- Kiểm thử đồng thời trên PostgreSQL 16 (5 tình huống) và toàn bộ kiểm thử trên PostgreSQL — đạt 12/10/2026 sau khi sửa 2 lỗi
-- Đính chính báo cáo cuối ca, chấm công và bổ sung giờ ra, trung tâm cảnh báo, xuất Excel (Excel mở được, số khớp) — trình duyệt và Excel 12/10/2026
-- Nhập bù phiếu chờ Chủ quán xác nhận giá, định mức — trình duyệt
+- Đăng nhập, phân quyền 5 vai trò, trang 403 và nhật ký từ chối quyền — tự động và trình duyệt
+- Nhận đơn trên điện thoại, quầy pha chế, món sẵn sàng, thu ngân — tự động và trình duyệt
+- Điều chỉnh đơn và duyệt, hủy hóa đơn đã thanh toán, duyệt hoàn và xác nhận đã hoàn — tự động
+- Nhập hàng, kiểm kê, quỹ ca, kết ca, chuyển đơn sang ca sau, báo cáo cuối ca và đối soát, đính chính — tự động và trình duyệt
+- Phiếu dự phòng có kích cỡ, tùy chọn, giá lịch sử, chờ Chủ quán xác nhận — tự động và trình duyệt
+- Bảng điều khiển, báo cáo doanh thu, kiểm soát, nguyên vật liệu, xuất Excel (Excel mở được, số khớp) — trình duyệt trên bộ dữ liệu 14 ngày
+- **Mới 12/10:** Tra cứu đơn có bộ lọc, phân trang, chi tiết đơn; Sổ kho có bộ lọc, tổng, liên kết sang đơn; lọc và phân trang Ngoại lệ, Vụ việc
+- **Mới 12/10:** Truy vết từ số tổng hợp tới giao dịch: 64/64 dòng báo cáo doanh thu ở 7 chiều mở đúng số đơn; 11/11 số liệu báo cáo nguyên vật liệu khớp tổng sổ kho; số trên bảng điều khiển mở được danh sách cấu thành; danh sách báo Sắp hết trên bảng điều khiển
+- **Mới 12/10:** Đề nghị kiểm kê lại từ màn tạo đơn (AC-03), kiểm kê nhóm trọng yếu trước giờ mở cửa hôm sau (FR-09) — tự động
+- **Mới 12/10:** Lưu nháp biểu mẫu trên thiết bị kèm mã nghiệp vụ, khôi phục sau tải lại; chặn thanh toán, phê duyệt, xem xét khi mất kết nối (NFR-16) — trình duyệt
+- **Mới 12/10:** 24 trang chính ở bề rộng 375 px không có cuộn ngang (NFR-15) — trình duyệt
+- **Mới 12/10:** Sao lưu và phục hồi vào CSDL riêng trên SQLite và PostgreSQL, CSDL đang chạy không bị đụng (NFR-09) — lệnh thật, `docs/VAN_HANH.md` mục 6
+- Đối chiếu chéo `kiem_tra_toan_ven` không báo sai lệch trên SQLite, PostgreSQL và bản phục hồi
+- Kiểm thử đồng thời trên PostgreSQL 16 (5 tình huống)
 
-### Đã làm nhưng chưa nghiệm thu
+### Đã làm, chờ Hai nghiệm thu
 
-- Giải trình và quyết định chênh lệch, vụ việc tổn thất, ngoại lệ và xem xét: có kiểm thử, chưa thao tác lại sau đổi giao diện
-- Đối chiếu tiêu hao trọng yếu, tải theo khung giờ: có kiểm thử, mới xem trang
-- Thông báo đẩy: máy chủ sẵn sàng (pywebpush, khóa VAPID, đường hầm HTTPS tạm thời); ghi riêng mốc dịch vụ đẩy nhận và điện thoại hiện; **chờ Hai thử trên điện thoại thật** (`docs/VAN_HANH.md` mục 3)
-- Tác vụ định kỳ: lệnh chạy được; **chưa lên lịch** trên máy vận hành (hướng dẫn ở `docs/VAN_HANH.md` mục 2)
+- Thông báo đẩy trên điện thoại thật (NFR-17): máy chủ gửi được; **tạm hoãn theo yêu cầu của Hai**, đường hầm đã tắt. Thông báo đẩy nay gửi cho cảnh báo, yêu cầu phê duyệt, báo cáo cuối ca, ca thiếu người duyệt dự phòng
+- In phiếu pha chế trên máy in thật của quầy (NFR-11): trang phiếu đã xem trên trình duyệt
+- Nội dung thông báo xử lý dữ liệu cá nhân (NFR-13): bản dự thảo cần Hai rà soát pháp lý
+- Lên lịch tác vụ định kỳ mỗi phút và sao lưu hằng ngày trên máy vận hành, chọn thư mục sao lưu ngoài máy (`docs/VAN_HANH.md` mục 2 và 6): tạo lịch là thay đổi cấu hình máy nên để Hai tự chạy lệnh
+- Tự nghiệm thu toàn bộ theo `docs/VAN_HANH.md` mục 1
 
 ### Chưa làm
 
-- Dự báo nhu cầu, cảnh báo Cần đặt hàng, đề xuất số lượng đặt (FR-28, FR-29, FR-31): chờ Hai hướng dẫn
-- Đo NFR-02 (đơn hiện ở quầy dưới 3 giây trên mạng của quán) và diễn tập mất kết nối NFR-16: làm ở tuần chạy thử
-- In hóa đơn FR-05 (Giai đoạn 3) và các chức năng Giai đoạn 2
+- Dự báo nhu cầu (FR-28), cảnh báo Cần đặt hàng (FR-29), đề xuất số lượng đặt (FR-31), cột nhu cầu ước tính trong báo cáo nguyên vật liệu (FR-54): **chờ Hai hướng dẫn logic dự báo**
+- Đo NFR-02, NFR-05, NFR-10 và diễn tập mất mạng thật: cần mạng, thiết bị, máy chủ thật ở tuần chạy thử
+- Các chức năng mức Should, Could của Giai đoạn 2, 3 (in hóa đơn FR-05, lịch ca, lương, BO-03...): ngoài phạm vi đợt này
 - Nhập dữ liệu thật của quán (nhân viên, thực đơn, giá, tồn đầu kỳ): chờ Hai
 
 ## Tiến độ theo phần
@@ -142,12 +147,14 @@ Bán hàng dự phòng và nhập bù (FR-06); đối chiếu tiêu hao trọng 
 - [x] Đối chiếu tiêu hao nguyên liệu trọng yếu giữa hai lần kiểm kê, ngoại lệ khi vượt mức cho phép, kết quả trong báo cáo nguyên vật liệu (FR-16, BRU-17, AC-32, AC-33, AC-34)
 - [x] Chấm công vào ca, ra ca theo vai trò; thiếu giờ ra không tính giờ, Quản lý ca bổ sung kèm lý do (FR-35, BRU-31, AC-76 đến AC-78)
 - [x] Tải và thời gian chờ theo khung giờ, đánh dấu quá tải, số người có mặt theo vai trò (FR-36, BRU-27, AC-79)
-- [x] Trung tâm cảnh báo theo Bảng 5.4: giao người xử lý chính, thời hạn tham số, Mới, Đang xử lý, Đã đóng, tự đóng, đóng tay có ghi chú, chuyển cấp hoặc nhắc lại, thống kê tuần (FR-51, BRU-36, AC-102, AC-103); chưa có "Cần đặt hàng" (chờ dự báo) và Web Push
+- [x] Trung tâm cảnh báo theo Bảng 5.4: giao người xử lý chính, thời hạn tham số, Mới, Đang xử lý, Đã đóng, tự đóng, đóng tay có ghi chú, chuyển cấp hoặc nhắc lại, thống kê tuần (FR-51, BRU-36, AC-102, AC-103); chưa có "Cần đặt hàng" (chờ dự báo)
 - [x] Bảng điều khiển (FR-50, AC-100, AC-101), báo cáo kiểm soát doanh thu (FR-52, AC-104), báo cáo doanh thu có xuất Excel (FR-53, AC-105), báo cáo nguyên vật liệu theo kỳ (FR-54, AC-106; cột nhu cầu ước tính chờ dự báo)
 - [x] Giao diện quản trị vuông vức theo UI UX Pro Max (DESIGN.md 12/10/2026): token màu mới, góc 2px, không bóng, điều hướng theo nhóm nghiệp vụ, bảng điều khiển tách phần ca (Quản lý ca) và chỉ tiêu (Chủ quán); đã rà soát lại các màn hình Phần 1–3 và Phần 4 trên máy tính và điện thoại
 - [x] Nhập bù có kích cỡ, tùy chọn; giá theo lịch sử giá và định mức theo thời điểm bán; thiếu lịch sử thì chờ Chủ quán xác nhận (12/10/2026)
-- [x] Thông báo đẩy: phần ứng dụng đã làm, chờ cài thư viện và HTTPS để gửi thật
-- [ ] Còn lại của Phần 4: dự báo (chờ Hai); đo NFR-02, NFR-16 trong tuần chạy thử; PostgreSQL (GD-13)
+- [x] Thông báo đẩy: đã cài pywebpush, khóa VAPID, gửi cho cảnh báo, phê duyệt, báo cáo cuối ca, ca thiếu người duyệt dự phòng; thử trên điện thoại thật tạm hoãn, chờ Hai
+- [x] PostgreSQL 16 để kiểm thử, kiểm thử đồng thời 5 tình huống (GD-13)
+- [x] Hoàn thiện 12/10/2026: đề nghị kiểm kê lại (AC-03), kiểm kê trọng yếu trước giờ mở cửa (FR-09), thông báo dữ liệu cá nhân (NFR-13), nháp biểu mẫu và chặn thao tác khi mất mạng (NFR-16), tra cứu đơn, chi tiết đơn, sổ kho, lọc và phân trang ngoại lệ, vụ việc, truy vết từ bảng điều khiển và báo cáo tới giao dịch (NFR-19), danh sách Sắp hết, sao lưu và phục hồi (NFR-09), mẫu cấu hình máy chủ thật, hướng dẫn khởi động, dừng
+- [ ] Còn lại của Phần 4: dự báo (chờ Hai); đo NFR-02, NFR-10, diễn tập mất mạng trong tuần chạy thử
 
 
 ## Chờ Hai giải thích
