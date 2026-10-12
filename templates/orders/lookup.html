@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Tra cứu đơn · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<h1>Tra cứu đơn</h1>
+<form method="get" class="filter-bar" aria-label="Bộ lọc đơn">
+  <div class="field"><label for="f-q">Mã đơn, bàn, ghi chú</label><input class="input" id="f-q" name="q" value="{{ f.q }}" placeholder="Ví dụ 1210-001"></div>
+  <div class="field"><label for="f-theo">Lọc ngày theo</label><select class="input" id="f-theo" name="theo"><option value="">Giờ tạo đơn</option><option value="thanh_toan"{% if f.theo == "thanh_toan" %} selected{% endif %}>Giờ thanh toán</option></select></div>
+  <div class="field"><label for="f-tu">Từ ngày</label><input class="input" id="f-tu" type="date" name="tu" value="{{ f.tu }}"></div>
+  <div class="field"><label for="f-den">Đến ngày</label><input class="input" id="f-den" type="date" name="den" value="{{ f.den }}"></div>
+  <div class="field"><label for="f-tt">Trạng thái</label><select class="input" id="f-tt" name="trang_thai"><option value="">Tất cả</option>{% for v, l in statuses %}<option value="{{ v }}"{% if f.trang_thai == v %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  <div class="field"><label for="f-pt">Phương thức</label><select class="input" id="f-pt" name="phuong_thuc"><option value="">Tất cả</option>{% for v, l in methods %}<option value="{{ v }}"{% if f.phuong_thuc == v %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+  <div class="field"><label for="f-ban">Bàn</label><select class="input" id="f-ban" name="ban"><option value="">Tất cả</option>{% for t in tables %}<option value="{{ t.pk }}"{% if f.ban == t.pk|stringformat:"d" %} selected{% endif %}>Bàn {{ t.code }}</option>{% endfor %}</select></div>
+  <div class="field"><label for="f-nv">Nhân viên tạo đơn</label><select class="input" id="f-nv" name="nhan_vien"><option value="">Tất cả</option>{% for u in staff %}<option value="{{ u.pk }}"{% if f.nhan_vien == u.pk|stringformat:"d" %} selected{% endif %}>{{ u }}</option>{% endfor %}</select></div>
+  <div class="field"><label for="f-mon">Món</label><select class="input" id="f-mon" name="mon"><option value="">Tất cả</option>{% for s in sizes %}<option value="{{ s.pk }}"{% if f.mon == s.pk|stringformat:"d" %} selected{% endif %}>{{ s.item.name }} {{ s.name }}</option>{% endfor %}</select></div>
+  <div class="filter-actions"><button class="btn btn-primary" type="submit">Lọc</button><a class="btn btn-quiet" href="{% url 'orders:lookup' %}">Xóa lọc</a></div>
+  {% if f.ca %}<input type="hidden" name="ca" value="{{ f.ca }}">{% endif %}{% if f.nhom %}<input type="hidden" name="nhom" value="{{ f.nhom }}">{% endif %}{% if f.gio %}<input type="hidden" name="gio" value="{{ f.gio }}">{% endif %}{% if f.da_thu %}<input type="hidden" name="da_thu" value="{{ f.da_thu }}">{% endif %}
+</form>
+{% if f.ca or f.nhom or f.gio or f.da_thu %}<p class="muted">Đang lọc thêm từ báo cáo:{% if f.da_thu %} chỉ đơn đã thu tiền;{% endif %}{% if f.ca %} theo ca;{% endif %}{% if f.nhom %} theo nhóm món;{% endif %}{% if f.gio %} khung {{ f.gio }} giờ;{% endif %} <a href="{% url 'orders:lookup' %}">bỏ lọc</a></p>{% endif %}
+{% if page.object_list %}
+<div class="table-wrap"><table class="data-table">
+  <thead><tr><th scope="col">Mã đơn</th><th scope="col">Bàn</th><th scope="col">Tạo lúc</th><th scope="col">Người tạo</th><th scope="col">Trạng thái</th><th scope="col">Thanh toán</th><th scope="col" class="num">Tổng tiền</th></tr></thead>
+  <tbody>{% for o in page.object_list %}
+  <tr><th scope="row"><a href="{% url 'orders:detail' o.pk %}">{{ o.code }}</a></th><td>{{ o.table.code }}</td><td>{{ o.created_at|date:"H:i d/m/Y" }}</td><td>{{ o.created_by }}</td><td>{{ o.get_status_display }}</td>
+    <td>{% if o.payment %}{{ o.payment.get_method_display }} {{ o.payment.created_at|date:"H:i d/m" }}{% else %}–{% endif %}</td><td class="num">{{ o.total|intcomma }} đ</td></tr>
+  {% endfor %}</tbody>
+</table></div>
+<p class="muted">Tổng tiền các đơn trên trang này: {{ page_total|intcomma }} đ.</p>
+{% include "partials/pagination.html" %}
+{% else %}<div class="empty"><p><strong>Không có đơn nào khớp bộ lọc.</strong></p><p>Đổi khoảng ngày hoặc bấm Xóa lọc.</p></div>{% endif %}
+{% endblock %}

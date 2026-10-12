@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views, views_backup, views_control
+from . import views, views_backup, views_control, views_lookup
 
 app_name = "orders"
 
@@ -19,6 +19,8 @@ urlpatterns = [
     path("don/san-sang/so-luong/", views.ready_count, name="ready_count"),
     path("don/mang-ra/", views.serve, name="serve"),
     path("don/dang-mo/", views_control.open_orders, name="open_orders"),
+    path("don/tra-cuu/", views_lookup.order_lookup, name="lookup"),
+    path("don/<int:order_id>/", views_lookup.order_detail, name="detail"),
     path("don/<int:order_id>/dieu-chinh/", views_control.request_adjustment, name="request_adjustment"),
     path("duyet/", views_control.approvals, name="approvals"),
     path("duyet/so-luong/", views_control.approvals_count, name="approvals_count"),

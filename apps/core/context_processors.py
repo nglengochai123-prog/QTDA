@@ -15,7 +15,7 @@ def navigation(request):
         return {}
     # Mục đánh dấu desktop chỉ hiện trên máy tính (thanh dưới điện thoại giữ tối đa 4 mục).
     desktop_only = {"bar", "data", "log", "cashier", "status", "exceptions", "cases", "params", "backup", "workload",
-                    "revenue", "control_report", "materials", "dashboard"}
+                    "revenue", "control_report", "materials", "dashboard", "lookup", "ledger"}
     # Nhóm điều hướng theo nghiệp vụ (DESIGN.md: bố cục quản trị); trên điện thoại chỉ hiện tối đa 5 mục.
     groups = [
         (None, [("home", "Trang chủ", reverse("core:home"), None),
@@ -25,6 +25,7 @@ def navigation(request):
             ("order", "Tạo đơn", reverse("orders:create"), Cap.ORDER_CREATE),
             ("ready", "Món sẵn sàng", reverse("orders:ready"), Cap.ORDER_CREATE),
             ("open", "Đơn đang mở", reverse("orders:open_orders"), Cap.ORDER_CREATE),
+            ("lookup", "Tra cứu đơn", reverse("orders:lookup"), Cap.VIEW_DASHBOARD),
             ("approve", "Duyệt", reverse("orders:approvals"), Cap.ORDER_ADJUST_APPROVE),
             ("bar", "Quầy pha chế", reverse("orders:bar"), Cap.BAR_PREPARE),
             ("cashier", "Thu ngân", reverse("orders:cashier"), Cap.PAYMENT),

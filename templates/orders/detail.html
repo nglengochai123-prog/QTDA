@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Đơn {{ order.code }} · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<p><a href="{% url 'orders:lookup' %}">‹ Tra cứu đơn</a></p>
+<header class="page-head">
+  <h1>Đơn {{ order.code }} <span class="muted">· Bàn {{ order.table.code }}</span></h1>
+  <span class="chip">{{ order.get_status_display }}</span>
+</header>
+<dl class="figure-grid">
+  <div class="figure-key"><dt>Tổng tiền</dt><dd>{{ order.total|intcomma }} đ</dd></div>
+  <div><dt>Tạo lúc</dt><dd class="dd-text">{{ order.created_at|date:"H:i d/m/Y" }}</dd></div>
+  <div><dt>Người tạo</dt><dd class="dd-text">{{ order.created_by }}</dd></div>
+  <div><dt>Ca</dt><dd class="dd-text">{% if order.shift %}<a href="{% url 'shifts:my_shift_detail' order.shift.pk %}">{{ order.shift }}</a>{% else %}–{% endif %}</dd></div>
+  <div><dt>Thanh toán</dt><dd class="dd-text">{% if order.payment %}{{ order.payment.get_method_display }} {{ order.payment.amount|intcomma }} đ · {{ order.payment.created_at|date:"H:i d/m" }} · {{ order.payment.cashier }}{% else %}Chưa{% endif %}</dd></div>
+  {% if slip %}<div><dt>Phiếu dự phòng</dt><dd class="dd-text">{{ slip }} · bán lúc {{ slip.sold_at|date:"H:i d/m" }}{% if slip.confirmed_by %} · xác nhận bởi {{ slip.confirmed_by }}{% endif %}</dd></div>{% endif %}
+</dl>
+<section class="panel" aria-labelledby="ln-title"><h2 id="ln-title">Món</h2>
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr><th scope="col">Món</th><th scope="col" class="num">Số ly</th><th scope="col" class="num">Đã pha</th><th scope="col" class="num">Hủy trước pha</th><th scope="col" class="num">Hủy sau pha</th><th scope="col" class="num">Đơn giá</th><th scope="col">Định mức</th><th scope="col">Trạng thái</th></tr></thead>
+    <tbody>{% for l in lines %}<tr><th scope="row">{{ l.item_name }} {{ l.size_name }}{% for o in l.options.all %} · {{ o.name }}{% endfor %}{% if l.note %} <span class="muted">({{ l.note }})</span>{% endif %}</th>
+      <td class="num">{{ l.quantity }}</td><td class="num">{{ l.done_quantity }}</td><td class="num">{{ l.cancelled_quantity }}</td><td class="num">{{ l.voided_done_quantity }}</td><td class="num">{{ l.unit_price|intcomma }} đ</td>
+      <td>{% if l.recipe_version %}Bản {{ l.recipe_version.number }}{% else %}Không dùng nguyên liệu{% endif %}</td><td>{{ l.get_status_display }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+<section class="panel" aria-labelledby="rq-title"><h2 id="rq-title">Yêu cầu điều chỉnh và hoàn tiền</h2>
+  {% if requests or refunds %}<ul class="ruled-list compact">
+    {% for r in requests %}<li class="row-between"><span>{{ r.summary }} · {{ r.reason }} · {{ r.requested_by }}</span><span>{{ r.get_status_display }}{% if r.decided_by %} · {{ r.decided_by }}{% endif %}</span></li>{% endfor %}
+    {% for r in refunds %}<li class="row-between"><span>{{ r }}</span><span>{{ r.get_status_display }}{% if r.shift %} · {{ r.shift }}{% endif %}</span></li>{% endfor %}
+  </ul>{% else %}<p class="muted">Không có.</p>{% endif %}
+</section>
+<section class="panel" aria-labelledby="tr-title"><h2 id="tr-title">Nhật ký liên quan</h2>
+  {% if trail %}<ol class="trail">{% for t in trail %}<li>{{ t.created_at|date:"H:i:s d/m" }} · {{ t.actor|default:t.actor_label }} · {{ t.get_action_display }}{% if t.reason %} · {{ t.reason }}{% endif %}</li>{% endfor %}</ol>{% else %}<p class="muted">Không có.</p>{% endif %}
+</section>
+{% endblock %}
