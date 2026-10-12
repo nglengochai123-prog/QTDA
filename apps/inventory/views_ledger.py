@@ -2,6 +2,7 @@
 
 from datetime import date, datetime, time, timedelta
 
+from django.db.models import Sum
 from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
@@ -39,7 +40,10 @@ def filter_movements(params):
 def ledger(request):
     from apps.orders.models import OrderLine
 
-    page, qs = paginate(request, filter_movements(request.GET), per_page=50)
+    movements = filter_movements(request.GET)
+    page, qs = paginate(request, movements, per_page=50)
+    # Cộng biến động chỉ có nghĩa khi cùng một nguyên vật liệu (cùng đơn vị); dùng để khớp với số trên báo cáo.
+    total = movements.aggregate(s=Sum("quantity"))["s"] if (request.GET.get("nvl") or "").isdigit() else None
     rows = list(page.object_list)
     # Dòng tiêu hao pha chế ghi mã dòng món; tra ra đơn để mở chi tiết.
     line_ids = [int(m.source_id) for m in rows if m.source_type == "dong_mon" and m.source_id.isdigit()]
@@ -48,5 +52,6 @@ def ledger(request):
         m.order_id = orders.get(int(m.source_id)) if m.source_type == "dong_mon" and m.source_id.isdigit() else None
     return render(request, "inventory/ledger.html", {
         "page": page, "rows": rows, "qs": qs, "f": request.GET, "kinds": StockMovement.Kind.choices,
-        "ingredients": Ingredient.objects.order_by("name"),
+        "ingredients": Ingredient.objects.order_by("name"), "total": total,
+        "unit": rows[0].ingredient.get_unit_display() if rows else "",
     })

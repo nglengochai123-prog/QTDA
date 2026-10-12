@@ -12,7 +12,7 @@
   <div><dt>Tạo lúc</dt><dd class="dd-text">{{ order.created_at|date:"H:i d/m/Y" }}</dd></div>
   <div><dt>Người tạo</dt><dd class="dd-text">{{ order.created_by }}</dd></div>
   <div><dt>Ca</dt><dd class="dd-text">{% if order.shift %}<a href="{% url 'shifts:my_shift_detail' order.shift.pk %}">{{ order.shift }}</a>{% else %}–{% endif %}</dd></div>
-  <div><dt>Thanh toán</dt><dd class="dd-text">{% if order.payment %}{{ order.payment.get_method_display }} {{ order.payment.amount|intcomma }} đ · {{ order.payment.created_at|date:"H:i d/m" }} · {{ order.payment.cashier }}{% else %}Chưa{% endif %}</dd></div>
+  <div><dt>Thanh toán</dt><dd class="dd-text">{% if order.payment %}{{ order.payment.get_method_display }} · {{ order.payment.created_at|date:"H:i d/m" }} · {{ order.payment.cashier }}{% if order.payment.amount != order.total %} · thu chung cả bàn {{ order.payment.amount|intcomma }} đ{% endif %}{% else %}Chưa{% endif %}</dd></div>
   {% if slip %}<div><dt>Phiếu dự phòng</dt><dd class="dd-text">{{ slip }} · bán lúc {{ slip.sold_at|date:"H:i d/m" }}{% if slip.confirmed_by %} · xác nhận bởi {{ slip.confirmed_by }}{% endif %}</dd></div>{% endif %}
 </dl>
 <section class="panel" aria-labelledby="ln-title"><h2 id="ln-title">Món</h2>
@@ -30,6 +30,6 @@
   </ul>{% else %}<p class="muted">Không có.</p>{% endif %}
 </section>
 <section class="panel" aria-labelledby="tr-title"><h2 id="tr-title">Nhật ký liên quan</h2>
-  {% if trail %}<ol class="trail">{% for t in trail %}<li>{{ t.created_at|date:"H:i:s d/m" }} · {{ t.actor|default:t.actor_label }} · {{ t.get_action_display }}{% if t.reason %} · {{ t.reason }}{% endif %}</li>{% endfor %}</ol>{% else %}<p class="muted">Không có.</p>{% endif %}
+  {% if trail %}<ol class="trail">{% for t in trail %}<li>{{ t.created_at|date:"H:i:s d/m" }} · {{ t.actor|default:t.actor_label }} · {{ t.get_action_display }}{% if t.object_repr %} · {{ t.object_repr }}{% endif %}{% if t.reason %} · {{ t.reason }}{% endif %}</li>{% endfor %}</ol>{% else %}<p class="muted">Không có.</p>{% endif %}
 </section>
 {% endblock %}

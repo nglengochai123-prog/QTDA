@@ -21,6 +21,7 @@
     <td>{{ m.actor }}</td><td>{{ m.note|default:"" }}</td></tr>
   {% endfor %}</tbody>
 </table></div>
+{% if total is not None %}<p><strong>Tổng biến động theo bộ lọc: {% if total > 0 %}+{% endif %}{{ total|floatformat:"-2g" }} {{ unit }}</strong> <span class="muted">(tiêu hao, hao hụt mang dấu trừ)</span></p>{% endif %}
 {% include "partials/pagination.html" %}
 {% else %}<div class="empty"><p><strong>Không có biến động nào khớp bộ lọc.</strong></p><p>Đổi nguyên vật liệu, loại hoặc khoảng ngày.</p></div>{% endif %}
 {% endblock %}
