@@ -14,6 +14,21 @@ Ngày chạy 12/10/2026. Tệp `Du_lieu_gia_dinh_LAM_Coffee_6_thang.xlsx` do Hai
 | Món và cỡ | Đủ 11 món-cỡ, khớp thực đơn, không dòng nào bị bỏ |
 | Nơi lưu | Loại "Dữ liệu mô phỏng", tách riêng khỏi dữ liệu thật; chỉ cơ sở dữ liệu chạy thử `thu_du_bao.sqlite3` mới dùng nó cho dự báo |
 
+### Đơn hàng chi tiết
+
+Sheet `Don_hang` và `Chi_tiet_mon` được nhập thành đơn đã thanh toán bằng lệnh `manage.py nhap_don_gia_dinh <tệp> --chay-thu`:
+
+| Kiểm tra | Kết quả |
+|---|---|
+| Số đơn | 23.753, khớp cột "Số đơn" của `Du_lieu_ngay` |
+| Tổng tiền đơn và thanh toán | 1.041.325.000 đ, khớp cột "Doanh thu VND" |
+| Số ly | 31.883 trên 31.650 dòng món, không dòng nào lệch tổng tiền |
+| Ca | Mỗi ngày một ca "Ca cả ngày (giả định)" đã kết, có báo cáo cuối ca đúng tiền mặt và chuyển khoản |
+| Tùy chọn | Đường, đá, topping giữ theo tệp |
+| Kho | Không ghi biến động kho (tệp không có nhập hàng, kiểm kê); `kiem_tra_toan_ven` không báo sai lệch |
+
+Đơn hiện ở Bán hàng › Tra cứu đơn (mã GD-…), Báo cáo › Doanh thu (chọn khoảng 01/04–30/09/2026). Bảng điều khiển chỉ hiện ca hôm nay nên không có số liệu của tệp.
+
 ## 2. Đánh giá cuốn chiếu
 
 - **Học và kiểm tra:** nửa đầu (01/04 đến khoảng 01/07) dùng để chọn cấu hình; nửa sau (khoảng 02/07 đến 30/09) để kiểm tra, mỗi món 92 ngày kiểm tra ở thời hạn 1 ngày.
