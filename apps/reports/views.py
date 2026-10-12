@@ -34,7 +34,20 @@ def dashboard(request):
         month = date.fromisoformat(request.GET.get("thang", "") + "-01")
     except ValueError:
         pass
+    fallback = None
+    if month is None:
+        # Tháng hiện tại chưa có đơn đã thanh toán thì mở tháng gần nhất có đơn (ví dụ dữ liệu lịch sử đã nhập).
+        from apps.orders.models import Payment
+
+        today = timezone.localdate()
+        first = today.replace(day=1)
+        valid = Payment.objects.filter(status=Payment.Status.VALID)
+        if not valid.filter(created_at__date__gte=first).exists():
+            last = valid.order_by("-created_at").values_list("created_at", flat=True).first()
+            if last is not None:
+                month = fallback = timezone.localtime(last).date()
     context = services.dashboard(month=month)
+    context["fallback_month"] = fallback
     context["ops"] = services.shift_panel(request.user)
     context["is_owner"] = request.user.is_owner
     context["can_review"] = user_can(request.user, Cap.EXCEPTION_REVIEW)

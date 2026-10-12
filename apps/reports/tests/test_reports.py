@@ -86,6 +86,21 @@ class ReportTests(Base):
                          (165000, 50000, 215000, 100000, 65000))
         self.assertFalse(data["met"])
 
+    def test_dashboard_opens_latest_month_with_sales_when_current_month_is_empty(self):
+        from datetime import timedelta
+
+        from apps.orders.models import Payment
+
+        self.paid()
+        old = timezone.now().replace(day=1) - timedelta(days=40)
+        Payment.objects.update(created_at=old)
+        self.client.login(username=self.d["owner"].username, password=PASSWORD)
+        page = self.client.get(reverse("reports:dashboard"))
+        self.assertEqual(page.context["month"], timezone.localtime(old).date().replace(day=1))
+        self.assertContains(page, "tháng gần nhất có đơn")
+        page = self.client.get(reverse("reports:dashboard"), {"thang": timezone.localdate().strftime("%Y-%m")})
+        self.assertIsNone(page.context["fallback_month"])  # chọn tháng cụ thể thì giữ đúng tháng đó
+
     def test_dashboard_renders_for_owner_only(self):
         # Bỏ Quản lý ca (12/10/2026): bảng điều khiển và báo cáo chỉ dành cho Chủ quán.
         self.paid()

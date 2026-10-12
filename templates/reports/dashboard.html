@@ -10,6 +10,7 @@
     <button class="btn btn-quiet" type="submit">Xem</button>
   </form>
 </header>
+{% if fallback_month %}<p class="notice">Tháng này chưa có đơn đã thanh toán, đang hiện tháng {{ fallback_month|date:"m/Y" }} là tháng gần nhất có đơn. Chọn tháng khác ở ô Tháng.</p>{% endif %}
 
 <section class="panel" aria-labelledby="ops-title">
   <h2 id="ops-title">Ca đang mở{% if ops.shift %}: {{ ops.shift }} {{ ops.shift.starts_at|date:"H:i" }}–{{ ops.shift.ends_at|date:"H:i" }}{% endif %}</h2>
