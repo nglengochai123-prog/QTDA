@@ -124,14 +124,17 @@ def prior_state(weekday, weekend):
 # ---------------- mô hình ----------------
 
 class PoissonDGLM:
-    def __init__(self, m, C, delta_level, delta_season):
+    def __init__(self, m, C, delta_level, delta_season, obs_var=0.0):
         self.m = list(m)
         self.C = [list(r) for r in C]
         self.dl = delta_level
         self.ds = delta_season
+        # Nhiễu riêng từng ngày trên thang log (hiệu ứng ngẫu nhiên, Berry và West 2020): log λ_t = F'θ_t + ε_t,
+        # ε_t ~ (0, obs_var). Bằng 0 là Poisson thuần; lớn hơn 0 cho phép số bán phân tán hơn Poisson có điều kiện.
+        self.v = obs_var
 
     def copy(self):
-        return PoissonDGLM(self.m, self.C, self.dl, self.ds)
+        return PoissonDGLM(self.m, self.C, self.dl, self.ds, self.v)
 
     def _evolve(self):
         """R = C + W, W theo chiết khấu từng khối (mức nền, hiệu ứng thứ)."""
@@ -148,7 +151,7 @@ class PoissonDGLM:
         F = design(dow)
         RF = _matvec(R, F)
         f = sum(a * b for a, b in zip(F, self.m))
-        q = max(sum(a * b for a, b in zip(F, RF)), 1e-9)
+        q = max(sum(a * b for a, b in zip(F, RF)), 1e-9) + self.v
         alpha = alpha_from_q(q)
         beta = math.exp(digamma(alpha) - f)
         return alpha, beta, f, q, R, RF
@@ -187,13 +190,26 @@ class PoissonDGLM:
             path = []
             for dow in dows:
                 theta[0] += rng.gauss(0, math.sqrt(max(w_level, 0)))
-                eta = theta[0] + (theta[dow] if dow > 0 else 0.0)
+                eta = theta[0] + (theta[dow] if dow > 0 else 0.0) + (rng.gauss(0, math.sqrt(self.v)) if self.v else 0.0)
                 path.append(poisson(math.exp(min(eta, 12)), rng))
             paths.append(path)
         return paths
 
 
 # ---------------- phân phối nhị thức âm (dự báo một ngày) ----------------
+
+def dispersion(points):
+    """Kiểm tra độ phân tán có điều kiện (mục 3.1): trung bình (y − μ)² / phương sai dự báo của các dự báo 1 ngày.
+    Gần 1 là mô hình mô tả đúng độ biến động; lớn hơn nhiều là số bán phân tán hơn mô hình. points: [(α, β, y)]."""
+    if not points:
+        return None
+    vals = []
+    for a, b, y in points:
+        mu = a / b
+        var = mu + mu * mu / a
+        vals.append((y - mu) ** 2 / var if var > 0 else 0.0)
+    return sum(vals) / len(vals)
+
 
 def nb_pmf_list(alpha, beta, upto):
     """P(Y = k) với Y ~ Poisson(λ), λ ~ Gamma(α, β), k = 0..upto."""

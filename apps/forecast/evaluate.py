@@ -18,7 +18,7 @@ from apps.core import params
 
 from . import dglm
 from .models import DayType
-from .services import VAGUE, _sizes, current_judgements, fit, history, prior_for
+from .services import _sizes, current_judgements, history, initial_model, prior_for, size_flags
 
 HORIZONS = (1, 3, 7)
 DELTAS = (0.90, 0.95, 0.98)
@@ -60,13 +60,12 @@ def _aggregate(rows):
             "width": round(sum(r["width"] for r in rows) / n, 1)}
 
 
-def _model_points(series, dates, status, flags, prior, dl, ds, max_h):
+OBS_VARS = (0.0, 0.02, 0.05, 0.10)  # nhiễu quan sát trên thang log: 0 là Poisson thuần
+
+
+def _model_points(series, dates, status, flags, prior, dl, ds, max_h, obs_var=0.0):
     """Một lượt học tuần tự; tại mỗi mốc ghi dự báo 1..max_h ngày tới. Trả {(chỉ số mốc, h): (α, β)}."""
-    if prior is not None and prior["independent"]:
-        m, C = dglm.prior_state(prior["weekday"], prior["weekend"])
-    else:
-        m, C = dglm.prior_state(VAGUE, VAGUE)
-    model = dglm.PoissonDGLM(m, C, dl, ds)
+    model = initial_model(prior, dl, ds, obs_var)
     out = {}
     for i, d in enumerate(dates):
         ahead = model.ahead([dd.weekday() for dd in dates[i:i + max_h]])
@@ -80,47 +79,62 @@ def _model_points(series, dates, status, flags, prior, dl, ds, max_h):
 
 
 def evaluate_series(size, dates, status, cups, flags, judgements, max_days, ds):
+    """Đánh giá cuốn chiếu một món-kích cỡ.
+
+    Giai đoạn chọn cấu hình (nửa đầu các mốc): thử các tổ hợp hệ số thích nghi × nhiễu quan sát, chọn CRPS nhỏ nhất.
+    Giai đoạn kiểm tra (nửa sau): báo ba cách trên cùng ngày đích, độ phân tán có điều kiện của cấu hình đã chọn và
+    độ nhạy theo sức nặng nhận định (×0,5 và ×2)."""
     series = cups.get(size.pk, {})
-    flagged = flags.get(size.pk, set())
+    flagged = size_flags(flags, size.pk)
     prior = prior_for(size.pk, judgements, max_days)
     eligible = [i for i, d in enumerate(dates) if status.get(d) == "du_dieu_kien" and d not in flagged]
     if len(eligible) < 2:
         return None
     max_h = max(HORIZONS)
     split = dates[eligible[len(eligible) // 2]]  # mốc chia: nửa đầu chọn cấu hình, nửa sau kiểm tra
-    by_delta = {dl: _model_points(series, dates, status, flagged, prior, dl, ds, max_h) for dl in DELTAS}
 
-    def targets(selection):
+    def targets(selection, only_h=None):
         for i in range(len(dates)):
-            origin = dates[i]
-            if (origin < split) != selection:
+            if (dates[i] < split) != selection:
                 continue
             for h in range(1, max_h + 1):
                 j = i + h - 1
                 if j >= len(dates):
                     break
+                if only_h and h != only_h:
+                    continue
                 d = dates[j]
                 if status.get(d) == "du_dieu_kien" and d not in flagged:
                     yield i, h, d, series.get(d, 0)
 
-    # chọn hệ số chiết khấu trên nửa đầu
-    sel = {}
-    for dl, pts in by_delta.items():
-        rows = [_score(_nb(*pts[(i, h)]), y) for i, h, d, y in targets(True)]
-        sel[dl] = _aggregate(rows)
-    choices = [dl for dl in DELTAS if sel[dl]]
-    chosen = min(choices, key=lambda dl: sel[dl]["crps"]) if choices else params.get("forecast_delta_level_percent") / 100
-    pts = by_delta.get(chosen) or by_delta[DELTAS[1]]
-    result = {"size": size, "delta": chosen, "selection": {str(k): v for k, v in sel.items()}, "split": split,
-              "eligible_days": len(eligible), "has_prior": prior is not None, "horizons": {}}
+    sel_targets = list(targets(True))
+    configs = {}
+    for dl in DELTAS:
+        for v in OBS_VARS:
+            pts = _model_points(series, dates, status, flagged, prior, dl, ds, max_h, v)
+            score = _aggregate([_score(_nb(*pts[(i, h)]), y) for i, h, d, y in sel_targets])
+            configs[(dl, v)] = (pts, score)
+    scored = [k for k, (_, sc) in configs.items() if sc]
+    default = (params.get("forecast_delta_level_percent") / 100, 0.0)
+    chosen = min(scored, key=lambda k: configs[k][1]["crps"]) if scored else default
+    if chosen not in configs:
+        configs[chosen] = (_model_points(series, dates, status, flagged, prior, chosen[0], ds, max_h, chosen[1]), None)
+    pts = configs[chosen][0]
+    test_h1 = list(targets(False, 1))
+    disp_sel = dglm.dispersion([(*pts[(i, h)], y) for i, h, d, y in sel_targets if h == 1])
+    disp_test = dglm.dispersion([(*pts[(i, h)], y) for i, h, d, y in test_h1])
+    pure = configs.get((chosen[0], 0.0), (None, None))[0]
+    disp_poisson = dglm.dispersion([(*pure[(i, h)], y) for i, h, d, y in test_h1]) if pure else None
+    result = {"size": size, "delta": chosen[0], "obs_var": chosen[1], "split": split,
+              "selection": {f"{k[0]}|{k[1]}": v[1] for k, v in configs.items() if v[1]},
+              "eligible_days": len(eligible), "has_prior": prior is not None, "horizons": {},
+              "dispersion": {"selection": _r(disp_sel), "test": _r(disp_test), "poisson_test": _r(disp_poisson)},
+              "sensitivity": []}
     for H in HORIZONS:
         model_rows, owner_rows, naive_rows = [], [], []
-        for i, h, d, y in targets(False):
-            if h != H:
-                continue
+        for i, h, d, y in targets(False, H):
             last = d - timedelta(days=7)
-            naive_ok = status.get(last) == "du_dieu_kien" and last not in flagged
-            if not naive_ok:
+            if not (status.get(last) == "du_dieu_kien" and last not in flagged):
                 continue  # chỉ so trên các ngày mọi cách đều có dự báo (thiếu nhận định thì bỏ cách Ước tính ban đầu)
             model_rows.append(_score(_nb(*pts[(i, h)]), y))
             if prior is not None:
@@ -129,9 +143,19 @@ def evaluate_series(size, dates, status, cups, flags, judgements, max_days, ds):
             naive_rows.append(_score(_poisson(series.get(last, 0)), y))
         result["horizons"][H] = {"model": _aggregate(model_rows), "owner": _aggregate(owner_rows),
                                  "naive": _aggregate(naive_rows)}
+    # Độ nhạy theo sức nặng nhận định (mục 2.1): cùng cấu hình, giới hạn sức nặng ×0,5 và ×2
+    if prior is not None:
+        for factor in (0.5, 1, 2):
+            # giữ nguyên mức điển hình, nhân sức nặng (số ngày quan sát tương đương) với hệ số
+            p2 = dict(prior, weekday=(prior["weekday"][0] * factor, prior["weekday"][1] * factor),
+                      weekend=(prior["weekend"][0] * factor, prior["weekend"][1] * factor))
+            pts2 = pts if factor == 1 else _model_points(series, dates, status, flagged, p2, chosen[0], ds, 1, chosen[1])
+            agg = _aggregate([_score(_nb(*pts2[(i, 1)]), y) for i, h, d, y in test_h1])
+            if agg:
+                result["sensitivity"].append({"factor": factor, "days": round(prior["days"] * factor, 1),
+                                              "crps": agg["crps"], "mae": agg["mae"]})
     h1 = result["horizons"][1]
-    min_test = 14
-    if h1["model"] and h1["model"]["n"] >= min_test:
+    if h1["model"] and h1["model"]["n"] >= 14:
         def baselines(H):
             return [result["horizons"][H][k]["crps"] for k in ("owner", "naive") if result["horizons"][H][k]]
 
@@ -141,6 +165,10 @@ def evaluate_series(size, dates, status, cups, flags, judgements, max_days, ds):
     else:
         result["verdict"] = "chua_du_du_lieu"
     return result
+
+
+def _r(x):
+    return None if x is None else round(x, 2)
 
 
 def evaluate(today=None):
@@ -186,7 +214,7 @@ def ingredient_weekly(today=None, weeks=8):
         if not usage:
             continue
         prior = prior_for(size.pk, judgements, max_days)
-        pts = _model_points(cups.get(size.pk, {}), dates, status, flags.get(size.pk, set()), prior, dl, ds, 1)
+        pts = _model_points(cups.get(size.pk, {}), dates, status, size_flags(flags, size.pk), prior, dl, ds, 1)
         for i, d in enumerate(dates):
             week = d - timedelta(days=d.weekday())
             if status.get(d) != "du_dieu_kien" or week < first_week:

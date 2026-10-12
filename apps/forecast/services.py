@@ -115,23 +115,65 @@ def shortage_flags(start, end):
     return out
 
 
-def history(today=None, days=None):
-    """Chuỗi quan sát của mọi món-kích cỡ: (danh sách ngày theo thứ tự, trạng thái ngày, số ly, cờ thiếu hàng)."""
+def imported_history(include_simulated=False):
+    """Lịch sử nhập từ tệp của các lần nhập đang dùng: ({ngày: trạng thái}, {size_id: {ngày: số ly}})."""
+    from .models import HistoricalDay, HistoricalSale, HistoryBatch
+
+    kinds = [HistoryBatch.Kind.REAL] + ([HistoryBatch.Kind.SIMULATED] if include_simulated else [])
+    days, cups = {}, defaultdict(lambda: defaultdict(int))
+    for d in HistoricalDay.objects.filter(batch__active=True, batch__kind__in=kinds):
+        days[d.date] = d.status
+    for row in HistoricalSale.objects.filter(batch__active=True, batch__kind__in=kinds):
+        cups[row.size_id][row.date] += row.cups
+        days.setdefault(row.date, "mo_cua")
+    return days, cups
+
+
+def history(today=None, days=None, include_simulated=False):
+    """Chuỗi quan sát của mọi món-kích cỡ: (danh sách ngày theo thứ tự, trạng thái ngày, số ly, cờ thiếu hàng).
+
+    Gộp dữ liệu hệ thống với lịch sử bán nhập từ tệp. Ngày có ca trên hệ thống dùng dữ liệu hệ thống; ngày chỉ có
+    trong tệp dùng số trong tệp; ngày không có ở đâu là đóng cửa. Ngày thiếu hàng trong tệp bị gắn cờ cho mọi món.
+    """
     from apps.shifts.models import Shift
 
     today = today or timezone.localdate()
+    imp_days, imp_cups = imported_history(include_simulated)
     first = Shift.objects.order_by("starts_at").values_list("starts_at", flat=True).first()
-    if first is None:
+    starts = ([_local_day(first)] if first else []) + ([min(imp_days)] if imp_days else [])
+    if not starts:
         return [], {}, {}, {}
-    start = _local_day(first)
+    start = min(starts)
     if days:
         start = max(start, today - timedelta(days=days))
     end = today - timedelta(days=1)
     if end < start:
         return [], {}, {}, {}
     status = day_status(start, end, today)
+    cups = cups_by_day(start, end)
+    flags = shortage_flags(start, end)
+    short_days = set()
+    for d, st in imp_days.items():
+        if not (start <= d <= end) or status.get(d) != "dong_cua":
+            continue  # ngày đã có ca trên hệ thống: dữ liệu hệ thống được ưu tiên
+        if st == "dong_cua":
+            continue
+        status[d] = "du_dieu_kien"
+        if st == "thieu_hang":
+            short_days.add(d)
+        for size_id, series in imp_cups.items():
+            if d in series:
+                cups[size_id][d] += series[d]
+    if short_days:
+        for size_id in set(cups) | {sid for sid in flags}:
+            flags[size_id] = set(flags.get(size_id, set())) | short_days
+        flags["*"] = short_days  # áp cho món chưa có số bán trong tệp
     dates = sorted(status)
-    return dates, status, cups_by_day(start, end), shortage_flags(start, end)
+    return dates, status, cups, flags
+
+
+def size_flags(flags, size_id):
+    return set(flags.get(size_id, set())) | set(flags.get("*", set()))
 
 
 # ---------------- tiên nghiệm ----------------
@@ -160,13 +202,17 @@ def prior_for(size_id, judgements, max_days):
 VAGUE = (0.5, 0.05)  # Gamma(0.5, 0.05): trung bình 10 ly, rất rộng; chỉ dùng khi chưa có nhận định Chủ quán
 
 
-def fit(series, dates, status, flags, prior, delta_level, delta_season, until=None):
-    """Học tuần tự trên các ngày (tới trước `until`); trả mô hình và số ngày đã dùng, số ngày bị gắn cờ."""
+def initial_model(prior, delta_level, delta_season, obs_var=0.0):
     if prior is not None and prior["independent"]:
         m, C = dglm.prior_state(prior["weekday"], prior["weekend"])
     else:
         m, C = dglm.prior_state(VAGUE, VAGUE)
-    model = dglm.PoissonDGLM(m, C, delta_level, delta_season)
+    return dglm.PoissonDGLM(m, C, delta_level, delta_season, obs_var)
+
+
+def fit(series, dates, status, flags, prior, delta_level, delta_season, until=None, obs_var=0.0):
+    """Học tuần tự trên các ngày (tới trước `until`); trả mô hình và số ngày đã dùng, số ngày bị gắn cờ."""
+    model = initial_model(prior, delta_level, delta_season, obs_var)
     used = flagged = 0
     for d in dates:
         if until is not None and d >= until:
@@ -187,6 +233,16 @@ def _sizes():
 
     return list(ItemSize.objects.filter(is_active=True, item__status=MenuItem.Status.ON_SALE)
                 .select_related("item").order_by("item__name", "sort_order"))
+
+
+def approved_config(size_id):
+    """Cấu hình mô hình đã được Chủ quán duyệt cùng quyết định dùng mô hình; chưa duyệt thì None (dùng mặc định)."""
+    from .models import SeriesConfig
+
+    cfg = SeriesConfig.objects.filter(size_id=size_id, approved_at__isnull=False).first()
+    if cfg and method_for(size_id) == MethodDecision.Method.MODEL:
+        return cfg
+    return None
 
 
 def method_for(size_id, has_prior=True):
@@ -256,7 +312,9 @@ def release(user=None, now=None):
         prior = prior_for(size.pk, judgements, max_days)
         method = method_for(size.pk, has_prior=prior is not None)
         series = cups.get(size.pk, {})
-        model, used, flagged = fit(series, dates, status, flags.get(size.pk, set()), prior, dl, ds)
+        cfg = approved_config(size.pk)
+        s_dl, s_v = (cfg.delta_level, cfg.obs_var) if cfg else (dl, 0.0)
+        model, used, flagged = fit(series, dates, status, size_flags(flags, size.pk), prior, s_dl, ds, obs_var=s_v)
         limitations = []
         if prior is None:
             limitations.append("Chưa có nhận định của Chủ quán; mô hình bắt đầu từ tiên nghiệm rất rộng.")
@@ -285,6 +343,8 @@ def release(user=None, now=None):
             paths = model.simulate(dows, n_paths, rng)
         size_paths[size.pk] = paths
         totals = {str(k): _summ([sum(p[:k]) for p in paths]) for k in (1, 3, 7) if k <= horizon}
+        if cfg:
+            limitations.append(f"Dùng cấu hình đã duyệt: thích nghi {cfg.delta_level}, nhiễu quan sát {cfg.obs_var}.")
         SeriesForecast.objects.create(
             release=rel, size=size, method=method, eligible_days=used, flagged_days=flagged,
             prior_days=prior["days"] if prior else None, prior_capped=bool(prior and prior["capped"]),
@@ -293,12 +353,18 @@ def release(user=None, now=None):
     return rel
 
 
-def option_rates(today, window=56):
-    """Tỷ lệ chọn từng tùy chọn của mỗi món: trung bình hậu nghiệm Beta(1, 1) trên các ly đã bán gần đây."""
-    rates = {}
+def option_posteriors(today, window=56):
+    """Hậu nghiệm Beta(1 + số ly có tùy chọn, 1 + số ly không có) của tỷ lệ chọn từng tùy chọn mỗi món (mục 6.2)."""
+    post = {}
     for item, (n, chosen) in option_counts(today - timedelta(days=window), today - timedelta(days=1)).items():
-        rates[item] = {opt: (x + 1) / (n + 2) for opt, x in chosen.items()}
-    return rates
+        post[item] = {opt: (x + 1, n - x + 1) for opt, x in chosen.items()}
+    return post
+
+
+def option_rates(today, window=56):
+    """Tỷ lệ chọn bình quân (trung bình hậu nghiệm), dùng khi chỉ cần kỳ vọng."""
+    return {item: {opt: a / (a + b) for opt, (a, b) in opts.items()}
+            for item, opts in option_posteriors(today, window).items()}
 
 
 def _recipe_usage(sizes):
@@ -319,38 +385,51 @@ def _recipe_usage(sizes):
 
 
 def _ingredient_forecasts(rel, size_paths, today, days_ahead):
+    """Nhu cầu nguyên liệu trên từng đường mô phỏng: số ly × định mức kích cỡ, cộng phần tùy chọn với tỷ lệ chọn rút
+    từ hậu nghiệm Beta cho mỗi đường và số ly có tùy chọn xấp xỉ nhị thức (mục 6.2: tùy chọn có tỷ lệ riêng)."""
     from apps.catalog.models import ItemSize
 
     sizes = {s.pk: s for s in ItemSize.objects.filter(pk__in=size_paths).select_related("item")}
     per_size, per_option = _recipe_usage(sizes.values())
-    rates = option_rates(today)
+    post = option_posteriors(today)
     methods = {s.size_id: s.method for s in rel.series.all()}
     n = len(next(iter(size_paths.values()))) if size_paths else 0
     horizon = len(days_ahead)
     demand = defaultdict(lambda: [[0.0] * horizon for _ in range(n)])
     contributors = defaultdict(dict)
+    rng = dglm.make_rng(rel.data_version, "tuy-chon")
     for size_id, paths in size_paths.items():
         size = sizes[size_id]
-        usage = dict(per_size.get(size_id, {}))
-        for opt, ings in per_option.get(size.item_id, {}).items():
-            rate = rates.get(size.item_id, {}).get(opt, 0.0)
-            for ing, qty in ings.items():
-                usage[ing] = usage.get(ing, 0.0) + rate * qty
-        for ing, qty in usage.items():
-            if qty <= 0:
-                continue
-            contributors[ing][f"{size.item.name} {size.name}"] = methods.get(size_id)
-            target = demand[ing]
+        label = f"{size.item.name} {size.name}"
+        for ing, qty in per_size.get(size_id, {}).items():
+            contributors[ing][label] = methods.get(size_id)
+            rows = demand[ing]
             for i, path in enumerate(paths):
-                row = target[i]
+                row = rows[i]
                 for t, c in enumerate(path):
                     row[t] += c * qty
+        for opt, ings in per_option.get(size.item_id, {}).items():
+            if opt not in post.get(size.item_id, {}):
+                continue  # chưa từng bán kèm tùy chọn này: không cộng
+            a, b = post[size.item_id][opt]
+            for ing in ings:
+                contributors[ing][label] = methods.get(size_id)
+            for i, path in enumerate(paths):
+                p = rng.betavariate(a, b)
+                for t, c in enumerate(path):
+                    if c <= 0:
+                        continue
+                    k = c * p + rng.gauss(0, math.sqrt(max(c * p * (1 - p), 0)))
+                    k = min(max(round(k), 0), c)
+                    if k:
+                        for ing, q in ings.items():
+                            demand[ing][i][t] += k * q
     for ing, paths in demand.items():
         daily = []
         for t, d in enumerate(days_ahead):
-            s = _summ([p[t] for p in paths])
-            daily.append({"date": d.isoformat(), "mean": round(s["mean"], 2), "q10": round(s["q10"], 2),
-                          "q90": round(s["q90"], 2)})
+            st = _summ([p[t] for p in paths])
+            daily.append({"date": d.isoformat(), "mean": round(st["mean"], 2), "q10": round(st["q10"], 2),
+                          "q90": round(st["q90"], 2)})
         cumulative = []
         for p in paths[:400]:  # mẫu đường để tính phân vị nhu cầu trong thời gian giao (giữ phụ thuộc giữa các ngày)
             acc, row = 0.0, []
@@ -378,8 +457,16 @@ def ensure_today_release(now=None):
 # ---------------- đặt hàng (BRU-22, BRU-24) ----------------
 
 def _remaining_today_fraction(now):
-    open_h, close_h = params.get("open_hour"), params.get("close_hour")
+    """Phần nhu cầu hôm nay còn lại: tổng tỷ lệ bán của các giờ còn lại trong lịch sử 8 tuần; thiếu dữ liệu theo giờ
+    thì chia đều theo giờ mở cửa."""
+    from apps.schedule.services import _hourly_profile
+
     local = timezone.localtime(now)
+    share = _hourly_profile(local.date())[0].get(local.weekday() >= 5, {})
+    if share:
+        frac_hour = 1 - local.minute / 60
+        return min(1.0, share.get(local.hour, 0) * frac_hour + sum(v for h, v in share.items() if h > local.hour))
+    open_h, close_h = params.get("open_hour"), params.get("close_hour")
     hour = local.hour + local.minute / 60
     if hour <= open_h:
         return 1.0
@@ -498,3 +585,191 @@ def orders_needed(now=None):
         if st.get("need_order"):
             out.append(st)
     return out
+
+
+# ---------------- kiểm tra nhận định bằng kịch bản (mục 6.1) ----------------
+
+def prior_check(size_id, n=2000):
+    """Sinh các tuần bán hàng theo nhận định để Chủ quán đối chiếu tính hợp lý trước khi dùng."""
+    prior = prior_for(size_id, current_judgements(), params.get("forecast_prior_max_days"))
+    if prior is None:
+        return None
+    rng = dglm.make_rng("kiem-tra", size_id)
+    paths = _owner_paths(prior, list(range(7)), n, rng)
+    weekday = sorted(v for p in paths for v in p[:5])
+    weekend = sorted(v for p in paths for v in p[5:])
+    week = sorted(sum(p) for p in paths)
+    peak = sorted(max(p) for p in paths)
+    q = dglm.quantile
+    return {"weekday": (q(weekday, 0.1), q(weekday, 0.9)), "weekend": (q(weekend, 0.1), q(weekend, 0.9)),
+            "week": (q(week, 0.1), q(week, 0.5), q(week, 0.9)), "peak95": q(peak, 0.95),
+            "days": round(prior["days"], 1), "capped": prior["capped"]}
+
+
+# ---------------- đối chiếu các lần phát hành đã lưu (mục 6.1) ----------------
+
+BUCKETS = [(1, 1, "1 ngày"), (2, 3, "2–3 ngày"), (4, 7, "4–7 ngày"), (8, 60, "8 ngày trở lên")]
+
+
+def release_accuracy(today=None, lookback=56):
+    """So dự báo đã phát hành (giữ nguyên) với số bán thực trên ngày đủ điều kiện, theo thời hạn và theo món.
+
+    Số bán thực lấy theo dữ liệu hiện tại, đã gồm nhập bù muộn; số điểm có nhập bù sau thời điểm phát hành được đếm
+    riêng để phân biệt kết quả ban đầu với kết quả sau điều chỉnh."""
+    from apps.catalog.models import ItemSize
+    from apps.orders.models import BackupSlip
+
+    today = today or timezone.localdate()
+    dates, status, cups, flags = history(today)
+    late = defaultdict(set)
+    for slip in BackupSlip.objects.filter(sold_at__isnull=False, order__isnull=False).select_related("order"):
+        late[_local_day(slip.sold_at)].add(slip.order.created_at)
+    points = []  # (size_id, h, row, y)
+    revised = 0
+    for rel in ForecastRelease.objects.filter(first_day__gte=today - timedelta(days=lookback)):
+        for s in rel.series.all():
+            fl = size_flags(flags, s.size_id)
+            for row in s.daily:
+                d = datetime.fromisoformat(row["date"]).date()
+                if d >= today or status.get(d) != "du_dieu_kien" or d in fl:
+                    continue
+                y = cups.get(s.size_id, {}).get(d, 0)
+                if any(t > rel.issued_at for t in late.get(d, ())):
+                    revised += 1
+                points.append((s.size_id, (d - rel.first_day).days + 1, row, y))
+
+    def agg(pts):
+        n = len(pts)
+        return {"n": n, "mae": round(sum(abs(r["q50"] - y) for r, y in pts) / n, 2),
+                "bias": round(sum(r["q50"] - y for r, y in pts) / n, 2),
+                "coverage": round(100 * sum(r["q10"] <= y <= r["q90"] for r, y in pts) / n)}
+
+    buckets = []
+    for lo, hi, label in BUCKETS:
+        pts = [(r, y) for _, h, r, y in points if lo <= h <= hi]
+        if pts:
+            buckets.append({"label": label, **agg(pts)})
+    labels = {s.pk: f"{s.item.name} {s.name}" for s in ItemSize.objects.select_related("item")}
+    per_size = defaultdict(list)
+    for sid, h, r, y in points:
+        if h == 1:
+            per_size[sid].append((r, y))
+    sizes = sorted(({"label": labels.get(sid, sid), **agg(pts)} for sid, pts in per_size.items()),
+                   key=lambda x: str(x["label"]))
+    return {"buckets": buckets, "sizes": sizes, "revised": revised, "points": len(points)}
+
+
+# ---------------- nhập lịch sử bán từ tệp ----------------
+
+HEADERS = {
+    "date": ("ngay", "ngày", "date", "thoi_gian", "thời gian", "ngay_ban", "ngày bán", "created_at", "time"),
+    "item": ("mon", "món", "ten_mon", "tên món", "item", "san_pham", "sản phẩm", "product"),
+    "size": ("kich_co", "kích cỡ", "size", "co", "cỡ"),
+    "qty": ("so_ly", "số ly", "so_luong", "số lượng", "qty", "quantity", "sl"),
+    "status": ("trang_thai", "trạng thái", "tinh_trang", "tình trạng", "status"),
+}
+STATUS_WORDS = {"dong_cua": ("đóng cửa", "dong cua", "dong_cua", "nghỉ", "nghi", "closed"),
+                "thieu_hang": ("thiếu hàng", "thieu hang", "thieu_hang", "hết hàng", "het hang", "stockout")}
+DATE_FORMATS = ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M",
+                "%d/%m/%Y %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M")
+
+
+def _parse_day(value):
+    value = (value or "").strip()
+    for fmt in DATE_FORMATS:
+        try:
+            return datetime.strptime(value, fmt).date()
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(value).date()
+    except ValueError:
+        return None
+
+
+@transaction.atomic
+def import_history(fileobj, file_name, kind, user, note=""):
+    """Nhập lịch sử bán dạng CSV (mỗi dòng là một món của một đơn, hoặc tổng một ngày); gộp theo ngày và món-kích cỡ.
+
+    Cột nhận theo tên (ngày, món, kích cỡ, số ly, trạng thái). Dòng có trạng thái đóng cửa hoặc thiếu hàng đánh dấu
+    cả ngày. Món không khớp tên trong thực đơn được liệt kê, không đoán."""
+    import csv
+    import io
+    import unicodedata
+
+    from apps.audit.models import Action
+    from apps.audit.services import record
+    from apps.catalog.models import ItemSize
+
+    from .models import HistoricalDay, HistoricalSale, HistoryBatch
+
+    raw = fileobj.read()
+    text = raw.decode("utf-8-sig") if isinstance(raw, bytes) else raw
+    try:
+        dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t")
+    except csv.Error:
+        dialect = csv.excel
+    reader = csv.reader(io.StringIO(text), dialect)
+    header = next(reader, None)
+    if not header:
+        raise ValueError("Tệp trống.")
+
+    def norm(x):
+        return unicodedata.normalize("NFC", (x or "").strip().lower())
+
+    cols = {}
+    for key, names in HEADERS.items():
+        for i, h in enumerate(header):
+            if norm(h) in names:
+                cols[key] = i
+                break
+    if "date" not in cols or "item" not in cols:
+        raise ValueError("Không tìm thấy cột ngày và cột món trong dòng tiêu đề.")
+    sizes = {}
+    for s in ItemSize.objects.select_related("item"):
+        sizes[(norm(s.item.name), norm(s.name))] = s
+        sizes.setdefault((norm(s.item.name), ""), s)
+    totals, day_map, unmatched, bad_rows = defaultdict(int), {}, defaultdict(int), 0
+    for row in reader:
+        if not any(c.strip() for c in row):
+            continue
+
+        def get(k):
+            return row[cols[k]].strip() if k in cols and cols[k] < len(row) else ""
+
+        day = _parse_day(get("date"))
+        if day is None:
+            bad_rows += 1
+            continue
+        st = norm(get("status"))
+        for key, words in STATUS_WORDS.items():
+            if st in words:
+                day_map[day] = key
+        name = norm(get("item"))
+        if not name:
+            day_map.setdefault(day, "mo_cua")
+            continue
+        size = sizes.get((name, norm(get("size")))) if get("size") else sizes.get((name, ""))
+        if size is None:
+            unmatched[f"{get('item')} {get('size')}".strip()] += 1
+            continue
+        try:
+            qty = int(float((get("qty") or "1").replace(",", ".")))
+        except ValueError:
+            bad_rows += 1
+            continue
+        totals[(day, size.pk)] += max(qty, 0)
+        day_map.setdefault(day, "mo_cua")
+    batch = HistoryBatch.objects.create(kind=kind, file_name=file_name[:200], note=note[:255], imported_by=user)
+    HistoricalSale.objects.bulk_create([HistoricalSale(batch=batch, date=d, size_id=sid, cups=n)
+                                        for (d, sid), n in totals.items()])
+    HistoricalDay.objects.bulk_create([HistoricalDay(batch=batch, date=d, status=st) for d, st in day_map.items()])
+    days = sorted(day_map)
+    batch.summary = {"cups": sum(totals.values()), "days": len(days), "from": str(days[0]) if days else "",
+                     "to": str(days[-1]) if days else "", "sizes": len({sid for _, sid in totals}),
+                     "unmatched": dict(sorted(unmatched.items(), key=lambda x: -x[1])[:30]), "bad_rows": bad_rows,
+                     "closed": sum(1 for v in day_map.values() if v == "dong_cua"),
+                     "short": sum(1 for v in day_map.values() if v == "thieu_hang")}
+    batch.save(update_fields=["summary"])
+    record(Action.CREATE, actor=user, obj=batch, object_type="forecast.HistoryBatch", after=batch.summary)
+    return batch

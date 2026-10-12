@@ -21,6 +21,14 @@
       <td class="num">{% if d.owner %}{{ d.owner.mean|floatformat:1 }}{% else %}–{% endif %}</td><td class="num">{% if d.owner %}{{ d.owner.q10 }}–{{ d.owner.q90 }}{% else %}–{% endif %}</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
+{% if check %}
+<section class="panel"><h2>Kiểm tra nhận định bằng kịch bản</h2>
+  <p>Theo nhận định đang dùng ({{ check.days }} ngày tương đương{% if check.capped %}, đã bị giới hạn{% endif %}), hệ thống sinh 2.000 tuần bán thử:
+    một ngày thường thường bán <strong>{{ check.weekday.0 }}–{{ check.weekday.1 }} ly</strong>, một ngày cuối tuần <strong>{{ check.weekend.0 }}–{{ check.weekend.1 }} ly</strong>,
+    cả tuần <strong>{{ check.week.0 }}–{{ check.week.2 }} ly</strong> (thường {{ check.week.1 }}); ngày đông nhất trong tuần có thể tới {{ check.peak95 }} ly.</p>
+  <p class="page-note">Nếu các con số này không hợp lý với quán, sửa nhận định ở trang Nhận định Chủ quán trước khi dùng (mục 6.1 khung lý thuyết).</p>
+</section>
+{% endif %}
 <section class="panel"><h2>Tổng nhiều ngày</h2>
   <div class="table-wrap"><table class="data-table">
     <thead><tr><th scope="col">Khoảng thời gian</th><th scope="col" class="num">Kỳ vọng</th><th scope="col" class="num">Trung vị</th><th scope="col" class="num">10%–90%</th></tr></thead>

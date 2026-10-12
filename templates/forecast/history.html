@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Lịch sử bán · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head"><h1>Lịch sử bán</h1></header>
+<details class="help-tip"><summary>Giải thích</summary><p>Nhập số bán trước khi dùng hệ thống từ tệp CSV để mô hình học và đánh giá. Dòng tiêu đề cần có cột ngày và cột món; nên có cột kích cỡ và số ly (thiếu số ly thì mỗi dòng tính 1 ly, hợp với tệp xuất từng dòng hóa đơn). Có thể thêm cột trạng thái với giá trị "đóng cửa" hoặc "thiếu hàng" để đánh dấu cả ngày. Tên món và kích cỡ phải trùng thực đơn; món không khớp được liệt kê và không được nhập. Ngày đã có ca trên hệ thống luôn dùng số của hệ thống. Lịch sử thật và dữ liệu mô phỏng lưu riêng; dữ liệu mô phỏng không bao giờ dùng cho dự báo thật.</p></details>
+<section class="panel"><h2>Nhập tệp</h2>
+  <form method="post" enctype="multipart/form-data" class="inline-action" data-once>{% csrf_token %}
+    <div class="field"><label for="f-file">Tệp CSV</label><input class="input" id="f-file" type="file" name="file" accept=".csv,text/csv" required></div>
+    <div class="field"><label for="f-kind">Loại dữ liệu</label><select class="input" id="f-kind" name="kind">{% for v, l in kinds %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="f-note">Ghi chú</label><input class="input" id="f-note" name="note" placeholder="Nguồn dữ liệu"></div>
+    <button class="btn btn-primary" type="submit">Nhập</button>
+  </form>
+</section>
+{% if batches %}
+<div class="table-wrap"><table class="data-table">
+  <thead><tr><th scope="col">Tệp</th><th scope="col">Loại</th><th scope="col">Khoảng ngày</th><th scope="col" class="num">Số ly</th><th scope="col" class="num">Ngày đóng cửa</th><th scope="col" class="num">Ngày thiếu hàng</th><th scope="col">Không khớp</th><th scope="col">Nhập bởi</th><th scope="col">Đang dùng</th></tr></thead>
+  <tbody>{% for b in batches %}<tr>
+    <th scope="row">{{ b.file_name }}{% if b.note %}<br><span class="muted">{{ b.note }}</span>{% endif %}</th><td>{{ b.get_kind_display }}</td>
+    <td>{{ b.summary.from }} → {{ b.summary.to }} ({{ b.summary.days }} ngày)</td><td class="num">{{ b.summary.cups }}</td>
+    <td class="num">{{ b.summary.closed }}</td><td class="num">{{ b.summary.short }}</td>
+    <td>{% if b.summary.unmatched %}<span class="text-warn">{{ b.summary.unmatched|length }} tên</span>{% else %}–{% endif %}</td>
+    <td>{{ b.imported_by }} · {{ b.created_at|date:"H:i d/m" }}</td>
+    <td><form method="post" data-once>{% csrf_token %}<input type="hidden" name="batch" value="{{ b.pk }}"><button class="btn btn-quiet btn-xs" name="action" value="toggle">{% if b.active %}Đang dùng · Tắt{% else %}Đã tắt · Bật{% endif %}</button></form></td>
+  </tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<div class="empty"><p><strong>Chưa nhập lịch sử nào.</strong></p></div>{% endif %}
+{% endblock %}

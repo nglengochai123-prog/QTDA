@@ -140,3 +140,66 @@ class OrderSuggestion(StoreScopedModel):
 
     class Meta:
         ordering = ["-created_at"]
+
+
+class HistoryBatch(TimeStampedModel):
+    """Một lần nhập lịch sử bán từ tệp (mục 6.1: lưu riêng lịch sử thật và dữ liệu mô phỏng với dữ liệu hệ thống)."""
+
+    class Kind(models.TextChoices):
+        REAL = "thuc_te", "Lịch sử bán thật của quán"
+        SIMULATED = "mo_phong", "Dữ liệu mô phỏng (chỉ để kiểm tra phần mềm)"
+
+    kind = models.CharField("Loại dữ liệu", max_length=10, choices=Kind.choices)
+    file_name = models.CharField("Tệp", max_length=200)
+    note = models.CharField("Ghi chú", max_length=255, blank=True)
+    imported_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="+")
+    summary = models.JSONField("Tóm tắt", default=dict)
+    active = models.BooleanField("Đang dùng", default=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.file_name} ({self.get_kind_display()})"
+
+
+class HistoricalSale(models.Model):
+    """Số ly đã bán của một món-kích cỡ trong một ngày, từ tệp nhập (trước khi dùng hệ thống)."""
+
+    batch = models.ForeignKey(HistoryBatch, on_delete=models.CASCADE, related_name="sales")
+    date = models.DateField("Ngày")
+    size = models.ForeignKey("catalog.ItemSize", on_delete=models.PROTECT, related_name="+")
+    cups = models.PositiveIntegerField("Số ly")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["batch", "date", "size"], name="uniq_hist_sale")]
+
+
+class HistoricalDay(models.Model):
+    """Trạng thái một ngày trong tệp nhập: mở cửa (đủ điều kiện), đóng cửa, hay thiếu hàng."""
+
+    class Status(models.TextChoices):
+        OPEN = "mo_cua", "Mở cửa, số liệu đủ"
+        CLOSED = "dong_cua", "Đóng cửa"
+        SHORT = "thieu_hang", "Thiếu hàng (số bán bị giới hạn)"
+
+    batch = models.ForeignKey(HistoryBatch, on_delete=models.CASCADE, related_name="days")
+    date = models.DateField("Ngày")
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.OPEN)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["batch", "date"], name="uniq_hist_day")]
+
+
+class SeriesConfig(models.Model):
+    """Cấu hình mô hình của một món-kích cỡ do đánh giá đề xuất (hệ số thích nghi, nhiễu quan sát).
+
+    Chỉ dùng khi phát hành sau khi Chủ quán xác nhận dùng mô hình (mục 6.1: cấu hình chưa có bằng chứng giữ ở trạng
+    thái thử nghiệm)."""
+
+    size = models.OneToOneField("catalog.ItemSize", on_delete=models.CASCADE, related_name="+")
+    delta_level = models.FloatField()
+    obs_var = models.FloatField(default=0.0)
+    evidence = models.JSONField(default=dict)
+    approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, related_name="+")
+    approved_at = models.DateTimeField(null=True)

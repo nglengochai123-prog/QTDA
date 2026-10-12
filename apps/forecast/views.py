@@ -19,7 +19,7 @@ from apps.core.idempotency import OperationKeyError
 
 from . import evaluate as ev
 from . import services
-from .models import MethodDecision, OrderSuggestion, SeriesForecast
+from .models import HistoryBatch, MethodDecision, OrderSuggestion, SeriesConfig, SeriesForecast
 
 
 @capability_required(Cap.FORECASTS)
@@ -44,7 +44,8 @@ def overview(request):
 @capability_required(Cap.FORECASTS)
 def series_detail(request, pk):
     s = get_object_or_404(SeriesForecast.objects.select_related("size", "size__item", "release"), pk=pk)
-    return render(request, "forecast/series.html", {"s": s, "method_label": MethodDecision.Method(s.method).label})
+    return render(request, "forecast/series.html", {"s": s, "method_label": MethodDecision.Method(s.method).label,
+                                                    "check": services.prior_check(s.size_id)})
 
 
 @capability_required(Cap.FORECASTS)
@@ -124,6 +125,7 @@ def evaluation(request):
         current[r["size"].pk] = services.method_for(r["size"].pk, has_prior=r["has_prior"])
         r["current_label"] = MethodDecision.Method(current[r["size"].pk]).label
     return render(request, "forecast/evaluation.html", {"result": result, "weekly": weekly, "current": current,
+                                                        "accuracy": services.release_accuracy(),
                                                         "methods": dict(MethodDecision.Method.choices),
                                                         "horizons": ev.HORIZONS})
 
@@ -140,15 +142,54 @@ def choose_method(request, size_id):
     evidence = {}
     for r in ev.evaluate()["rows"]:
         if r["size"].pk == size.pk:
-            evidence = {"delta": r["delta"], "verdict": r["verdict"], "split": str(r["split"]),
+            evidence = {"delta": r["delta"], "obs_var": r["obs_var"], "verdict": r["verdict"],
+                        "split": str(r["split"]), "dispersion": r["dispersion"], "sensitivity": r["sensitivity"],
                         "horizons": {str(h): v for h, v in r["horizons"].items()}}
     if method == MethodDecision.Method.MODEL and evidence.get("verdict") != "mo_hinh_tot_hon" and not request.POST.get("note"):
         messages.error(request, "Đánh giá chưa cho thấy mô hình tốt hơn; ghi lý do nếu vẫn muốn dùng mô hình.")
         return redirect("forecast:evaluation")
     d = MethodDecision.objects.create(store=size.item.store, size=size, method=method, evidence=evidence,
                                       note=request.POST.get("note", "")[:255], decided_by=request.user)
+    if method == MethodDecision.Method.MODEL and "delta" in evidence:
+        # Cấu hình đánh giá chọn được chỉ áp dụng từ khi Chủ quán duyệt (mục 6.1)
+        SeriesConfig.objects.update_or_create(size=size, defaults={
+            "delta_level": evidence["delta"], "obs_var": evidence["obs_var"], "evidence": evidence,
+            "approved_by": request.user, "approved_at": timezone.now()})
     record(Action.UPDATE, request=request, obj=d, object_type="forecast.MethodDecision",
            after={"mon": str(size), "cach_tinh": d.get_method_display()}, reason=d.note)
     messages.success(request, f"{size.item.name} {size.name}: dùng {d.get_method_display().lower()} cho đặt hàng từ lần "
                               f"phát hành tới.")
     return redirect("forecast:evaluation")
+
+
+@capability_required(Cap.FORECASTS)
+@require_http_methods(["GET", "POST"])
+def history_import(request):
+    """Nhập lịch sử bán từ tệp CSV; lịch sử thật và dữ liệu mô phỏng lưu riêng, bật tắt từng lần nhập."""
+    if request.method == "POST":
+        if request.POST.get("action") == "toggle":
+            batch = get_object_or_404(HistoryBatch, pk=request.POST.get("batch"))
+            batch.active = not batch.active
+            batch.save(update_fields=["active", "updated_at"])
+            record(Action.STATUS_CHANGE, request=request, obj=batch, object_type="forecast.HistoryBatch",
+                   after={"dang_dung": batch.active})
+            messages.success(request, f"{'Bật' if batch.active else 'Tắt'} lần nhập {batch.file_name}.")
+            return redirect("forecast:history")
+        f = request.FILES.get("file")
+        kind = request.POST.get("kind")
+        if not f or kind not in HistoryBatch.Kind.values:
+            messages.error(request, "Chọn tệp CSV và loại dữ liệu.")
+            return redirect("forecast:history")
+        try:
+            batch = services.import_history(f, f.name, kind, request.user, request.POST.get("note", ""))
+        except (ValueError, UnicodeDecodeError) as error:
+            messages.error(request, f"Không đọc được tệp: {error}")
+            return redirect("forecast:history")
+        sm = batch.summary
+        messages.success(request, f"Đã nhập {sm['cups']} ly trong {sm['days']} ngày ({sm['from']} đến {sm['to']}).")
+        if sm.get("unmatched"):
+            messages.warning(request, "Món không khớp thực đơn (chưa nhập): " +
+                             "; ".join(f"{k} ({v} dòng)" for k, v in sm["unmatched"].items()))
+        return redirect("forecast:history")
+    return render(request, "forecast/history.html", {"batches": HistoryBatch.objects.select_related("imported_by"),
+                                                     "kinds": HistoryBatch.Kind.choices})

@@ -23,7 +23,7 @@ def navigation(request):
     desktop_only = {"bar", "data", "log", "cashier", "status", "exceptions", "cases", "params", "backup", "workload",
                     "revenue", "control_report", "materials", "dashboard", "lookup", "ledger"} | {
         "md_ca", "md_nhan-vien", "md_mon", "md_nhom-mon", "md_tuy-chon", "md_ban", "md_nguyen-lieu", "md_dinh-muc",
-        "md_nha-cung-cap", "md_ly-do", "schedule", "fc_overview", "fc_ordering", "fc_eval", "fc_prior"}
+        "md_nha-cung-cap", "md_ly-do", "schedule", "fc_overview", "fc_ordering", "fc_eval", "fc_prior", "fc_history"}
     # Nhóm điều hướng theo nghiệp vụ (DESIGN.md: bố cục quản trị); trên điện thoại chỉ hiện tối đa 5 mục.
     groups = [
         (None, [("home", "Trang chủ", reverse("core:home"), None),
@@ -53,7 +53,8 @@ def navigation(request):
             ("fc_overview", "Dự báo nhu cầu", reverse("forecast:overview"), Cap.FORECASTS),
             ("fc_ordering", "Đặt hàng đề xuất", reverse("forecast:ordering"), Cap.FORECASTS),
             ("fc_eval", "Đánh giá dự báo", reverse("forecast:evaluation"), Cap.FORECASTS),
-            ("fc_prior", "Nhận định Chủ quán", reverse("masterdata:list", args=["nhan-dinh"]), Cap.FORECASTS)]),
+            ("fc_prior", "Nhận định Chủ quán", reverse("masterdata:list", args=["nhan-dinh"]), Cap.FORECASTS),
+            ("fc_history", "Lịch sử bán", reverse("forecast:history"), Cap.FORECASTS)]),
         ("Kiểm soát", [
             ("exceptions", "Ngoại lệ", reverse("control:exceptions"), Cap.EXCEPTION_REVIEW),
             ("cases", "Vụ việc tổn thất", reverse("control:cases"), Cap.EXCEPTION_REVIEW)]),

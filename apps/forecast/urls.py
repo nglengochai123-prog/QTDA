@@ -10,4 +10,5 @@ urlpatterns = [
     path("du-bao/dat-hang/", views.ordering, name="ordering"),
     path("du-bao/danh-gia/", views.evaluation, name="evaluation"),
     path("du-bao/cach-tinh/<int:size_id>/", views.choose_method, name="choose_method"),
+    path("du-bao/lich-su/", views.history_import, name="history"),
 ]
