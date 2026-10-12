@@ -37,6 +37,9 @@ def home(request):
             ("Nhật ký thao tác", reverse("admin:audit_auditlog_changelist"), "", False),
         ]
     context["can_dashboard"] = user_can(request.user, Cap.VIEW_DASHBOARD)
+    from .models import DATA_NOTICE_VERSION, DataNoticeAck
+
+    context["notice_pending"] = not DataNoticeAck.objects.filter(user=request.user, version=DATA_NOTICE_VERSION).exists()
     if request.user.is_owner:
         from apps.shifts.services import shifts_missing_backup
 
@@ -144,3 +147,22 @@ def push_log(request):
              "opened": m.opened_at.isoformat() if m.opened_at else None}
             for m in PushMessage.objects.filter(user=request.user)[:5]]
     return JsonResponse({"messages": rows})
+
+
+@login_required
+def data_notice(request):
+    """Thông báo xử lý dữ liệu cá nhân cho nhân viên (NFR-13); bấm xác nhận một lần cho mỗi phiên bản."""
+    from django.shortcuts import redirect
+
+    from apps.audit.models import Action
+    from apps.audit.services import record
+
+    from .models import DATA_NOTICE_VERSION, DataNoticeAck
+
+    ack = DataNoticeAck.objects.filter(user=request.user, version=DATA_NOTICE_VERSION).first()
+    if request.method == "POST" and ack is None:
+        ack = DataNoticeAck.objects.create(user=request.user, version=DATA_NOTICE_VERSION)
+        record(Action.CREATE, request=request, obj=ack, object_type="core.DataNoticeAck",
+               after={"phien_ban": DATA_NOTICE_VERSION})
+        return redirect("core:home")
+    return render(request, "core/data_notice.html", {"version": DATA_NOTICE_VERSION, "acknowledged": ack})

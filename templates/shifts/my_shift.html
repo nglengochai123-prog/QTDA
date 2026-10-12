@@ -68,7 +68,7 @@
       <button class="btn btn-primary btn-block" type="submit">Xác nhận tiền đầu ca</button>
     </form>
     {% endif %}
-    <form method="post" action="{% url 'shifts:cash_entry' shift.pk %}" enctype="multipart/form-data" class="mini-form" data-once>{% csrf_token %}
+    <form data-draft="chi-tien" method="post" action="{% url 'shifts:cash_entry' shift.pk %}" enctype="multipart/form-data" class="mini-form" data-once>{% csrf_token %}
       <input type="hidden" name="operation_key" value="{{ op_expense }}"><input type="hidden" name="kind" value="chi">
       <h3>Chi tiền mặt</h3>
       <div class="field"><label for="f-exp">Số tiền (đồng)</label><input class="input" id="f-exp" name="amount" inputmode="numeric" required></div>
@@ -126,7 +126,7 @@
 {% elif not report %}
 <section class="panel" aria-labelledby="report-title">
   <h2 id="report-title">Báo cáo cuối ca</h2>
-  <form method="post" action="{% url 'shifts:report' shift.pk %}" class="mini-form" data-once>{% csrf_token %}
+  <form data-draft="bao-cao-cuoi-ca" method="post" action="{% url 'shifts:report' shift.pk %}" class="mini-form" data-once>{% csrf_token %}
     <div class="field"><label for="f-cash">Tiền mặt đếm thực tế (đồng)</label><input class="input" id="f-cash" name="counted_cash" inputmode="numeric" required></div>
     <div class="field"><label for="f-tin">Tiền chuyển khoản nhận theo sao kê (đồng)</label><input class="input" id="f-tin" name="transfer_received" inputmode="numeric" required></div>
     <div class="field"><label for="f-tout">Tiền hoàn bằng chuyển khoản theo sao kê (đồng)</label><input class="input" id="f-tout" name="transfer_refunded" inputmode="numeric" value="0"></div>
@@ -165,7 +165,7 @@
   {% if corrections %}<ul class="ruled-list compact">{% for c in corrections %}
     <li><span>{{ c.created_at|date:"H:i d/m" }} · {{ c.requested_by }}: tiền mặt {{ c.counted_cash|intcomma }}, CK nhận {{ c.transfer_received|intcomma }}, CK hoàn {{ c.transfer_refunded|intcomma }} · {{ c.reason }} · <strong>{{ c.get_status_display }}</strong>{% if c.decided_by %} ({{ c.decided_by }}){% endif %}</span></li>
   {% endfor %}</ul>{% endif %}
-  <form method="post" action="{% url 'shifts:correction' shift.pk %}" class="mini-form" data-once>{% csrf_token %}
+  <form data-draft="dinh-chinh" method="post" action="{% url 'shifts:correction' shift.pk %}" class="mini-form" data-once>{% csrf_token %}
     <input type="hidden" name="operation_key" value="{{ op_correction }}">
     <p class="hint">Báo cáo gốc được giữ nguyên. Đính chính cần lý do và Chủ quán duyệt; sau khi duyệt hệ thống đối soát lại theo số mới, không tính trùng chênh lệch.</p>
     <div class="field"><label for="c-cash">Tiền mặt đếm thực tế (đồng)</label><input class="input" id="c-cash" name="counted_cash" inputmode="numeric" value="{{ effective.counted_cash }}" required></div>

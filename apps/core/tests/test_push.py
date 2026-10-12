@@ -97,3 +97,17 @@ class NotifyOnEventsTests(TestCase):
                 shift_services.close_shift(base.manager, base.shift.pk)
                 shift_services.submit_report(base.manager, base.shift.pk, 0, 0)
             self.assertIn(base.d["owner"], {c.args[0] for c in send.call_args_list})
+
+
+class DataNoticeTests(TestCase):
+    def test_notice_banner_until_acknowledged(self):
+        User.objects.create_user("pv", password="matkhau-thu-123", role=Role.PHUC_VU)
+        self.client.login(username="pv", password="matkhau-thu-123")
+        self.assertContains(self.client.get(reverse("core:home")), "thông báo xử lý dữ liệu cá nhân")
+        self.assertContains(self.client.get(reverse("core:data_notice")), "Kiểm soát doanh thu và thất thoát")
+        self.client.post(reverse("core:data_notice"))
+        self.client.post(reverse("core:data_notice"))
+        from apps.core.models import DataNoticeAck
+
+        self.assertEqual(DataNoticeAck.objects.count(), 1)
+        self.assertNotContains(self.client.get(reverse("core:home")), "thông báo xử lý dữ liệu cá nhân")

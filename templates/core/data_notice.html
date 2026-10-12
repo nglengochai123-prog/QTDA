@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Thông báo xử lý dữ liệu cá nhân · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<h1>Thông báo xử lý dữ liệu cá nhân</h1>
+<p class="muted">Phiên bản {{ version }}. Bản dự thảo do nhóm dự án soạn theo NFR-13; Chủ quán cần rà soát với Luật Bảo vệ dữ liệu cá nhân số 91/2025/QH15 trước khi áp dụng chính thức.</p>
+<section class="panel" aria-labelledby="dn-1">
+  <h2 id="dn-1">Dữ liệu được thu thập</h2>
+  <ul>
+    <li>Thông tin hồ sơ: họ tên, số điện thoại, vai trò đảm nhận, đơn giá lương giờ, trạng thái làm việc.</li>
+    <li>Dữ liệu làm việc: giờ vào ca, ra ca, vai trò làm việc trong ca.</li>
+    <li>Lịch sử thao tác trên hệ thống: tạo đơn, pha chế, phục vụ, thanh toán, yêu cầu và phê duyệt điều chỉnh, quỹ tiền, nhập hàng, kiểm kê, hao hụt, đăng nhập và các lần bị từ chối quyền.</li>
+  </ul>
+  <p>Hệ thống không thu thập dữ liệu cá nhân ngoài phạm vi trên, không dùng vị trí, ảnh khuôn mặt hay dữ liệu sinh trắc.</p>
+</section>
+<section class="panel" aria-labelledby="dn-2">
+  <h2 id="dn-2">Mục đích sử dụng</h2>
+  <ul>
+    <li>Vận hành bán hàng, quỹ ca và nguyên vật liệu.</li>
+    <li><strong>Kiểm soát doanh thu và thất thoát</strong>: dữ liệu thao tác được dùng để phát hiện ngoại lệ theo quy tắc, xem xét ngoại lệ và xác minh vụ việc tổn thất. Mọi kết luận do Chủ quán đưa ra sau khi xem căn cứ, không do hệ thống tự kết luận.</li>
+    <li>Tính giờ công và đo tải phục vụ theo khung giờ.</li>
+  </ul>
+</section>
+<section class="panel" aria-labelledby="dn-3">
+  <h2 id="dn-3">Ai được xem và lưu bao lâu</h2>
+  <ul>
+    <li>Chỉ Chủ quán xem được đơn giá lương, chi phí và nhật ký thao tác đầy đủ; Quản lý ca chỉ xem dữ liệu cần cho ca mình phụ trách.</li>
+    <li>Dữ liệu và nhật ký được lưu tối thiểu 24 tháng (NFR-08), không chia sẻ cho bên thứ ba.</li>
+    <li>Nhân viên có quyền yêu cầu xem, đính chính thông tin hồ sơ của mình bằng cách báo Chủ quán.</li>
+  </ul>
+</section>
+{% if acknowledged %}
+<p class="muted">Bạn đã xác nhận đọc thông báo này lúc {{ acknowledged.acknowledged_at|date:"H:i d/m/Y" }}.</p>
+{% else %}
+<form method="post" data-once>{% csrf_token %}<button class="btn btn-primary" type="submit">Tôi đã đọc thông báo này</button></form>
+{% endif %}
+{% endblock %}

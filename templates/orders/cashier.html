@@ -24,7 +24,7 @@
     </div>
     {% endif %}
     {% if not bill.blockers or bill.can_received %}
-    <form method="post" action="{% url 'orders:pay' bill.table.pk %}" class="pay-form" data-once>
+    <form data-online-only method="post" action="{% url 'orders:pay' bill.table.pk %}" class="pay-form" data-once>
       {% csrf_token %}
       <input type="hidden" name="operation_key" value="{{ bill.operation_key }}">
       {% if bill.blockers %}<input type="hidden" name="mode" value="received">{% endif %}

@@ -6,7 +6,7 @@
 
 <section class="panel" aria-labelledby="enter-title">
   <h2 id="enter-title">Nhập bù một phiếu</h2>
-  <form method="post" class="mini-form" data-once>{% csrf_token %}
+  <form data-draft="nhap-bu" method="post" class="mini-form" data-once>{% csrf_token %}
     <input type="hidden" name="action" value="enter"><input type="hidden" name="operation_key" value="{{ operation_key }}">
     <div class="form-grid">
       <div class="field"><label for="b-no">Số phiếu</label><input class="input" id="b-no" name="number" inputmode="numeric" required></div>

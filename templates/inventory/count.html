@@ -24,7 +24,7 @@
   {% for i in ingredients %}
   <li class="qr-row">
     <div class="exc-text"><strong>{{ i.name }}{% if i.is_critical %} <span class="chip">Trọng yếu</span>{% endif %}</strong><span class="muted">Tồn vật lý trên hệ thống {{ i.stock.physical|floatformat:"-2g" }} {{ i.get_unit_display }}</span></div>
-    <form method="post" class="inline-form" data-once>{% csrf_token %}
+    <form data-draft="kiem-ke" method="post" class="inline-form" data-once>{% csrf_token %}
       <input type="hidden" name="operation_key" value="{{ i.op }}"><input type="hidden" name="ingredient" value="{{ i.pk }}">
       <label class="visually-hidden" for="c-{{ i.pk }}">Đếm được</label>
       <input class="input input-sm" id="c-{{ i.pk }}" name="counted" inputmode="decimal" placeholder="Đếm được ({{ i.get_unit_display }})" required>

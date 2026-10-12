@@ -99,6 +99,64 @@
     });
   });
 
+  // --- Lưu nháp biểu mẫu trên thiết bị (NFR-16) ---
+  // Biểu mẫu có data-draft được lưu nháp khi gõ, kể cả mã nghiệp vụ, nên gửi lại sau mất mạng
+  // vẫn là cùng một yêu cầu và máy chủ không ghi trùng. Nháp được xóa khi trang báo đã lưu thành công.
+  var savedOk = document.querySelector(".notice-ok");
+  document.querySelectorAll("form[data-draft]").forEach(function (form) {
+    var key = "nhap:" + location.pathname + ":" + form.dataset.draft;
+    var fields = function () {
+      return Array.prototype.filter.call(form.elements, function (el) {
+        return el.name && el.type !== "file" && el.type !== "submit" && el.name !== "csrfmiddlewaretoken";
+      });
+    };
+    var stored = null;
+    try { stored = JSON.parse(localStorage.getItem(key) || "null"); } catch (e) { stored = null; }
+    var stale = stored && stored.sent && (Date.now() - (stored.at || 0) > 30 * 60 * 1000);
+    if (stored && stored.sent && (savedOk || stale)) {
+      try { localStorage.removeItem(key); } catch (e) { /* bộ nhớ thiết bị không dùng được */ }
+    } else if (stored && stored.values) {
+      fields().forEach(function (el) {
+        if (!(el.name in stored.values)) return;
+        var v = stored.values[el.name];
+        if (el.type === "checkbox" || el.type === "radio") el.checked = Array.isArray(v) ? v.indexOf(el.value) >= 0 : v === el.value;
+        else if (el.multiple) Array.prototype.forEach.call(el.options, function (o) { o.selected = (v || []).indexOf(o.value) >= 0; });
+        else el.value = v;
+      });
+      var note = document.createElement("p");
+      note.className = "hint";
+      note.textContent = stored.sent ? "Đã khôi phục nội dung vừa gửi nhưng chưa chắc máy chủ đã nhận; kiểm tra rồi gửi lại (không bị ghi trùng)."
+                                     : "Đã khôi phục nội dung đang nhập dở trên thiết bị này.";
+      form.insertBefore(note, form.firstChild);
+    }
+    var save = function (sent) {
+      var values = {};
+      fields().forEach(function (el) {
+        if (el.type === "checkbox" || el.type === "radio") {
+          if (!el.checked) return;
+          values[el.name] = (values[el.name] || []).concat([el.value]);
+        } else if (el.multiple) {
+          values[el.name] = Array.prototype.filter.call(el.options, function (o) { return o.selected; }).map(function (o) { return o.value; });
+        } else values[el.name] = el.value;
+      });
+      try { localStorage.setItem(key, JSON.stringify({ values: values, sent: !!sent, at: Date.now() })); } catch (e) { /* bỏ qua */ }
+    };
+    form.addEventListener("input", function () { save(false); });
+    form.addEventListener("change", function () { save(false); });
+    form.addEventListener("submit", function () { save(true); });
+  });
+
+  // --- Không ghi thanh toán, phê duyệt, kết quả xem xét khi mất kết nối (NFR-16) ---
+  document.querySelectorAll("form[data-online-only]").forEach(function (form) {
+    form.addEventListener("submit", function (event) {
+      if (offline || navigator.onLine === false) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        window.alert("Đang mất kết nối. Thao tác này chỉ ghi khi có mạng; chờ có mạng rồi bấm lại.");
+      }
+    }, true);
+  });
+
   // --- Chống bấm gửi hai lần ---
   document.querySelectorAll("form[data-once]").forEach(function (form) {
     form.addEventListener("submit", function () {

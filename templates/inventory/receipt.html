@@ -4,7 +4,7 @@
 <p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
 <h1>Lập phiếu nhập</h1>
 <p class="lead-muted">Nhập số lượng thực nhận theo đơn vị tính và đơn giá trên mỗi đơn vị tính. Chọn lần đặt nếu hàng giao theo lần đặt.</p>
-<form method="post" enctype="multipart/form-data" class="mini-form narrow" data-once>{% csrf_token %}
+<form data-draft="phieu-nhap" method="post" enctype="multipart/form-data" class="mini-form narrow" data-once>{% csrf_token %}
   <input type="hidden" name="operation_key" value="{{ operation_key }}"><input type="hidden" name="rows" value="{{ rows|length }}">
   <div class="field"><label for="r-sup">Nhà cung cấp</label><select class="input" id="r-sup" name="supplier" required>
     <option value="">Chọn nhà cung cấp</option>{% for s in suppliers %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}</select></div>

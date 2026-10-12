@@ -148,3 +148,20 @@ class PushMessage(models.Model):
         verbose_name = "Thông báo đã gửi"
         verbose_name_plural = "Thông báo đã gửi"
         ordering = ["-created_at"]
+
+
+DATA_NOTICE_VERSION = "2026-10-12"
+
+
+class DataNoticeAck(models.Model):
+    """Nhân viên xác nhận đã đọc thông báo xử lý dữ liệu cá nhân (NFR-13)."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người dùng", on_delete=models.CASCADE,
+                             related_name="data_notice_acks")
+    version = models.CharField("Phiên bản thông báo", max_length=20)
+    acknowledged_at = models.DateTimeField("Xác nhận lúc", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Xác nhận thông báo dữ liệu"
+        verbose_name_plural = "Xác nhận thông báo dữ liệu"
+        constraints = [models.UniqueConstraint(fields=["user", "version"], name="one_ack_per_version")]

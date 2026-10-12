@@ -45,7 +45,7 @@
   {% empty %}<p class="muted">Chưa có kết quả.</p>{% endfor %}
 
   {% if request.user.is_owner %}
-  <form method="post" class="mini-form" data-once>{% csrf_token %}
+  <form data-online-only method="post" class="mini-form" data-once>{% csrf_token %}
     <fieldset class="option-group"><legend>{% if effective %}Lập bản đính chính{% else %}Ghi kết quả{% endif %}</legend>
       <div class="choice-row">{% for v, l in results %}<label class="pick"><input type="radio" name="result" value="{{ v }}" required><span>{{ l }}</span></label>{% endfor %}</div></fieldset>
     <label class="toggle"><input type="checkbox" name="money_loss" value="1"> Có tổn thất tiền (phải gắn vụ việc trước)</label>
@@ -54,7 +54,7 @@
     <button class="btn btn-primary" type="submit">{% if effective %}Lưu bản đính chính{% else %}Lưu kết quả{% endif %}</button>
   </form>
   {% if not exc.loss_case %}
-  <form method="post" class="inline-form" data-once>{% csrf_token %}
+  <form data-online-only method="post" class="inline-form" data-once>{% csrf_token %}
     <input type="hidden" name="action" value="attach"><input type="hidden" name="operation_key" value="{{ operation_key }}">
     <span>Gắn vào vụ việc tổn thất</span>
     <select class="input input-sm" name="case"><option value="new">Lập vụ việc mới</option>{% for c in cases %}<option value="{{ c.pk }}">{{ c }}</option>{% endfor %}</select>

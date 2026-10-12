@@ -13,12 +13,12 @@
       <span class="muted">Người yêu cầu {{ req.requested_by }} · {{ req.created_at|date:"H:i" }} · Cấp: {{ req.get_current_level_display }}</span>
     </div>
     <div class="approval-actions">
-      <form method="post" action="{% url 'orders:decide' req.pk %}" data-once>{% csrf_token %}
+      <form data-online-only method="post" action="{% url 'orders:decide' req.pk %}" data-once>{% csrf_token %}
         <input type="hidden" name="operation_key" value="{{ req.op_reject }}">
         <input type="hidden" name="decision" value="reject">
         <button type="submit" class="btn btn-quiet">Từ chối</button>
       </form>
-      <form method="post" action="{% url 'orders:decide' req.pk %}" data-once>{% csrf_token %}
+      <form data-online-only method="post" action="{% url 'orders:decide' req.pk %}" data-once>{% csrf_token %}
         <input type="hidden" name="operation_key" value="{{ req.op_approve }}">
         <input type="hidden" name="decision" value="approve">
         <button type="submit" class="btn btn-primary">Đồng ý</button>

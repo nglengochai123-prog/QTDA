@@ -7,6 +7,11 @@
   </div>
 </section>
 
+{% if notice_pending %}
+<div class="notice notice-info" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
+  <div>Vui lòng đọc <a href="{% url 'core:data_notice' %}">thông báo xử lý dữ liệu cá nhân</a> và bấm xác nhận.</div></div>
+{% endif %}
+
 {% if missing_backup %}
 <div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
   <div><strong>Ca chưa có người duyệt dự phòng.</strong> Bổ sung trước giờ ca; nếu không, yêu cầu quá hạn sẽ chuyển thẳng Chủ quán như ngoại lệ.
