@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Đăng ký ca · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <h1>Đăng ký ca tuần {{ week|date:"d/m" }}</h1>
+  <div class="page-tools"><a class="btn btn-quiet" href="?tuan={{ prev|date:'Y-m-d' }}">‹</a><a class="btn btn-quiet" href="?tuan={{ next|date:'Y-m-d' }}">›</a></div>
+</header>
+{% if open %}<p class="page-note">Hạn đăng ký: <strong>{{ deadline|date:"H:i" }} {{ deadline|date:"d/m/Y" }}</strong>. Ca có viền đỏ đang thiếu người.</p>
+{% else %}<div class="notice notice-warn" role="status"><div>Đã quá hạn đăng ký ({{ deadline|date:"H:i d/m" }}). Muốn làm thêm ca, hãy liên hệ Chủ quán.</div></div>{% endif %}
+{% if not roles %}<div class="notice notice-info"><div>Hồ sơ của bạn chưa có vị trí làm việc; báo Chủ quán cập nhật.</div></div>{% endif %}
+{% if groups %}
+<form method="post" data-draft="dang-ky-ca" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}">
+  {% for g in groups %}
+  <section class="panel reg-day"><h2>{{ g.day }} {{ g.date|date:"d/m" }}</h2>
+    {% for item in g.shifts %}{% with s=item.shift %}
+    <fieldset class="reg-shift{% for o in item.options %}{% if o.short %} is-short{% endif %}{% endfor %}"{% if not open %} disabled{% endif %}>
+      <legend>{{ s.name }} {{ s.start|time:"H:i" }}–{{ s.end|time:"H:i" }}</legend>
+      <div class="choice-row">
+        <label class="pick"><input type="radio" name="ca_{{ s.pk }}" value=""{% if not item.mine %} checked{% endif %}><span>Không</span></label>
+        {% for o in item.options %}<label class="pick"><input type="radio" name="ca_{{ s.pk }}" value="{{ o.role }}"{% if item.mine == o.role %} checked{% endif %}><span>{{ o.label }}<span class="pick-sub{% if o.short %} text-danger{% endif %}">{{ o.count }}/{{ o.need }} người</span></span></label>{% endfor %}
+      </div>
+    </fieldset>
+    {% endwith %}{% endfor %}
+  </section>
+  {% endfor %}
+  {% if open %}<div class="form-actions"><button class="btn btn-primary" type="submit">Gửi đăng ký</button></div>{% endif %}
+</form>
+{% else %}<div class="empty"><p><strong>Chủ quán chưa mở ca cho tuần này.</strong></p></div>{% endif %}
+{% endblock %}

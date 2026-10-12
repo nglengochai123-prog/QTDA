@@ -77,6 +77,7 @@ INSTALLED_APPS = [
     "apps.reports",
     "apps.masterdata.apps.MasterdataConfig",
     "apps.forecast.apps.ForecastConfig",
+    "apps.schedule.apps.ScheduleConfig",
 ]
 
 MIDDLEWARE = [

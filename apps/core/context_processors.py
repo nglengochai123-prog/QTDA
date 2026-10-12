@@ -23,7 +23,7 @@ def navigation(request):
     desktop_only = {"bar", "data", "log", "cashier", "status", "exceptions", "cases", "params", "backup", "workload",
                     "revenue", "control_report", "materials", "dashboard", "lookup", "ledger"} | {
         "md_ca", "md_nhan-vien", "md_mon", "md_nhom-mon", "md_tuy-chon", "md_ban", "md_nguyen-lieu", "md_dinh-muc",
-        "md_nha-cung-cap", "md_ly-do", "fc_overview", "fc_ordering", "fc_eval", "fc_prior"}
+        "md_nha-cung-cap", "md_ly-do", "schedule", "fc_overview", "fc_ordering", "fc_eval", "fc_prior"}
     # Nhóm điều hướng theo nghiệp vụ (DESIGN.md: bố cục quản trị); trên điện thoại chỉ hiện tối đa 5 mục.
     groups = [
         (None, [("home", "Trang chủ", reverse("core:home"), None),
@@ -43,6 +43,9 @@ def navigation(request):
             ("attendance", "Chấm công", reverse("staff:attendance"),
              Cap.TIMEKEEPING if user_can(user, Cap.TIMEKEEPING) else Cap.TIMEKEEPING_ADJUST),
             ("status", "Tình trạng ca", reverse("shifts:status"), Cap.VIEW_DASHBOARD),
+            ("schedule", "Lịch làm tuần", reverse("schedule:board"), Cap.SCHEDULE_MANAGE),
+            ("register", "Đăng ký ca", reverse("schedule:register"), Cap.SHIFT_REGISTER),
+            ("my_schedule", "Lịch của tôi", reverse("schedule:mine"), Cap.SHIFT_REGISTER),
             ("workload", "Tải và thời gian chờ", reverse("staff:workload"), Cap.VIEW_WORKLOAD)]),
         ("Kho", [("stock", "Tồn kho", reverse("inventory:stock"), Cap.STOCK_OPERATIONS),
                  ("ledger", "Sổ kho", reverse("inventory:ledger"), Cap.VIEW_DASHBOARD)]),
@@ -81,7 +84,7 @@ def navigation(request):
         item["group_start"] = item["group"] if item["group"] != last and item["group"] else ""
         last = item["group"]
     # Thanh dưới điện thoại giữ tối đa 5 mục theo thứ tự ưu tiên; các mục còn lại xem trên máy tính.
-    priority = ["home", "order", "approve", "shift", "alerts", "attendance", "stock", "open", "ready"]
+    priority = ["home", "order", "approve", "shift", "register", "alerts", "attendance", "stock", "open", "ready"]
     mobile = [key for key in priority if any(i["key"] == key and not i["desktop_only"] for i in nav)][:4]
     for item in nav:
         item["desktop_only"] = item["key"] not in mobile

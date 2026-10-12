@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Lịch làm tuần · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <h1>Lịch làm tuần {{ week|date:"d/m" }} – {{ week_end|date:"d/m/Y" }}</h1>
+  <div class="page-tools">
+    <a class="btn btn-quiet" href="?tuan={{ prev|date:'Y-m-d' }}">‹ Tuần trước</a>
+    <a class="btn btn-quiet" href="?tuan={{ next|date:'Y-m-d' }}">Tuần sau ›</a>
+    <form method="post" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}"><button class="btn btn-quiet" name="action" value="copy_prev">Chép ca tuần trước</button></form>
+    <form method="post" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}"><button class="btn btn-quiet" name="action" value="suggest_needs">Gợi ý số người cần</button></form>
+    <form method="post" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}"><button class="btn btn-primary" name="action" value="auto_assign">Xếp theo đăng ký</button></form>
+  </div>
+</header>
+<details class="help-tip"><summary>Giải thích</summary><p>1. Thêm ca (giờ) cho các ngày. 2. Bấm "Gợi ý số người cần" hoặc nhập số người cần từng vị trí; khác gợi ý thì ghi lý do. 3. Nhân viên đăng ký trên điện thoại đến hạn {{ deadline|date:"H:i" }} {{ deadline|date:"d/m" }}. 4. Bấm "Xếp theo đăng ký": hệ thống xếp ô khan hiếm trước, ưu tiên người ít giờ trong tuần, không xếp ai vào hai ca trùng giờ; ô bạn đã xếp tay được giữ. 5. Sửa tay trong từng ô rồi Công bố. Gợi ý số người cần = số ly dự báo của ngày × tỷ lệ bán theo giờ × hệ số tải, chia năng suất mỗi người (từ các giờ không quá tải), lấy giờ cao nhất trong ca, không thấp hơn mức tối thiểu ở trang Tham số.</p></details>
+
+<div class="summary-bar">
+  <span class="chip {% if total_short %}chip-danger{% else %}chip-ok{% endif %}">{% if total_short %}Còn thiếu {{ total_short }} chỗ{% else %}Đủ người{% endif %}</span>
+  {% if total_surplus %}<span class="chip chip-warn">Dư {{ total_surplus }} chỗ</span>{% endif %}
+  <span class="muted">Hạn đăng ký: {{ deadline|date:"H:i d/m/Y" }}{% if published %} · Đã công bố {{ published.created_at|date:"H:i d/m" }}{% endif %}</span>
+</div>
+
+{% if rows %}
+<div class="table-wrap"><table class="data-table schedule-table">
+  <thead><tr><th scope="col">Ca</th>{% for r, label in roles %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead>
+  <tbody>{% for row in rows %}{% with s=row.shift %}
+  <tr>
+    <th scope="row" class="shift-cell"><strong>{{ row.day }} {{ s.date|date:"d/m" }}</strong><br>{{ s.name }} {{ s.start|time:"H:i" }}–{{ s.end|time:"H:i" }}
+      <form method="post" class="needs-form" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}"><input type="hidden" name="shift" value="{{ s.pk }}">
+        {% for c in row.cells %}<label>{{ c.label }} <input class="input input-xs" name="need_{{ c.role }}" value="{{ c.needed }}" inputmode="numeric" size="2">{% if c.need.suggested is not None and c.need.suggested != c.needed %}<input class="input input-xs" name="reason_{{ c.role }}" value="{{ c.need.reason }}" placeholder="Lý do (gợi ý {{ c.need.suggested }})">{% endif %}</label>{% endfor %}
+        <button class="btn btn-quiet btn-xs" name="action" value="set_needs">Lưu số cần</button>
+      </form>
+      <form method="post" class="inline-delete" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}"><input type="hidden" name="shift" value="{{ s.pk }}"><button class="link-btn" name="action" value="delete_shift">Xóa ca</button></form>
+    </th>
+    {% for c in row.cells %}
+    <td class="slot{% if c.short %} is-short{% elif c.surplus %} is-surplus{% elif c.needed %} is-ok{% endif %}">
+      <div class="slot-head"><span>Cần {{ c.needed }}{% if c.need.suggested is not None %} <span class="muted">(gợi ý {{ c.need.suggested }})</span>{% endif %}</span>
+        {% if c.short %}<span class="badge badge-danger">Thiếu {{ c.short }}</span>{% elif c.surplus %}<span class="badge badge-warn">Dư {{ c.surplus }}</span>{% elif c.needed %}<span class="badge badge-ok">Đủ</span>{% endif %}</div>
+      <ul class="slot-people">{% for a in c.assigned %}<li><span>{{ a.user }}{% if a.source == "chu_quan" %} <span class="muted">· xếp tay</span>{% endif %}</span>
+        <form method="post" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}"><input type="hidden" name="assignment" value="{{ a.pk }}"><button class="link-btn" name="action" value="unassign" aria-label="Bỏ {{ a.user }}">×</button></form></li>{% endfor %}</ul>
+      {% if c.unassigned_regs %}<p class="slot-regs">Đăng ký chưa xếp: {% for r in c.unassigned_regs %}{{ r.user }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+      {% if c.reg_short and not c.assigned|length %}<p class="slot-regs text-danger">Mới có {{ c.registered|length }} người đăng ký</p>{% endif %}
+      {% if c.candidates %}<form method="post" class="slot-add" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}"><input type="hidden" name="shift" value="{{ s.pk }}"><input type="hidden" name="role" value="{{ c.role }}">
+        <select class="input input-xs" name="user" aria-label="Thêm người vào {{ c.label }} {{ s }}">{% for x in c.candidates %}<option value="{{ x.user.pk }}">{{ x.user }}{% if x.registered %} (đã đăng ký){% endif %} · {{ x.hours|floatformat:0 }} giờ</option>{% endfor %}</select>
+        <button class="btn btn-quiet btn-xs" name="action" value="assign">Thêm</button></form>{% endif %}
+    </td>{% endfor %}
+  </tr>{% endwith %}{% endfor %}</tbody>
+</table></div>
+{% else %}
+<div class="empty"><p><strong>Tuần này chưa có ca.</strong></p><p>Thêm ca bên dưới hoặc bấm "Chép ca tuần trước".</p></div>
+{% endif %}
+
+<section class="panel"><h2>Thêm ca</h2>
+  <form method="post" class="inline-action" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}">
+    <div class="field"><label for="f-name">Tên ca</label><input class="input" id="f-name" name="name" placeholder="Ca sáng" required></div>
+    <div class="field"><label for="f-start">Bắt đầu</label><input class="input" id="f-start" type="time" name="start" required></div>
+    <div class="field"><label for="f-end">Kết thúc</label><input class="input" id="f-end" type="time" name="end" required></div>
+    <fieldset class="day-picks"><legend>Các ngày</legend>{% for d, label in days %}<label><input type="checkbox" name="days" value="{{ d|date:'Y-m-d' }}" checked> {{ label }} {{ d|date:"d/m" }}</label>{% endfor %}</fieldset>
+    <button class="btn btn-primary" name="action" value="add_shift">Thêm ca</button>
+  </form>
+</section>
+
+<section class="panel"><h2>Công bố lịch</h2>
+  {% if gaps %}<div class="notice notice-warn"><div>Còn thiếu: {{ gaps|join:"; " }}.</div></div>{% endif %}
+  <form method="post" class="inline-action" data-once data-online-only>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}">
+    <label class="toggle"><input type="checkbox" name="confirm" value="1"> Tôi xác nhận công bố lịch tuần này{% if gaps %} dù còn {{ gaps|length }} chỗ thiếu{% endif %}</label>
+    <button class="btn btn-primary" name="action" value="publish">Công bố</button>
+  </form>
+</section>
+{% endblock %}

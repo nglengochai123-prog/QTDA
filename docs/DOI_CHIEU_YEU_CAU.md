@@ -183,7 +183,7 @@ Chủ quán trả lời ngày 11/10/2026. Cột "Đã làm" ghi cách hệ thố
 
 ## 9. Bảng đối chiếu cuối cùng (12/10/2026)
 
-Phạm vi làm: mọi yêu cầu mức Must của BRD. Các mục Should, Could thuộc Giai đoạn 2, 3 theo Bảng 9.1 (FR-05, FR-19, FR-31 đến FR-33, FR-37 đến FR-49, FR-55 đến FR-58, NFR-18, NFR-20, NFR-21) không làm trong đợt này theo chỉ đạo không mở rộng phạm vi.
+Phạm vi làm: mọi yêu cầu mức Must của BRD; thêm theo yêu cầu của Hai (12/10/2026): FR-31 đề xuất số lượng đặt, FR-37 gợi ý số người cần, FR-38 đăng ký ca, FR-39 lập và công bố lịch (AC-84 đến AC-88, `schedule/tests`). Các mục Should, Could thuộc Giai đoạn 2, 3 theo Bảng 9.1 (FR-05, FR-19, FR-31 đến FR-33, FR-37 đến FR-49, FR-55 đến FR-58, NFR-18, NFR-20, NFR-21) không làm trong đợt này theo chỉ đạo không mở rộng phạm vi.
 
 **Chức năng Must:** FR-01 đến FR-04, FR-06 đến FR-18, FR-20 đến FR-27, FR-30, FR-34 đến FR-36, FR-50, FR-52, FR-53, FR-59 đến FR-61 là **Đúng** (chi tiết mục 3). Còn lại:
 

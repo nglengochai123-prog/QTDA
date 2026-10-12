@@ -49,6 +49,13 @@ DEFAULTS = {
     "forecast_prior_max_days": (7, "ngày", "Sức nặng tối đa của nhận định Chủ quán (số ngày quan sát tương đương)", "Khung dự báo 2.1"),
     "forecast_min_history_days": (56, "ngày", "Số ngày dữ liệu đủ điều kiện để bắt đầu đánh giá có ý nghĩa", "Khung dự báo 5.3"),
     "forecast_paths": (1000, "đường", "Số đường mô phỏng khi tính tổng nhu cầu nhiều ngày", "Khung dự báo 4.2"),
+    # Đăng ký ca và lập lịch (FR-38, FR-39)
+    "schedule_deadline_weekday": (5, "thứ", "Hạn đăng ký ca tuần sau: thứ trong tuần (2 là thứ Hai … 8 là Chủ nhật)", "BRU-29"),
+    "schedule_deadline_hour": (12, "giờ", "Hạn đăng ký ca tuần sau: giờ trong ngày", "BRU-29"),
+    "schedule_min_per_role": (1, "người", "Số người tối thiểu mỗi vị trí trong một ca", "BRU-28"),
+    "schedule_productivity_pha_che": (0, "tải/người/giờ", "Năng suất pha chế (0: tự tính từ các giờ không quá tải)", "BRU-28"),
+    "schedule_productivity_phuc_vu": (0, "tải/người/giờ", "Năng suất phục vụ (0: tự tính từ các giờ không quá tải)", "BRU-28"),
+    "schedule_productivity_thu_ngan": (0, "tải/người/giờ", "Năng suất thu ngân (0: tự tính từ các giờ không quá tải)", "BRU-28"),
 }
 
 
@@ -87,6 +94,12 @@ BASIS = {
                                             "cần kiểm tra độ nhạy"),
     "forecast_min_history_days": (FRAMEWORK, "Mục 5.3: 8 đến 12 tuần dữ liệu ngày làm mốc khởi đầu đánh giá thử"),
     "forecast_paths": (ASSUMPTION, "Số đường mô phỏng đủ ổn định phân vị; chỉ ảnh hưởng độ mượt, không đổi phương pháp"),
+    "schedule_deadline_weekday": (AC_EXAMPLE, "AC-85: hạn là 12 giờ trưa thứ Năm"),
+    "schedule_deadline_hour": (AC_EXAMPLE, "AC-85: hạn là 12 giờ trưa thứ Năm"),
+    "schedule_min_per_role": (ASSUMPTION, "BRU-28 có mức tối thiểu mỗi vai trò nhưng chưa nêu số; tạm 1 người"),
+    "schedule_productivity_pha_che": (BRD, "BRU-28: năng suất ban đầu do Chủ quán đặt; để 0 thì hệ thống tính từ các giờ không quá tải"),
+    "schedule_productivity_phuc_vu": (BRD, "BRU-28: như trên"),
+    "schedule_productivity_thu_ngan": (BRD, "BRU-28: như trên"),
 }
 
 
