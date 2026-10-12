@@ -1,13 +1,13 @@
 # Vận hành, nghiệm thu và kiểm tra kỹ thuật
 
-Cập nhật 12/10/2026. Mọi lệnh chạy trong PowerShell, tại thư mục `D:\QTDA`.
+Cập nhật 12/10/2026 (cuối ngày). Mọi lệnh chạy trong PowerShell, tại thư mục `D:\QTDA`.
 
 ## 0. Trạng thái kiểm chứng
 
 | Hạng mục | Kết quả | Kiểm chứng bằng |
 |---|---|---|
-| Kiểm thử tự động trên SQLite | Xem dòng cập nhật ở cuối tài liệu | `manage.py test` |
-| Kiểm thử tự động trên PostgreSQL 16.10 | 176 bài đạt (sau khi sửa 2 lỗi chỉ lộ ra trên PostgreSQL) | `manage.py test` với cấu hình PostgreSQL |
+| Kiểm thử tự động trên SQLite | 188 bài đạt (12/10/2026) | `manage.py test` |
+| Kiểm thử tự động trên PostgreSQL 16.10 | 188 bài: 187 đạt, 1 bài sao lưu chỉ dành cho SQLite được bỏ qua (sao lưu PostgreSQL thử bằng lệnh thật, dòng dưới) | `manage.py test` với cấu hình PostgreSQL |
 | Đồng thời trên PostgreSQL: hai đơn tranh phần tồn cuối, gửi lại cùng mã, hoàn thành một món nhiều lần, thanh toán cùng lúc, hai người duyệt một yêu cầu | Đạt: không âm kho, không ghi trùng tiền, không hiệu lực hai lần, `kiem_tra_toan_ven` sạch | `apps/core/tests/test_concurrency.py`, 6 luồng chạy cùng lúc |
 | Bộ dữ liệu 14 ngày trên PostgreSQL | Tạo được, `kiem_tra_toan_ven` không báo sai lệch | Lệnh mục 4 |
 | Đính chính báo cáo cuối ca | Đạt trên trình duyệt: Quản lý ca gửi, Chủ quán duyệt, chênh lệch 20.000 đ hết hiệu lực, giá trị kiểm soát giảm từ 40.000 xuống 20.000 đ, không cộng trùng | Trình duyệt, bộ dữ liệu mẫu |
