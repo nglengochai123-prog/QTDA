@@ -189,10 +189,10 @@ Phạm vi làm: mọi yêu cầu mức Must của BRD. Các mục Should, Could 
 
 | Mã | Trạng thái | Phần còn thiếu | Lý do |
 |---|---|---|---|
-| FR-28 | Chưa làm | Ước tính nhu cầu nguyên vật liệu | Chờ Hai hướng dẫn logic dự báo; dữ liệu đầu vào đã sẵn (mục 7) |
-| FR-29 | Chưa làm | Cảnh báo Cần đặt hàng | Phụ thuộc FR-28 |
-| FR-51 | Một phần | Loại cảnh báo Cần đặt hàng | Phụ thuộc FR-29; mọi loại khác đã có |
-| FR-54 | Một phần | Cột nhu cầu ước tính | Phụ thuộc FR-28 |
+| FR-28 | Đúng, chờ dữ liệu thật | Ước tính nhu cầu theo giai đoạn dữ liệu: ước tính ban đầu từ nhận định Chủ quán, mô hình Bayes động khi Chủ quán xác nhận, đối chiếu hằng tuần với tiêu hao thực tế (docs/DU_BAO.md) | Chất lượng tại quán chưa đánh giá được: chờ bộ dữ liệu đơn hàng mẫu của Hai |
+| FR-29 | Đúng | Cảnh báo Cần đặt hàng có ngày đặt muộn nhất, chỉ tính lô về kịp, tự đóng khi đặt đủ (AC-66, AC-67; `forecast/tests`) | |
+| FR-51 | Đúng | Đủ các loại ở Bảng 5.4, gồm Cần đặt hàng | |
+| FR-54 | Đúng | Cột nhu cầu 7 ngày tới kèm kỳ dự báo và khoảng 10%–90% | |
 
 **Phi chức năng Must:**
 
@@ -219,4 +219,4 @@ Phạm vi làm: mọi yêu cầu mức Must của BRD. Các mục Should, Could 
 | NFR-22 Quyết định thuộc con người | Đúng | Không có thao tác quản trị tự động; mọi kết luận cần người xác nhận |
 | NFR-23 Tải xử lý của Chủ quán | Đúng | Mọi loại cảnh báo có người xử lý chính, thời hạn, cấp chuyển; mức Thông tin không đẩy; thống kê tuần |
 
-**Kết luận:** toàn bộ phạm vi Must làm được mà không cần logic dự báo đã có trong mã nguồn. Phần còn lại chia ba nhóm: chờ logic dự báo (FR-28, FR-29, loại cảnh báo Cần đặt hàng, cột nhu cầu ước tính), chờ Hai nghiệm thu hoặc thử trên thiết bị thật (NFR-11, NFR-13, NFR-17, in phiếu), và đo khi chạy thử hoặc triển khai (NFR-02, NFR-05, lên lịch NFR-09, NFR-10).
+**Kết luận (cập nhật cuối 12/10/2026):** đã làm cả phần dự báo theo khung lý thuyết của Hai (FR-28, FR-29, FR-31 mức Should cũng đã làm vì cùng khung), và bỏ vai trò Quản lý ca theo GD-27. Toàn bộ phạm vi Must đã có trong mã nguồn. Phần còn lại: đánh giá dự báo trên dữ liệu đơn hàng thật hoặc mẫu của Hai; chờ Hai nghiệm thu hoặc thử trên thiết bị thật (NFR-11, NFR-13, NFR-17, in phiếu), và đo khi chạy thử hoặc triển khai (NFR-02, NFR-05, lên lịch NFR-09, NFR-10).

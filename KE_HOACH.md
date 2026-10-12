@@ -10,7 +10,7 @@ Mỗi phần là một lát cắt chạy được từ đầu đến cuối, là
 
 ## Trạng thái nghiệm thu (cập nhật 12/10/2026, cuối ngày)
 
-Ba trạng thái: **đã nghiệm thu nội bộ** (đã thao tác qua giao diện hoặc đối chiếu trên bộ dữ liệu nghiệm thu, không chỉ dựa vào kiểm thử tự động), **đã làm, chờ Hai nghiệm thu** (cần thiết bị, quyết định hoặc rà soát của Hai), **chưa làm** (kèm lý do). Kiểm thử tự động: 188 bài, đạt trên SQLite và PostgreSQL 16 (một bài chỉ chạy trên SQLite). Số bài kiểm thử không phải bằng chứng hoàn thành. Bảng đối chiếu cuối cùng theo từng yêu cầu ở `docs/DOI_CHIEU_YEU_CAU.md` mục 9.
+Ba trạng thái: **đã nghiệm thu nội bộ** (đã thao tác qua giao diện hoặc đối chiếu trên bộ dữ liệu nghiệm thu, không chỉ dựa vào kiểm thử tự động), **đã làm, chờ Hai nghiệm thu** (cần thiết bị, quyết định hoặc rà soát của Hai), **chưa làm** (kèm lý do). Kiểm thử tự động: 205 bài, đạt trên SQLite và PostgreSQL 16 (một bài chỉ chạy trên SQLite). Số bài kiểm thử không phải bằng chứng hoàn thành. Bảng đối chiếu cuối cùng theo từng yêu cầu ở `docs/DOI_CHIEU_YEU_CAU.md` mục 9.
 
 ### Đã nghiệm thu nội bộ
 
@@ -39,7 +39,7 @@ Ba trạng thái: **đã nghiệm thu nội bộ** (đã thao tác qua giao di�
 
 ### Chưa làm
 
-- Dự báo nhu cầu (FR-28), cảnh báo Cần đặt hàng (FR-29), đề xuất số lượng đặt (FR-31), cột nhu cầu ước tính trong báo cáo nguyên vật liệu (FR-54): **chờ Hai hướng dẫn logic dự báo**
+- Đánh giá chất lượng dự báo trên dữ liệu đơn hàng của quán: **chờ Hai gửi bộ dữ liệu mẫu** (phần mã dự báo, cảnh báo Cần đặt hàng, đề xuất số lượng, đánh giá đã làm 12/10/2026 theo khung lý thuyết, xem docs/DU_BAO.md)
 - Đo NFR-02, NFR-05, NFR-10 và diễn tập mất mạng thật: cần mạng, thiết bị, máy chủ thật ở tuần chạy thử
 - Các chức năng mức Should, Could của Giai đoạn 2, 3 (in hóa đơn FR-05, lịch ca, lương, BO-03...): ngoài phạm vi đợt này
 - Nhập dữ liệu thật của quán (nhân viên, thực đơn, giá, tồn đầu kỳ): chờ Hai
