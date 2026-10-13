@@ -1,6 +1,6 @@
 ---
 name: LAM Coffee
-description: Giao diện quản trị vuông vức, chắc chắn. Nền sáng, chữ đậm, một màu nhấn, góc vuông, phân tách bằng đường kẻ.
+description: Giao diện quản trị kiểu ServiceDesk Plus Cloud (từ 12/10/2026). Thanh trên xám than có thẻ phân hệ, thanh phụ gạch chân xanh, thẻ trắng viền mảnh, nút bo tròn.
 source: UI UX Pro Max 2.13.0, kiểu "Minimalism & Swiss Style", bảng màu "B2B Service" (chế độ sáng), mật độ 8/10, chuyển động 2/10
 colors:
   bg: "#f8fafc"
@@ -38,6 +38,8 @@ spacing:
   nav: "232px"
   bottom-nav: "64px"
 ---
+
+> **Cập nhật 12/10/2026 (bản hiện hành):** theo yêu cầu của Hai, giao diện chuyển sang kiểu **ManageEngine ServiceDesk Plus Cloud**. Màu, cỡ chữ đo trực tiếp trên bản demo công khai: thanh trên `#252e35` có thẻ phân hệ (thẻ đang mở nền tối hơn, gạch dưới xanh), thanh phụ trắng liệt kê các trang của phân hệ với gạch chân `#2c66dd`, nền trang `#f2f2f2`, thẻ trắng viền `#e7e7e7` bo 4px, tiêu đề bảng chữ hoa 12px `#515562` trên nền `#f8f8f8`, dòng bảng 40px viền `#f0f0f0`, nút bo tròn (25px) xanh `#2c66dd` hoặc xám `#f8f8f8`, chữ Roboto (dự phòng Segoe UI) 13px trên máy tính. Điện thoại giữ chữ 15px, vùng chạm 44px, thanh dưới 4 mục và mục "Tất cả" mở toàn bộ menu. Token nằm ở đầu `static/css/app.css`; phần dưới của tài liệu này là định hướng cũ, chỉ để tham khảo.
 
 # Design System: LAM Coffee
 

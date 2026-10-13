@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Thông báo xử lý dữ liệu cá nhân · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<h1>Thông báo xử lý dữ liệu cá nhân</h1>
+<header class="page-head"><h1>Thông báo xử lý dữ liệu cá nhân</h1></header>
 <p class="muted">Phiên bản {{ version }}. Bản dự thảo do nhóm dự án soạn theo NFR-13; Chủ quán cần rà soát với Luật Bảo vệ dữ liệu cá nhân số 91/2025/QH15 trước khi áp dụng chính thức.</p>
 <section class="panel" aria-labelledby="dn-1">
   <h2 id="dn-1">Dữ liệu được thu thập</h2>
@@ -23,7 +23,7 @@
 <section class="panel" aria-labelledby="dn-3">
   <h2 id="dn-3">Ai được xem và lưu bao lâu</h2>
   <ul>
-    <li>Chỉ Chủ quán xem được đơn giá lương, chi phí và nhật ký thao tác đầy đủ; Quản lý ca chỉ xem dữ liệu cần cho ca mình phụ trách.</li>
+    <li>Chỉ Chủ quán xem được đơn giá lương, chi phí và nhật ký thao tác đầy đủ; nhân viên chỉ xem dữ liệu cần cho ca mình phụ trách.</li>
     <li>Dữ liệu và nhật ký được lưu tối thiểu 24 tháng (NFR-08), không chia sẻ cho bên thứ ba.</li>
     <li>Nhân viên có quyền yêu cầu xem, đính chính thông tin hồ sơ của mình bằng cách báo Chủ quán.</li>
   </ul>

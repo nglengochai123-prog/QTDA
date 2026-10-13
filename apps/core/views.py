@@ -9,41 +9,75 @@ from django.views.decorators.http import require_GET, require_POST
 
 @login_required
 def home(request):
-    """Trang đầu sau khi đăng nhập. Mỗi vai trò sẽ có màn hình riêng ở các phần sau."""
+    """Tóm tắt của tôi: việc đang chờ mình xử lý (có số và lối vào) và lối tắt theo quyền."""
+    from django.urls import reverse
+
     from apps.accounts.permissions import Cap, user_can
 
-    context = {}
-    if user_can(request.user, Cap.MASTER_DATA):
-        from django.urls import reverse
+    user = request.user
+    can = lambda cap: user_can(user, cap)  # noqa: E731
+    tasks = []
 
+    def task(label, count, url, urgent=False):
+        tasks.append({"label": label, "count": count, "url": url, "urgent": urgent and count > 0})
+
+    if can(Cap.ORDER_ADJUST_APPROVE):
+        from apps.orders.adjustments import pending_for
+
+        task("Yêu cầu điều chỉnh chờ tôi duyệt", len(pending_for(user)), reverse("orders:approvals"), urgent=True)
+    if can(Cap.HANDLE_ALERTS):
+        from apps.control.alerts import visible_to
+        from apps.control.models import Alert
+
+        task("Cảnh báo của tôi", visible_to(user).filter(status__in=Alert.OPEN).count(), reverse("control:alerts"),
+             urgent=True)
+    if can(Cap.EXCEPTION_REVIEW):
+        from apps.control.models import ExceptionCase
+
+        task("Ngoại lệ chờ xem xét", ExceptionCase.objects.filter(status=ExceptionCase.Status.OPEN).count(),
+             reverse("control:exceptions"))
+    if can(Cap.STOCK_CONFIRM_ORDERING):
+        from apps.inventory.models import StockCount
+
+        task("Kiểm kê chờ xác nhận", StockCount.objects.filter(status=StockCount.Status.PENDING).count(),
+             reverse("inventory:count"))
+    if can(Cap.BACKUP_TICKETS) and user.is_owner:
+        from apps.orders.models import BackupSlip
+
+        task("Phiếu dự phòng chờ xác nhận giá", BackupSlip.objects.filter(status=BackupSlip.Status.PENDING).count(),
+             reverse("orders:backup_slips"))
+    if can(Cap.VIEW_WORKLOAD):
+        from apps.inventory.models import QuickReport
+
+        task("Báo nhanh nguyên liệu chưa xử lý", QuickReport.objects.filter(acknowledged_at__isnull=True).count(),
+             reverse("inventory:stock"))
+    if can(Cap.ORDER_CREATE):
+        from apps.orders.models import Order
+
+        task("Đơn đang mở", Order.objects.exclude(status__in=["da_thanh_toan", "da_huy"]).count(),
+             reverse("orders:open_orders"))
+
+    context = {"tasks": tasks}
+    if can(Cap.MASTER_DATA):
         from apps.catalog.models import MenuItem, Table
         from apps.inventory.models import Ingredient, RecipeVersion
+        from apps.shifts.models import Shift
         from apps.staff.models import Employee
 
+        md = lambda key: reverse("masterdata:list", args=[key])  # noqa: E731
         drafts = MenuItem.objects.filter(status=MenuItem.Status.DRAFT).count()
         context["master_data"] = [
-            ("Hồ sơ nhân viên", reverse("admin:staff_employee_changelist"),
-             f"{Employee.objects.filter(status='dang_lam').count()} đang làm", False),
-            ("Bàn", reverse("admin:catalog_table_changelist"),
-             f"{Table.objects.filter(is_active=True).count()} bàn", False),
-            ("Món, kích cỡ và giá", reverse("admin:catalog_menuitem_changelist"),
-             f"{MenuItem.objects.sellable().count()} đang bán"
+            ("Ca làm việc", md("ca"), f"{Shift.objects.filter(status=Shift.Status.OPEN).count()} ca đang mở", False),
+            ("Nhân viên", md("nhan-vien"), f"{Employee.objects.filter(status='dang_lam').count()} đang làm", False),
+            ("Món và giá", md("mon"), f"{MenuItem.objects.sellable().count()} đang bán"
              + (f", {drafts} đang soạn" if drafts else ""), bool(drafts)),
-            ("Nhóm tùy chọn", reverse("admin:catalog_optiongroup_changelist"), "", False),
-            ("Nguyên vật liệu", reverse("admin:inventory_ingredient_changelist"),
-             f"{Ingredient.objects.filter(is_active=True).count()} loại", False),
-            ("Định mức món", reverse("admin:inventory_recipeversion_changelist"),
-             f"{RecipeVersion.objects.filter(status='nhap').count()} bản nháp", False),
-            ("Nhật ký thao tác", reverse("admin:audit_auditlog_changelist"), "", False),
+            ("Bàn", md("ban"), f"{Table.objects.filter(is_active=True).count()} bàn", False),
+            ("Nguyên vật liệu", md("nguyen-lieu"), f"{Ingredient.objects.filter(is_active=True).count()} loại", False),
+            ("Định mức", md("dinh-muc"), f"{RecipeVersion.objects.filter(status='nhap').count()} bản nháp", False),
         ]
-    context["can_dashboard"] = user_can(request.user, Cap.VIEW_DASHBOARD)
     from .models import DATA_NOTICE_VERSION, DataNoticeAck
 
-    context["notice_pending"] = not DataNoticeAck.objects.filter(user=request.user, version=DATA_NOTICE_VERSION).exists()
-    if request.user.is_owner:
-        from apps.shifts.services import shifts_missing_backup
-
-        context["missing_backup"] = shifts_missing_backup()
+    context["notice_pending"] = not DataNoticeAck.objects.filter(user=user, version=DATA_NOTICE_VERSION).exists()
     return render(request, "core/home.html", context)
 
 

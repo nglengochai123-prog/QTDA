@@ -55,7 +55,7 @@ def quick_report(request):
                                                         p.get("level"), p.get("left") or None), "")
         if result:
             data, _ = result
-            messages.success(request, "Đã báo. Quản lý ca nhận được ngay." +
+            messages.success(request, "Đã báo. Chủ quán nhận được ngay." +
                              (" Đã ghi một trường hợp thiếu nguyên liệu hôm nay." if data["shortage_recorded"] else ""))
         return redirect("inventory:quick_report")
     items = list(_ingredients())
@@ -112,10 +112,11 @@ def waste(request):
     if request.method == "POST":
         p = request.POST
         _run(request, lambda: ops.record_waste(request.user, p.get("operation_key", ""), p.get("ingredient"),
-                                               p.get("quantity", ""), p.get("reason", ""), p.get("note", "")),
+                                               p.get("quantity", ""), p.get("reason", ""), p.get("note", ""),
+                                               is_one_off=bool(p.get("one_off"))),
              "Đã ghi hao hụt; tồn vật lý đã giảm.")
         return redirect("inventory:waste")
-    return render(request, "inventory/waste.html", {
+    return render(request, "inventory/waste.html", {"is_owner": request.user.is_owner,
         "ingredients": _ingredients(), "reasons": Waste.Reason.choices, "operation_key": uuid.uuid4().hex,
         "recent": Waste.objects.select_related("ingredient", "actor")[:10],
     })
@@ -129,8 +130,11 @@ def receipt(request):
         lines = []
         for i in range(int(p.get("rows", 0) or 0)):
             if p.get(f"ingredient_{i}") and p.get(f"quantity_{i}"):
-                lines.append({"ingredient": int(p.get(f"ingredient_{i}")), "quantity": p.get(f"quantity_{i}"),
-                              "unit_price": p.get(f"price_{i}") or 0, "purchase_order": p.get(f"po_{i}") or None})
+                line = {"ingredient": int(p.get(f"ingredient_{i}")), "quantity": p.get(f"quantity_{i}"),
+                        "unit_price": p.get(f"price_{i}") or 0, "purchase_order": p.get(f"po_{i}") or None}
+                if p.get(f"expiry_{i}"):
+                    line["expiry_date"] = p.get(f"expiry_{i}")
+                lines.append(line)
         result = _run(request, lambda: ops.create_receipt(
             request.user, p.get("operation_key", ""), p.get("supplier"), lines, p.get("payment_type", ""),
             invoice_photo=request.FILES.get("invoice_photo"), due_days=p.get("due_days") or 7,
@@ -139,10 +143,13 @@ def receipt(request):
             data, _ = result
             messages.success(request, f"Đã lưu phiếu nhập {data['code']}, giá trị {data['total']:,} đ; tồn vật lý đã tăng."
                              .replace(",", "."))
+            for warning in data.get("warnings") or []:
+                messages.warning(request, warning)
         return redirect("inventory:receipt")
     return render(request, "inventory/receipt.html", {
         "suppliers": Supplier.objects.filter(is_active=True), "ingredients": _ingredients(), "rows": range(4),
-        "open_pos": PurchaseOrder.objects.exclude(status=PurchaseOrder.Status.DELIVERED).select_related("ingredient", "supplier"),
+        "open_pos": PurchaseOrder.objects.exclude(status__in=[PurchaseOrder.Status.DELIVERED,
+                                                              PurchaseOrder.Status.CANCELLED]).select_related("ingredient", "supplier"),
         "sources": SupplierPayment.Source.choices, "operation_key": uuid.uuid4().hex,
     })
 

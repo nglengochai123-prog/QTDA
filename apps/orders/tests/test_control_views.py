@@ -32,11 +32,14 @@ class ControlViewTests(Base):
         req.refresh_from_db()
         self.assertEqual(req.status, AdjustmentRequest.Status.APPROVED)
 
-    def test_backup_approver_of_any_role_sees_escalated_request(self):
+    def test_only_owner_sees_pending_requests(self):
+        # Bỏ Quản lý ca (12/10/2026): người duyệt dự phòng cũ không còn thấy yêu cầu; Chủ quán thấy ngay.
         order, line = self.order()
         req = self.request(self.d["waiter"], order, "chuyen_ban", target_table=self.other_table.pk)
         AdjustmentRequest.objects.filter(pk=req.pk).update(level_since=req.level_since - timedelta(minutes=4))
-        self.client.force_login(self.backup)  # vai trò Phục vụ, là người duyệt dự phòng của ca
+        self.client.force_login(self.backup)
+        self.assertEqual(self.client.get(reverse("orders:approvals_count")).json()["count"], 0)
+        self.client.force_login(self.d["owner"])
         self.assertEqual(self.client.get(reverse("orders:approvals_count")).json()["count"], 1)
         self.assertEqual(self.client.get(reverse("orders:approvals")).status_code, 200)
 

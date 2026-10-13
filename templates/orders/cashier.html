@@ -2,8 +2,8 @@
 {% load humanize %}
 {% block title %}Thu ngân · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<h1>Thu ngân</h1>
-<p class="lead-muted">Thu tiền theo bàn khi mọi đơn của bàn đã phục vụ và không còn yêu cầu chờ duyệt. Số tiền tính tự động, không nhập tay.</p>
+<header class="page-head"><h1>Thu ngân</h1></header>
+<details class="help-tip"><summary>Giải thích</summary><p>Thu tiền theo bàn khi mọi đơn của bàn đã phục vụ và không còn yêu cầu chờ duyệt. Số tiền tính tự động, không nhập tay.</p></details>
 {% if bills %}
 <div class="bill-grid">
   {% for bill in bills %}

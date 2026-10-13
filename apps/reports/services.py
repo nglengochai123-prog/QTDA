@@ -193,7 +193,24 @@ def materials(start_day, end_day):
             "closing": closing, "shortages": shortages.get(ing.pk, 0),
         })
     total_shortages = sum(shortages.values())
-    return {"rows": rows, "shortages": total_shortages, "bo02_target": BO02_MONTHLY_TARGET}
+    # Nhu cầu ước tính 7 ngày tới theo lần phát hành dự báo gần nhất (kỳ dự báo, lượng dự kiến và căn cứ)
+    from apps.forecast.models import IngredientForecast
+    from apps.forecast.services import latest_release
+
+    rel = latest_release()
+    estimates = {}
+    if rel:
+        for fc in IngredientForecast.objects.filter(release=rel):
+            days = fc.daily[:7]
+            totals = sorted(p[min(6, len(p) - 1)] for p in fc.paths_sample) if fc.paths_sample else []
+            from apps.forecast import dglm
+
+            estimates[fc.ingredient_id] = {
+                "mean": round(sum(d["mean"] for d in days), 1), "q10": dglm.quantile(totals, 0.1),
+                "q90": dglm.quantile(totals, 0.9), "from": days[0]["date"] if days else "", "to": days[-1]["date"] if days else ""}
+    for row in rows:
+        row["estimate"] = estimates.get(row["ingredient"].pk)
+    return {"rows": rows, "shortages": total_shortages, "bo02_target": BO02_MONTHLY_TARGET, "forecast_release": rel}
 
 
 # ---------------- FR-50: bảng điều khiển ----------------

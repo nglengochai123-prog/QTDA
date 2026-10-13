@@ -10,7 +10,7 @@ Mỗi phần là một lát cắt chạy được từ đầu đến cuối, là
 
 ## Trạng thái nghiệm thu (cập nhật 12/10/2026, cuối ngày)
 
-Ba trạng thái: **đã nghiệm thu nội bộ** (đã thao tác qua giao diện hoặc đối chiếu trên bộ dữ liệu nghiệm thu, không chỉ dựa vào kiểm thử tự động), **đã làm, chờ Hai nghiệm thu** (cần thiết bị, quyết định hoặc rà soát của Hai), **chưa làm** (kèm lý do). Kiểm thử tự động: 188 bài, đạt trên SQLite và PostgreSQL 16 (một bài chỉ chạy trên SQLite). Số bài kiểm thử không phải bằng chứng hoàn thành. Bảng đối chiếu cuối cùng theo từng yêu cầu ở `docs/DOI_CHIEU_YEU_CAU.md` mục 9.
+Ba trạng thái: **đã nghiệm thu nội bộ** (đã thao tác qua giao diện hoặc đối chiếu trên bộ dữ liệu nghiệm thu, không chỉ dựa vào kiểm thử tự động), **đã làm, chờ Hai nghiệm thu** (cần thiết bị, quyết định hoặc rà soát của Hai), **chưa làm** (kèm lý do). Kiểm thử tự động: 205 bài, đạt trên SQLite và PostgreSQL 16 (một bài chỉ chạy trên SQLite). Số bài kiểm thử không phải bằng chứng hoàn thành. Bảng đối chiếu cuối cùng theo từng yêu cầu ở `docs/DOI_CHIEU_YEU_CAU.md` mục 9.
 
 ### Đã nghiệm thu nội bộ
 
@@ -39,7 +39,7 @@ Ba trạng thái: **đã nghiệm thu nội bộ** (đã thao tác qua giao di�
 
 ### Chưa làm
 
-- Dự báo nhu cầu (FR-28), cảnh báo Cần đặt hàng (FR-29), đề xuất số lượng đặt (FR-31), cột nhu cầu ước tính trong báo cáo nguyên vật liệu (FR-54): **chờ Hai hướng dẫn logic dự báo**
+- Đánh giá chất lượng dự báo trên dữ liệu đơn hàng của quán: **chờ Hai gửi bộ dữ liệu mẫu** (phần mã dự báo, cảnh báo Cần đặt hàng, đề xuất số lượng, đánh giá đã làm 12/10/2026 theo khung lý thuyết, xem docs/DU_BAO.md)
 - Đo NFR-02, NFR-05, NFR-10 và diễn tập mất mạng thật: cần mạng, thiết bị, máy chủ thật ở tuần chạy thử
 - Các chức năng mức Should, Could của Giai đoạn 2, 3 (in hóa đơn FR-05, lịch ca, lương, BO-03...): ngoài phạm vi đợt này
 - Nhập dữ liệu thật của quán (nhân viên, thực đơn, giá, tồn đầu kỳ): chờ Hai
@@ -136,7 +136,7 @@ Mã nguồn được quản lý bằng Git trong `D:\QTDA` (nhánh main, chưa c
 - [x] Trường hợp thiếu nguyên liệu: báo Đã hết trong giờ mở cửa, đổi hoặc hủy món vì Hết nguyên liệu được duyệt, khách đổi món sau cảnh báo khi tạo đơn; mỗi nguyên liệu tối đa một trường hợp mỗi ngày (FR-27, BRU-26, AC-61, AC-62, AC-63)
 - [x] Ghi nhận đặt hàng, theo dõi Đã đặt, Giao một phần, Đã giao đủ, Giao chậm; lô giao chậm không tính là hàng đang về đến khi có ngày giao mới (FR-30, BRU-23, AC-68, AC-69)
 - [x] Báo cáo nguyên vật liệu tháng: hao hụt theo lý do, hủy sau pha chế, kiểm kê, trường hợp thiếu theo ngày và nguyên liệu
-- [ ] Đề xuất số lượng đặt hàng (FR-31, BRU-24) và cảnh báo cần đặt hàng (FR-29, BRU-22): chờ Hai giải thích logic dự báo
+- [x] Đề xuất số lượng đặt hàng (FR-31, BRU-24) và cảnh báo cần đặt hàng (FR-29, BRU-22): làm 13/10/2026 theo `docs/THIET_KE_MUA_NGUYEN_LIEU.md` (nhánh du-bao-nguyen-lieu), màn hình Dự báo › Kế hoạch mua; tham số mặc định là giả định, cần Hai khai quy cách, hạn dùng, ước tính tuần cho 58 nguyên liệu thật
 - [x] Cảnh báo khoản phải trả đến hạn và giao chậm có thời hạn, nhắc lại hằng ngày theo Bảng 5.4: trong trung tâm cảnh báo (FR-51)
 
 ## Phần 4: Dự phòng, ước tính, nhân sự, báo cáo (Sprint 3, đã xong phần không cần dự báo)

@@ -29,7 +29,7 @@ class RecountTests(Base):
         self.assertNotIn(alert, alerts.visible_to(self.d["owner"]))
         alerts.sync(self.shift.ends_at + timedelta(minutes=1))  # quá hạn trước khi kết ca: chuyển Quản lý ca
         alert.refresh_from_db()
-        self.assertEqual((alert.assignee_role, alert.assignee), ("quan_ly_ca", self.manager))
+        self.assertEqual((alert.assignee_role, alert.assignee), ("chu_quan", None))  # quá hạn chuyển Chủ quán
         ops.submit_count(self.d["barista"], key(), self.d["milk"].pk, "1000")
         self.assertIsNotNone(RecountRequest.objects.get().done_at)
         alerts.sync()

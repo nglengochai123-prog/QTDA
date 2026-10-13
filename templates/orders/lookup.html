@@ -2,7 +2,7 @@
 {% load humanize %}
 {% block title %}Tra cứu đơn · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<h1>Tra cứu đơn</h1>
+<header class="page-head"><h1>Tra cứu đơn</h1></header>
 <form method="get" class="filter-bar" aria-label="Bộ lọc đơn">
   <div class="field"><label for="f-q">Mã đơn, bàn, ghi chú</label><input class="input" id="f-q" name="q" value="{{ f.q }}" placeholder="Ví dụ 1210-001"></div>
   <div class="field"><label for="f-theo">Lọc ngày theo</label><select class="input" id="f-theo" name="theo"><option value="">Giờ tạo đơn</option><option value="thanh_toan"{% if f.theo == "thanh_toan" %} selected{% endif %}>Giờ thanh toán</option></select></div>

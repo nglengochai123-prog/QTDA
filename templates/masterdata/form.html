@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{% if obj %}{{ obj }}{% else %}Thêm {{ r.singular|lower }}{% endif %} · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <h1><a class="back" href="{% url 'masterdata:list' r.key %}" aria-label="Quay lại {{ r.title|lower }}"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg></a>{% if obj %}{{ obj }}{% else %}Thêm {{ r.singular|lower }}{% endif %}</h1>
+  {% if obj and not editable %}<span class="chip">Chỉ xem</span>{% endif %}
+</header>
+{% if r.note %}<p class="page-note">{{ r.note }}</p>{% endif %}
+
+<form method="post" class="record-form" data-once>{% csrf_token %}
+  {% if form.non_field_errors %}<div class="notice notice-error" role="alert">{% for e in form.non_field_errors %}{{ e }} {% endfor %}</div>{% endif %}
+  <section class="panel">
+    <div class="field-grid">
+      {% for field in form %}
+      <div class="field-row{% if field.errors %} has-error{% endif %}{% if field.field.widget.input_type == 'checkbox' and not field.field.widget.allow_multiple_selected %} is-check{% endif %}">
+        <label for="{{ field.id_for_label }}">{% if field.field.required %}<span class="req" aria-hidden="true">*</span>{% endif %}{{ field.label }}</label>
+        <div class="field-control">
+          {{ field }}
+          {% if field.help_text %}<p class="hint">{{ field.help_text }}</p>{% endif %}
+          {% for e in field.errors %}<p class="error">{{ e }}</p>{% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% for item in formsets %}{% with fs=item.fs %}
+  <section class="panel">
+    <h2>{{ item.inline.label }}</h2>
+    {{ fs.management_form }}
+    {% if fs.non_form_errors %}<div class="notice notice-error">{{ fs.non_form_errors|join:" " }}</div>{% endif %}
+    <div class="table-wrap"><table class="data-table inline-table">
+      <thead><tr>{% for f in fs.empty_form.visible_fields %}{% if f.name != "DELETE" %}<th scope="col">{{ f.label }}</th>{% endif %}{% endfor %}{% if item.inline.can_delete and item.editable %}<th scope="col">Xóa</th>{% endif %}</tr></thead>
+      <tbody>{% for sub in fs.forms %}{% if item.editable or sub.instance.pk %}
+        <tr>{% for hidden in sub.hidden_fields %}{{ hidden }}{% endfor %}
+          {% for f in sub.visible_fields %}{% if f.name != "DELETE" %}<td>{{ f }}{% for e in f.errors %}<p class="error">{{ e }}</p>{% endfor %}</td>{% endif %}{% endfor %}
+          {% if item.inline.can_delete and item.editable %}<td>{% if sub.instance.pk %}{{ sub.DELETE }}{% endif %}</td>{% endif %}
+        </tr>
+        {% if sub.non_field_errors %}<tr><td colspan="9"><p class="error">{{ sub.non_field_errors|join:" " }}</p></td></tr>{% endif %}
+      {% endif %}{% empty %}<tr><td colspan="9" class="muted">Chưa có dòng nào.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+  {% endwith %}{% endfor %}
+  {% if not obj and r.inlines %}<p class="page-note">Lưu trước, sau đó thêm {{ r.inlines.0.label|lower }} ở trang tiếp theo.</p>{% endif %}
+
+  {% if editable or formsets %}
+  <div class="form-actions">
+    {% if editable %}<button class="btn btn-primary" type="submit">{% if obj %}Lưu{% else %}Thêm {{ r.singular|lower }}{% endif %}</button>{% endif %}
+    <a class="btn btn-quiet" href="{% url 'masterdata:list' r.key %}">{% if editable %}Hủy{% else %}Quay lại{% endif %}</a>
+  </div>
+  {% endif %}
+</form>
+
+{% for item in actions %}
+<section class="panel">
+  <h2>{{ item.a.label }}</h2>
+  {% if item.a.help %}<p class="page-note">{{ item.a.help }}</p>{% endif %}
+  <form method="post" action="{% url 'masterdata:action' r.key obj.pk item.a.key %}" class="inline-action" data-once data-online-only>{% csrf_token %}
+    {% for field in item.form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>{% endfor %}
+    <button class="btn {% if item.a.primary %}btn-primary{% else %}btn-quiet{% endif %}" type="submit">{{ item.a.label }}</button>
+  </form>
+</section>
+{% endfor %}
+{% endblock %}

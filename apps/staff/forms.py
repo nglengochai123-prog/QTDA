@@ -1,12 +1,12 @@
 from django import forms
 
-from apps.accounts.models import Role, User
+from apps.accounts.models import ACTIVE_ROLES, Role, User
 
 from .models import Employee
 
 
 class EmployeeForm(forms.ModelForm):
-    roles = forms.MultipleChoiceField(label="Vai trò đảm nhận được", choices=Role.choices,
+    roles = forms.MultipleChoiceField(label="Vai trò đảm nhận được", choices=ACTIVE_ROLES,
                                       widget=forms.CheckboxSelectMultiple)
     username = forms.CharField(label="Tên đăng nhập", required=False,
                                help_text="Để trống thì dùng số điện thoại. Chỉ dùng khi tạo mới.")

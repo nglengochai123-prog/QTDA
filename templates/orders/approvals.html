@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Duyệt điều chỉnh · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<h1>Yêu cầu chờ bạn duyệt</h1>
-<p class="lead-muted">Mỗi cấp có {{ deadline }} phút; quá hạn yêu cầu tự chuyển lên người duyệt dự phòng rồi Chủ quán.</p>
+<header class="page-head"><h1>Yêu cầu chờ bạn duyệt</h1></header>
+<details class="help-tip"><summary>Giải thích</summary><p>Chủ quán duyệt mọi yêu cầu. Quá {{ deadline }} phút chưa duyệt thì yêu cầu được đánh dấu quá hạn; thu ngân thu tiền theo món khách thực nhận và yêu cầu chuyển sang chờ hậu kiểm.</p></details>
 {% if pending %}
 <ul class="approval-list">
   {% for req in pending %}

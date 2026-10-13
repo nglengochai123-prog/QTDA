@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
 from django.db.models import Max, Q
 from django.utils import timezone
@@ -40,6 +40,21 @@ class Unit(models.TextChoices):
     PACK = "goi", "gói"
 
 
+class PolicyGroup(models.TextChoices):
+    PERISHABLE = "A", "Nhóm A, dễ hỏng: kiểm tra mỗi tối"
+    STABLE = "B", "Nhóm B, ổn định: kiểm tra mỗi tuần"
+
+
+class Weekday(models.IntegerChoices):
+    MON = 0, "Thứ Hai"
+    TUE = 1, "Thứ Ba"
+    WED = 2, "Thứ Tư"
+    THU = 3, "Thứ Năm"
+    FRI = 4, "Thứ Sáu"
+    SAT = 5, "Thứ Bảy"
+    SUN = 6, "Chủ nhật"
+
+
 class Ingredient(StoreScopedModel):
     name = models.CharField("Tên nguyên vật liệu", max_length=120)
     unit = models.CharField("Đơn vị tính", max_length=10, choices=Unit.choices)
@@ -64,6 +79,35 @@ class Ingredient(StoreScopedModel):
         "Ngưỡng thiếu kiểm kê tích lũy tháng", max_digits=12, decimal_places=2, null=True, blank=True,
         help_text="Theo đơn vị tính. Để trống thì dùng 1 quy cách đóng gói (BRU-25).")
     is_active = models.BooleanField("Đang sử dụng", default=True)
+    # Chính sách mua (thiết kế mua nguyên liệu mục 7.4). Để trống thì dùng mặc định theo nhóm và tham số chung.
+    policy_group = models.CharField(
+        "Nhóm chính sách", max_length=1, choices=PolicyGroup.choices, blank=True,
+        help_text="Để trống: hạn dùng từ 14 ngày trở xuống là nhóm A, còn lại nhóm B.")
+    service_level = models.PositiveSmallIntegerField(
+        "Mức phục vụ chu kỳ (%)", null=True, blank=True,
+        validators=[MinValueValidator(50), MaxValueValidator(99)],
+        help_text="Để trống: 95% nếu trọng yếu, 90% nếu không.")
+    review_period_days = models.PositiveSmallIntegerField(
+        "Chu kỳ kiểm tra R (ngày)", null=True, blank=True, validators=[MinValueValidator(1)],
+        help_text="Để trống: nhóm A mỗi ngày (1), nhóm B mỗi tuần (7).")
+    target_cycle_days = models.PositiveSmallIntegerField(
+        "Khoảng cách mua mong muốn T (ngày)", null=True, blank=True, validators=[MinValueValidator(1)],
+        help_text="Không nhỏ hơn R. Để trống: nhóm A 2 ngày, nhóm B bằng R.")
+    review_weekday = models.PositiveSmallIntegerField(
+        "Ngày kiểm tra trong tuần", null=True, blank=True, choices=Weekday.choices,
+        help_text="Chỉ dùng cho nhóm B. Để trống: tối Chủ nhật.")
+    moq_packs = models.PositiveSmallIntegerField("Lượng đặt tối thiểu (số gói)", default=1,
+                                                 validators=[MinValueValidator(1)])
+    exposure_days = models.PositiveSmallIntegerField(
+        "Số ngày phơi nhiễm", default=1,
+        help_text="Số ngày bán trọn vẹn có thể trôi qua từ lúc đặt tới lúc hàng dùng được, trường hợp xấu.")
+    weekly_low = models.DecimalField("Tuần dùng ít (theo đơn vị tính)", max_digits=12, decimal_places=2, null=True,
+                                     blank=True, help_text="Khoảng 1 trong 20 tuần thấp hơn.")
+    weekly_typical = models.DecimalField("Tuần thường lệ (theo đơn vị tính)", max_digits=12, decimal_places=2,
+                                         null=True, blank=True,
+                                         help_text="Ước tính của Chủ quán, dùng khi chưa đủ dữ liệu.")
+    weekly_high = models.DecimalField("Tuần dùng nhiều (theo đơn vị tính)", max_digits=12, decimal_places=2, null=True,
+                                      blank=True, help_text="Khoảng 1 trong 20 tuần cao hơn.")
 
     class Meta:
         verbose_name = "Nguyên vật liệu"
@@ -73,6 +117,14 @@ class Ingredient(StoreScopedModel):
 
     def __str__(self):
         return f"{self.name} ({self.get_unit_display()})"
+
+    def clean(self):
+        super().clean()
+        if self.weekly_typical is not None and None not in (self.weekly_low, self.weekly_high):
+            if not (self.weekly_low <= self.weekly_typical <= self.weekly_high):
+                raise ValidationError("Tuần thường lệ phải nằm giữa tuần dùng ít và tuần dùng nhiều.")
+        if self.review_period_days and self.target_cycle_days and self.target_cycle_days < self.review_period_days:
+            raise ValidationError({"target_cycle_days": "T không được nhỏ hơn chu kỳ kiểm tra R."})
 
 
 class RecipeVersionQuerySet(models.QuerySet):
@@ -336,10 +388,12 @@ class PurchaseOrder(StoreScopedModel):
     """Lần đặt hàng (FR-30, BRU-23)."""
 
     class Status(models.TextChoices):
+        DRAFT = "nhap", "Nháp, chưa báo nhà cung cấp"
         ORDERED = "da_dat", "Đã đặt"
         PARTIAL = "giao_mot_phan", "Giao một phần"
         DELIVERED = "da_giao_du", "Đã giao đủ"
         LATE = "giao_cham", "Giao chậm"
+        CANCELLED = "da_huy", "Đã hủy"
 
     supplier = models.ForeignKey(Supplier, verbose_name="Nhà cung cấp", on_delete=models.PROTECT,
                                  related_name="purchase_orders")
@@ -353,6 +407,9 @@ class PurchaseOrder(StoreScopedModel):
     note = models.CharField("Ghi chú", max_length=255, blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người ghi", on_delete=models.PROTECT,
                                    related_name="+")
+    ordered_at = models.DateTimeField("Báo nhà cung cấp lúc", null=True, blank=True)
+    order_by = models.DateField("Phải đặt chậm nhất", null=True, blank=True,
+                                help_text="Đơn nháp quá ngày này không còn được tính là hàng đang về.")
 
     class Meta:
         verbose_name = "Lần đặt hàng"
@@ -366,12 +423,29 @@ class PurchaseOrder(StoreScopedModel):
     def remaining(self):
         return max(self.quantity - self.received_quantity, Decimal(0))
 
+    @property
+    def over_received(self):
+        return max(self.received_quantity - self.quantity, Decimal(0))
+
     def effective_status(self, today=None):
         """Trạng thái tại lúc đọc: quá ngày giao mà chưa đủ là Giao chậm, kể cả khi tác vụ định kỳ chưa ghi."""
         today = today or timezone.localdate()
         if self.status in (self.Status.ORDERED, self.Status.PARTIAL) and self.expected_date < today:
             return self.Status.LATE
         return self.status
+
+    def draft_expired(self, today=None):
+        """Đơn nháp quá ngày phải đặt mà chưa báo nhà cung cấp: không che rủi ro nữa (mục 8.1)."""
+        today = today or timezone.localdate()
+        limit = self.order_by or timezone.localdate(self.created_at)
+        return self.status == self.Status.DRAFT and today > limit
+
+    def is_incoming(self, today=None):
+        """Nháp còn hạn, Đã đặt, Giao một phần chưa quá ngày giao; Giao chậm, Đã giao đủ, Đã hủy không tính."""
+        st = self.effective_status(today)
+        if st == self.Status.DRAFT:
+            return not self.draft_expired(today) and self.remaining > 0
+        return st in (self.Status.ORDERED, self.Status.PARTIAL) and self.remaining > 0
 
     @property
     def current_status(self):
@@ -382,11 +456,15 @@ class PurchaseOrder(StoreScopedModel):
 
     @property
     def counts_as_incoming(self):
-        """Lô giao chậm không tính vào tồn dự kiến cho đến khi có ngày giao mới (AC-68)."""
-        return self.current_status in (self.Status.ORDERED, self.Status.PARTIAL)
+        """Lô giao chậm không tính vào tồn dự kiến cho đến khi có ngày giao mới (AC-68); nháp quá hạn cũng không."""
+        return self.is_incoming()
 
     def settle_status(self, today=None):
         today = today or timezone.localdate()
+        if self.status == self.Status.CANCELLED:
+            return
+        if self.status == self.Status.DRAFT and self.received_quantity == 0:
+            return
         if self.remaining == 0:
             self.status = self.Status.DELIVERED
         elif self.expected_date < today:
@@ -431,6 +509,7 @@ class ReceiptLine(models.Model):
     unit_price = models.PositiveBigIntegerField("Đơn giá (đồng theo đơn vị tính)")
     purchase_order = models.ForeignKey(PurchaseOrder, verbose_name="Lần đặt", on_delete=models.PROTECT, null=True,
                                        blank=True, related_name="receipt_lines")
+    expiry_date = models.DateField("Hạn sử dụng của lô", null=True, blank=True)
 
     class Meta:
         verbose_name = "Dòng phiếu nhập"
@@ -531,6 +610,9 @@ class Waste(StoreScopedModel):
                                    validators=[MinValueValidator(Decimal("0.01"))])
     reason = models.CharField("Lý do", max_length=20, choices=Reason.choices)
     note = models.CharField("Ghi chú", max_length=255, blank=True)
+    is_one_off = models.BooleanField(
+        "Sự cố đơn lẻ", default=False,
+        help_text="Chủ quán đánh dấu: không tính vào tỷ lệ hao hụt thường lệ khi dự báo nhu cầu.")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người ghi", on_delete=models.PROTECT,
                               related_name="+")
     operation_key = models.CharField("Mã nghiệp vụ", max_length=64, unique=True)

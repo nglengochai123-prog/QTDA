@@ -132,6 +132,7 @@ Chủ quán trả lời ngày 11/10/2026. Cột "Đã làm" ghi cách hệ thố
 | GD-10 | Giữ lịch sử tham số, nhưng báo cáo vẫn cập nhật theo giao dịch mới và đính chính hợp lệ | Lịch sử chỉ giữ giá trị ngưỡng, thời hạn đã áp dụng. Số liệu báo cáo (đối soát, tích lũy, giá trị kiểm soát tháng) luôn tính lại từ giao dịch và đính chính đang có hiệu lực, không chụp cứng |
 | GD-11 | Đính chính báo cáo cuối ca có lý do, người duyệt và lịch sử; đối soát lại theo số liệu có hiệu lực, không tính trùng chênh lệch | Bản gốc giữ nguyên; mỗi đính chính là một bản ghi có lý do, người đề nghị, Chủ quán duyệt hoặc từ chối. Duyệt xong hệ thống đối soát lại: khoản không đổi giữ nguyên, khoản đổi thì bản cũ hết hiệu lực (giữ lịch sử, giải trình, quyết định) và bản mới thay thế; tích lũy và giá trị kiểm soát chỉ đếm khoản đang có hiệu lực (`test_corrections.CorrectionTests`) |
 | GD-12 | Theo đề xuất: Chủ quán khai báo ca bằng tay trước khi có lịch ca | Đã có |
+| GD-27 (Hai 12/10/2026) | **Bỏ vai trò Quản lý ca**: Chủ quán trực tiếp quản lý ca. Mọi yêu cầu điều chỉnh do Chủ quán duyệt một cấp (Chủ quán tự gửi thì tự duyệt, có nhật ký; nhân viên vẫn không tự duyệt); quá thời hạn thì đánh dấu quá hạn mọi cấp như trước. Ca không còn người duyệt dự phòng (bỏ GD-08). Cảnh báo trước giao Quản lý ca nay giao Chủ quán. Quỹ ca, kết ca, báo cáo cuối ca do Thu ngân hoặc Chủ quán; khoản chênh lệch thuộc người lập báo cáo cuối ca, người đó hoặc Chủ quán giải trình, Chủ quán quyết định. Tài khoản, hồ sơ mang vai trò Quản lý ca chuyển sang Thu ngân; dữ liệu cũ giữ nguyên | Khác BRD Bảng 5.3, BRU-09 (chuyển cấp ba bậc), AC-22, AC-113 | Giữ theo quyết định của Hai | Không |
 | GD-13 | Giữ trạng thái chờ Chủ quán cho phép cài PostgreSQL | Chưa cài. Kiểm thử đồng thời mới đạt trên SQLite; **chưa kết luận đạt trên PostgreSQL** |
 
 ### Giả định mới phát sinh, chờ Chủ quán xác nhận
@@ -182,16 +183,16 @@ Chủ quán trả lời ngày 11/10/2026. Cột "Đã làm" ghi cách hệ thố
 
 ## 9. Bảng đối chiếu cuối cùng (12/10/2026)
 
-Phạm vi làm: mọi yêu cầu mức Must của BRD. Các mục Should, Could thuộc Giai đoạn 2, 3 theo Bảng 9.1 (FR-05, FR-19, FR-31 đến FR-33, FR-37 đến FR-49, FR-55 đến FR-58, NFR-18, NFR-20, NFR-21) không làm trong đợt này theo chỉ đạo không mở rộng phạm vi.
+Phạm vi làm: mọi yêu cầu mức Must của BRD; thêm theo yêu cầu của Hai (12/10/2026): FR-31 đề xuất số lượng đặt, FR-37 gợi ý số người cần, FR-38 đăng ký ca, FR-39 lập và công bố lịch (AC-84 đến AC-88, `schedule/tests`). Các mục Should, Could thuộc Giai đoạn 2, 3 theo Bảng 9.1 (FR-05, FR-19, FR-31 đến FR-33, FR-37 đến FR-49, FR-55 đến FR-58, NFR-18, NFR-20, NFR-21) không làm trong đợt này theo chỉ đạo không mở rộng phạm vi.
 
 **Chức năng Must:** FR-01 đến FR-04, FR-06 đến FR-18, FR-20 đến FR-27, FR-30, FR-34 đến FR-36, FR-50, FR-52, FR-53, FR-59 đến FR-61 là **Đúng** (chi tiết mục 3). Còn lại:
 
 | Mã | Trạng thái | Phần còn thiếu | Lý do |
 |---|---|---|---|
-| FR-28 | Chưa làm | Ước tính nhu cầu nguyên vật liệu | Chờ Hai hướng dẫn logic dự báo; dữ liệu đầu vào đã sẵn (mục 7) |
-| FR-29 | Chưa làm | Cảnh báo Cần đặt hàng | Phụ thuộc FR-28 |
-| FR-51 | Một phần | Loại cảnh báo Cần đặt hàng | Phụ thuộc FR-29; mọi loại khác đã có |
-| FR-54 | Một phần | Cột nhu cầu ước tính | Phụ thuộc FR-28 |
+| FR-28 | Đúng, chờ dữ liệu thật | Ước tính nhu cầu theo giai đoạn dữ liệu: ước tính ban đầu từ nhận định Chủ quán, mô hình Bayes động khi Chủ quán xác nhận, đối chiếu hằng tuần với tiêu hao thực tế (docs/DU_BAO.md) | Chất lượng tại quán chưa đánh giá được: chờ bộ dữ liệu đơn hàng mẫu của Hai |
+| FR-29 | Đúng | Cảnh báo Cần đặt hàng có ngày đặt muộn nhất, chỉ tính lô về kịp, tự đóng khi đặt đủ (AC-66, AC-67; `forecast/tests`) | |
+| FR-51 | Đúng | Đủ các loại ở Bảng 5.4, gồm Cần đặt hàng | |
+| FR-54 | Đúng | Cột nhu cầu 7 ngày tới kèm kỳ dự báo và khoảng 10%–90% | |
 
 **Phi chức năng Must:**
 
@@ -218,4 +219,4 @@ Phạm vi làm: mọi yêu cầu mức Must của BRD. Các mục Should, Could 
 | NFR-22 Quyết định thuộc con người | Đúng | Không có thao tác quản trị tự động; mọi kết luận cần người xác nhận |
 | NFR-23 Tải xử lý của Chủ quán | Đúng | Mọi loại cảnh báo có người xử lý chính, thời hạn, cấp chuyển; mức Thông tin không đẩy; thống kê tuần |
 
-**Kết luận:** toàn bộ phạm vi Must làm được mà không cần logic dự báo đã có trong mã nguồn. Phần còn lại chia ba nhóm: chờ logic dự báo (FR-28, FR-29, loại cảnh báo Cần đặt hàng, cột nhu cầu ước tính), chờ Hai nghiệm thu hoặc thử trên thiết bị thật (NFR-11, NFR-13, NFR-17, in phiếu), và đo khi chạy thử hoặc triển khai (NFR-02, NFR-05, lên lịch NFR-09, NFR-10).
+**Kết luận (cập nhật cuối 12/10/2026):** đã làm cả phần dự báo theo khung lý thuyết của Hai (FR-28, FR-29, FR-31 mức Should cũng đã làm vì cùng khung), và bỏ vai trò Quản lý ca theo GD-27. Toàn bộ phạm vi Must đã có trong mã nguồn. Phần còn lại: đánh giá dự báo trên dữ liệu đơn hàng thật hoặc mẫu của Hai; chờ Hai nghiệm thu hoặc thử trên thiết bị thật (NFR-11, NFR-13, NFR-17, in phiếu), và đo khi chạy thử hoặc triển khai (NFR-02, NFR-05, lên lịch NFR-09, NFR-10).

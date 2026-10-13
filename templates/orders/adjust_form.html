@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Yêu cầu điều chỉnh · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<h1>Yêu cầu điều chỉnh đơn {{ order.code }}</h1>
+<header class="page-head"><h1>Yêu cầu điều chỉnh đơn {{ order.code }}</h1></header>
 <p class="lead-muted">Bàn {{ order.table.code }} · {{ order.get_status_display }}. Yêu cầu chỉ có hiệu lực khi được duyệt; bạn không tự duyệt được yêu cầu của mình.</p>
 <form data-draft="dieu-chinh" method="post" class="adjust-form" data-once>
   {% csrf_token %}

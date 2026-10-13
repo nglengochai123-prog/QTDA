@@ -14,7 +14,7 @@ from django.core.exceptions import PermissionDenied
 from .models import Role
 
 OWNER = Role.CHU_QUAN
-MANAGER = Role.QUAN_LY_CA
+MANAGER = Role.QUAN_LY_CA  # Không còn dùng (Hai 12/10/2026: Chủ quán trực tiếp quản lý ca)
 CASHIER = Role.THU_NGAN
 WAITER = Role.PHUC_VU
 BARISTA = Role.PHA_CHE
@@ -50,28 +50,28 @@ class Cap:
 
 # (mô tả, vai trò được phép) — chép đúng thứ tự dòng của Bảng 5.3.
 CAPABILITIES = {
-    Cap.ORDER_CREATE: ("Tạo đơn, gửi yêu cầu điều chỉnh đơn", {OWNER, MANAGER, CASHIER, WAITER}),
-    Cap.BAR_PREPARE: ("Nhận món tại quầy, cập nhật Đã pha chế", {OWNER, MANAGER, BARISTA}),
-    Cap.ORDER_ADJUST_APPROVE: ("Phê duyệt điều chỉnh đơn", {OWNER, MANAGER}),
+    Cap.ORDER_CREATE: ("Tạo đơn, gửi yêu cầu điều chỉnh đơn", {OWNER, CASHIER, WAITER}),
+    Cap.BAR_PREPARE: ("Nhận món tại quầy, cập nhật Đã pha chế", {OWNER, BARISTA}),
+    Cap.ORDER_ADJUST_APPROVE: ("Phê duyệt điều chỉnh đơn", {OWNER}),
     Cap.PAID_INVOICE_CANCEL: ("Phê duyệt hủy hóa đơn đã thanh toán", {OWNER}),
-    Cap.PAYMENT: ("Thanh toán", {OWNER, MANAGER, CASHIER}),
-    Cap.CASH_FUND: ("Tiền đầu ca, chi tiền mặt, nộp tiền giữa ca", {OWNER, MANAGER, CASHIER}),
-    Cap.SHIFT_CLOSE: ("Kết ca, báo cáo cuối ca, giải trình chênh lệch", {OWNER, MANAGER, CASHIER}),
-    Cap.BACKUP_TICKETS: ("Phiếu dự phòng, nhập bù, khai báo phiếu hủy", {OWNER, MANAGER}),
+    Cap.PAYMENT: ("Thanh toán", {OWNER, CASHIER}),
+    Cap.CASH_FUND: ("Tiền đầu ca, chi tiền mặt, nộp tiền giữa ca", {OWNER, CASHIER}),
+    Cap.SHIFT_CLOSE: ("Kết ca, báo cáo cuối ca, giải trình chênh lệch", {OWNER, CASHIER}),
+    Cap.BACKUP_TICKETS: ("Phiếu dự phòng, nhập bù, khai báo phiếu hủy", {OWNER}),
     Cap.EXCEPTION_REVIEW: ("Xem xét ngoại lệ, vụ việc tổn thất", {OWNER}),
-    Cap.STOCK_OPERATIONS: ("Báo nhanh nguyên liệu, phiếu nhập, kiểm kê, hao hụt", {OWNER, MANAGER, BARISTA}),
+    Cap.STOCK_OPERATIONS: ("Báo nhanh nguyên liệu, phiếu nhập, kiểm kê, hao hụt", {OWNER, BARISTA}),
     Cap.STOCK_CONFIRM_ORDERING: ("Xác nhận chênh lệch kiểm kê, ghi nhận đặt hàng", {OWNER}),
     Cap.MASTER_INVENTORY: ("Khai báo nguyên vật liệu, định mức, nhà cung cấp", {OWNER}),
-    Cap.TIMEKEEPING: ("Chấm công vào ca, ra ca", {MANAGER, CASHIER, WAITER, BARISTA}),
-    Cap.TIMEKEEPING_ADJUST: ("Bổ sung giờ ra ca, xác nhận thời gian ngoài lịch", {OWNER, MANAGER}),
-    Cap.VIEW_WORKLOAD: ("Xem tải, thời gian chờ, khung giờ quá tải", {OWNER, MANAGER}),
-    Cap.SHIFT_REGISTER: ("Đăng ký ca (Giai đoạn 2)", {MANAGER, CASHIER, WAITER, BARISTA}),
-    Cap.SCHEDULE_MANAGE: ("Nhu cầu nhân sự, công bố lịch (Giai đoạn 2)", {OWNER, MANAGER}),
+    Cap.TIMEKEEPING: ("Chấm công vào ca, ra ca", {CASHIER, WAITER, BARISTA}),
+    Cap.TIMEKEEPING_ADJUST: ("Bổ sung giờ ra ca, xác nhận thời gian ngoài lịch", {OWNER}),
+    Cap.VIEW_WORKLOAD: ("Xem tải, thời gian chờ, khung giờ quá tải", {OWNER}),
+    Cap.SHIFT_REGISTER: ("Đăng ký ca (Giai đoạn 2)", {CASHIER, WAITER, BARISTA}),
+    Cap.SCHEDULE_MANAGE: ("Nhu cầu nhân sự, công bố lịch (Giai đoạn 2)", {OWNER}),
     Cap.PAYROLL: ("Bảng lương, đơn giá lương (Giai đoạn 2)", {OWNER}),
     Cap.FINANCE: ("Khoản phải trả, sổ chi phí, khóa sổ (Giai đoạn 2)", {OWNER}),
-    Cap.VIEW_DASHBOARD: ("Bảng điều khiển, báo cáo doanh thu, nguyên vật liệu", {OWNER, MANAGER}),
+    Cap.VIEW_DASHBOARD: ("Bảng điều khiển, báo cáo doanh thu, nguyên vật liệu", {OWNER}),
     Cap.VIEW_FINANCIALS: ("Xem lợi nhuận, chi phí, lương", {OWNER}),
-    Cap.HANDLE_ALERTS: ("Xem và xử lý cảnh báo được giao", {OWNER, MANAGER, BARISTA}),
+    Cap.HANDLE_ALERTS: ("Xem và xử lý cảnh báo được giao", {OWNER, BARISTA}),
     Cap.FORECASTS: ("Ước tính và đề xuất", {OWNER}),
     Cap.MASTER_DATA: ("Tài khoản, danh mục món, bảng giá, tham số", {OWNER}),
     Cap.AUDIT_LOG: ("Tra cứu nhật ký thao tác", {OWNER}),

@@ -20,7 +20,7 @@ from apps.core.models import Store
 
 from .models import Attendance
 
-WORK_ROLES = [Role.QUAN_LY_CA, Role.THU_NGAN, Role.PHUC_VU, Role.PHA_CHE]
+WORK_ROLES = [Role.THU_NGAN, Role.PHUC_VU, Role.PHA_CHE]
 
 
 def open_attendance(user):
@@ -65,7 +65,7 @@ def supplement_clock_out(manager, attendance_id, when, reason):
     from apps.accounts.permissions import Cap, user_can
 
     if not user_can(manager, Cap.TIMEKEEPING_ADJUST):
-        raise ValidationError("Chỉ Quản lý ca hoặc Chủ quán bổ sung giờ ra ca.")
+        raise ValidationError("Chỉ Chủ quán bổ sung giờ ra ca.")
     att = Attendance.objects.select_for_update().get(pk=attendance_id)
     if att.clock_out is not None:
         raise ValidationError("Lượt chấm công này đã có giờ ra.")
@@ -121,5 +121,5 @@ def remind_missing(now=None):
     return reminded
 
 
-MISSING_OUT = "Thiếu giờ ra: nhắc Quản lý ca bổ sung"
+MISSING_OUT = "Thiếu giờ ra: nhắc Chủ quán bổ sung"
 _ = timedelta

@@ -24,7 +24,6 @@ class Command(BaseCommand):
             "demo_chuquan": (Role.CHU_QUAN, "Trần Thị", "Lâm"),
             "demo_phucvu": (Role.PHUC_VU, "Nguyễn Ngọc", "Hà"),
             "demo_phache": (Role.PHA_CHE, "Lê Minh", "Tuấn"),
-            "demo_quanlyca": (Role.QUAN_LY_CA, "Phạm Thu", "Trang"),
             "demo_thungan": (Role.THU_NGAN, "Võ Quốc", "Bảo"),
         }
         for username, (role, first, last) in accounts.items():
@@ -104,8 +103,7 @@ class Command(BaseCommand):
 
         start = timezone.localtime().replace(hour=6, minute=0, second=0, microsecond=0)
         Shift.objects.create(store=store, name="Ca mẫu cả ngày", starts_at=start, ends_at=start + timedelta(hours=18),
-                             approver=User.objects.get(username="demo_quanlyca"),
-                             backup_approver=User.objects.get(username="demo_chuquan"),
+                             approver=User.objects.get(username="demo_chuquan"),
                              payment_authorizer=User.objects.get(username="demo_thungan"))
 
         self.stdout.write(self.style.WARNING(

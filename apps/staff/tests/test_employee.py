@@ -57,6 +57,6 @@ class EmployeeTests(TestCase):
         self.assertEqual(emp.user.role, Role.THU_NGAN)
 
     def test_non_owner_cannot_open_profiles(self):
-        manager = User.objects.create_user("qlca", password="matkhau-thu-123", role=Role.QUAN_LY_CA)
+        manager = User.objects.create_user("qlca", password="matkhau-thu-123", role=Role.THU_NGAN)
         self.client.force_login(manager)
         self.assertEqual(self.client.get(reverse("admin:staff_employee_changelist")).status_code, 302)

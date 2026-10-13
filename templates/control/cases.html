@@ -2,7 +2,7 @@
 {% load humanize %}
 {% block title %}Vụ việc tổn thất · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<h1>Vụ việc tổn thất</h1>
+<header class="page-head"><h1>Vụ việc tổn thất</h1></header>
 <form method="post" class="inline-form" data-once>{% csrf_token %}<input type="hidden" name="operation_key" value="{{ operation_key }}">
   <input class="input input-sm" name="title" placeholder="Tiêu đề vụ việc" required>
   <button class="btn btn-primary" type="submit">Lập vụ việc</button>

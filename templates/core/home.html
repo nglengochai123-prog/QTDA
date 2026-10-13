@@ -1,45 +1,39 @@
 {% extends "base.html" %}
 {% block content %}
-<section class="greeting">
-  <h1>Chào {{ user.given_name }}</h1>
-  <div class="roles" aria-label="Vai trò">
-    {% for label in user.role_labels %}<span class="chip">{{ label }}</span>{% endfor %}
-  </div>
-</section>
+<header class="page-head"><h1>Tóm tắt của tôi</h1></header>
 
 {% if notice_pending %}
 <div class="notice notice-info" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
   <div>Vui lòng đọc <a href="{% url 'core:data_notice' %}">thông báo xử lý dữ liệu cá nhân</a> và bấm xác nhận.</div></div>
 {% endif %}
 
-{% if missing_backup %}
-<div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
-  <div><strong>Ca chưa có người duyệt dự phòng.</strong> Bổ sung trước giờ ca; nếu không, yêu cầu quá hạn sẽ chuyển thẳng Chủ quán như ngoại lệ.
-    <ul class="notice-list">{% for s in missing_backup %}<li><a href="{% url 'admin:shifts_shift_change' s.pk %}">{{ s }} ({{ s.starts_at|date:"H:i" }}–{{ s.ends_at|date:"H:i" }})</a></li>{% endfor %}</ul></div></div>
-{% endif %}
-
-{% if can_dashboard %}
-<ul class="ruled-list home-links">
-  <li><a href="{% url 'reports:dashboard' %}"><span><strong>Bảng điều khiển</strong></span><span class="count"><svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></span></a></li>
-</ul>
-{% endif %}
-
-{% if master_data %}
-<h2>Dữ liệu nền</h2>
-<p>Khai báo đủ món, kích cỡ, nguyên vật liệu và định mức trước khi mở bán. Món thiếu định mức sẽ không mở bán được.</p>
-<ul class="ruled-list">
-  {% for label, url, count, attention in master_data %}
-  <li><a href="{{ url }}"><span>{{ label }}</span>
-    <span class="count{% if attention %} warn{% endif %}">{{ count }}
-      <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></span></a></li>
-  {% endfor %}
-</ul>
-{% else %}
-<h2>Việc của bạn</h2>
-<ul class="ruled-list">
-  {% for item in NAV_ITEMS %}{% if item.key != "home" %}
-  <li><a href="{{ item.url }}"><span>{{ item.label }}</span><span class="count"><svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></span></a></li>
-  {% endif %}{% endfor %}
-</ul>
-{% endif %}
+<div class="widget-grid">
+  {% if tasks %}
+  <section class="panel">
+    <h2>Việc chờ tôi xử lý</h2>
+    <div class="table-wrap"><table class="data-table">
+      <thead><tr><th scope="col">Việc</th><th scope="col" class="num">Số lượng</th></tr></thead>
+      <tbody>{% for t in tasks %}<tr><th scope="row"><a href="{{ t.url }}">{{ t.label }}</a></th>
+        <td class="num{% if t.urgent %} text-danger{% endif %}">{{ t.count }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+  {% endif %}
+  {% if master_data %}
+  <section class="panel">
+    <h2>Dữ liệu nền</h2>
+    <div class="table-wrap"><table class="data-table">
+      <thead><tr><th scope="col">Danh mục</th><th scope="col" class="num">Hiện có</th></tr></thead>
+      <tbody>{% for label, url, count, attention in master_data %}<tr><th scope="row"><a href="{{ url }}">{{ label }}</a></th>
+        <td class="num{% if attention %} text-warn{% endif %}">{{ count }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+  {% else %}
+  <section class="panel">
+    <h2>Lối tắt</h2>
+    <div class="shortcut-grid">{% for item in NAV_ITEMS %}{% if item.key != "home" %}
+      <a class="shortcut" href="{{ item.url }}"><svg class="icon" aria-hidden="true"><use href="#i-{{ item.key }}"/></svg>{{ item.label }}</a>
+    {% endif %}{% endfor %}</div>
+  </section>
+  {% endif %}
+</div>
 {% endblock %}

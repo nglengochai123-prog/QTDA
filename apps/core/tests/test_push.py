@@ -12,7 +12,7 @@ from apps.core.models import PushSubscription
 
 class PushTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user("qlca", password="matkhau-thu-123", role=Role.QUAN_LY_CA)
+        self.user = User.objects.create_user("qlca", password="matkhau-thu-123", role=Role.CHU_QUAN)
         self.client.login(username="qlca", password="matkhau-thu-123")
 
     def test_subscribe_and_status_without_library(self):
@@ -34,7 +34,7 @@ class PushDeliveryTests(TestCase):
     """Tách mốc: dịch vụ đẩy đã nhận (máy chủ gửi được) với điện thoại thực sự hiện thông báo."""
 
     def setUp(self):
-        self.user = User.objects.create_user("qlca", password="matkhau-thu-123", role=Role.QUAN_LY_CA)
+        self.user = User.objects.create_user("qlca", password="matkhau-thu-123", role=Role.CHU_QUAN)
         PushSubscription.objects.create(user=self.user, endpoint="https://push.example/1", p256dh="k", auth="a")
 
     def test_service_accepted_is_not_device_received(self):
@@ -61,7 +61,7 @@ class PushDeliveryTests(TestCase):
 
 class AlertPageTests(TestCase):
     def test_alert_page_renders_push_panel(self):
-        User.objects.create_user("qlca", password="matkhau-thu-123", role=Role.QUAN_LY_CA)
+        User.objects.create_user("qlca", password="matkhau-thu-123", role=Role.CHU_QUAN)
         self.client.login(username="qlca", password="matkhau-thu-123")
         page = self.client.get(reverse("control:alerts"))
         self.assertContains(page, "Thông báo đẩy trên điện thoại")

@@ -3,7 +3,7 @@
 {% block content %}
 <p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
 <h1>Kiểm kê</h1>
-<p class="lead-muted">Đếm thực tế rồi nhập theo đơn vị tính. Chênh lệch trong ngưỡng điều chỉnh tồn ngay; vượt ngưỡng phải ghi lý do và chờ Chủ quán xác nhận. Nhóm trọng yếu đứng đầu, kiểm hằng ngày.</p>
+<details class="help-tip"><summary>Giải thích</summary><p>Đếm thực tế rồi nhập theo đơn vị tính. Chênh lệch trong ngưỡng điều chỉnh tồn ngay; vượt ngưỡng phải ghi lý do và chờ Chủ quán xác nhận. Nhóm trọng yếu đứng đầu, kiểm hằng ngày.</p></details>
 
 {% if pending %}
 <section class="panel panel-warn" aria-labelledby="pend-title">

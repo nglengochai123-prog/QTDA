@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Phiếu dự phòng · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<h1>Phiếu dự phòng và nhập bù</h1>
-<p class="lead-muted">Khi mất kết nối, quán bán bằng phiếu đánh số. Có mạng lại thì nhập bù từng phiếu trong thời hạn ở trang Tham số (mặc định 1 giờ), ghi mã nghiệp vụ nếu phiếu có. Số phiếu thiếu, trùng, quá hạn hoặc khai báo hủy đều tạo ngoại lệ.</p>
+<header class="page-head"><h1>Phiếu dự phòng và nhập bù</h1></header>
+<details class="help-tip"><summary>Giải thích</summary><p>Khi mất kết nối, quán bán bằng phiếu đánh số. Có mạng lại thì nhập bù từng phiếu trong thời hạn ở trang Tham số (mặc định 1 giờ), ghi mã nghiệp vụ nếu phiếu có. Số phiếu thiếu, trùng, quá hạn hoặc khai báo hủy đều tạo ngoại lệ.</p></details>
 
 <section class="panel" aria-labelledby="enter-title">
   <h2 id="enter-title">Nhập bù một phiếu</h2>
@@ -19,7 +19,7 @@
         <label class="check"><input type="checkbox" name="transfer_confirmed" value="1"> Đã thấy tiền chuyển khoản về</label></div>
     </div>
     <h3>Món trên phiếu <span class="muted">(bỏ trống nếu phiếu có mã nghiệp vụ của đơn đã lưu: đơn đó giữ giá và định mức của nó)</span></h3>
-    <p class="hint">Giá và định mức lấy theo thời điểm bán ghi trên phiếu. Nếu hệ thống chưa có lịch sử giá hoặc định mức của thời điểm đó, phiếu chờ Chủ quán xác nhận, chưa ghi đơn.</p>
+    <details class="help-tip"><summary>Giải thích</summary><p>Giá và định mức lấy theo thời điểm bán ghi trên phiếu. Nếu hệ thống chưa có lịch sử giá hoặc định mức của thời điểm đó, phiếu chờ Chủ quán xác nhận, chưa ghi đơn.</p></details>
     {% for i in rows %}
     <div class="slip-line">
       <select class="input input-sm" name="item_{{ i }}" aria-label="Món và kích cỡ dòng {{ forloop.counter }}"><option value="">Món, kích cỡ</option>{% for s in sizes %}<option value="{{ s.item_id }}:{{ s.pk }}">{{ s.item.name }} {{ s.name }}</option>{% endfor %}</select>

@@ -40,6 +40,35 @@
         "LAM_ENV_FILE": ".secrets/thu_thong_bao.env"
       },
       "port": 8767
+    },
+    {
+      "name": "lam-thu-du-bao",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "manage.py",
+        "runserver",
+        "127.0.0.1:8768",
+        "--noreload"
+      ],
+      "env": {
+        "SQLITE_NAME": "thu_du_bao.sqlite3",
+        "LAM_FORECAST_INCLUDE_SIMULATED": "true"
+      },
+      "port": 8768
+    },
+    {
+      "name": "lam-thuc-don",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "manage.py",
+        "runserver",
+        "127.0.0.1:8769",
+        "--noreload"
+      ],
+      "env": {
+        "SQLITE_NAME": "thuc_don_lam.sqlite3"
+      },
+      "port": 8769
     }
   ]
 }

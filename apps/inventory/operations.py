@@ -1,7 +1,7 @@
 """Nguyên vật liệu vận hành: báo nhanh, phiếu nhập, khoản phải trả, kiểm kê, hao hụt, thiếu nguyên liệu,
 đặt hàng (FR-23 đến FR-27, FR-30, BRU-19, BRU-23, BRU-25, BRU-26, BRU-33)."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
@@ -26,6 +26,13 @@ def _dec(value, label, allow_zero=False):
     if number < 0 or (number == 0 and not allow_zero):
         raise ValidationError(f"{label} phải lớn hơn 0.")
     return number
+
+
+def _plan_changed(ingredient_id):
+    """Đơn đặt thay đổi: tính lại kế hoạch mua của nguyên liệu sau khi giao dịch ghi xong (mục 8.4)."""
+    from apps.forecast.planning import schedule_recompute
+
+    schedule_recompute(ingredient_id)
 
 
 def in_opening_hours(at=None):
@@ -85,19 +92,28 @@ def open_quick_reports():
 
 # ---------------- Đặt hàng (FR-30, BRU-23) ----------------
 
-def create_purchase_order(user, supplier_id, ingredient_id, quantity, expected_date, note="", *, operation_key):
+def create_purchase_order(user, supplier_id, ingredient_id, quantity, expected_date, note="", *, operation_key,
+                          status=PurchaseOrder.Status.ORDERED, order_by=None, on_created=None, extra_payload=None):
+    """Ghi một lần đặt. `on_created(po)` chạy trong cùng thao tác chạy một lần, nên gửi lại cùng mã chỉ trả về đơn đã
+    tạo, không lưu thêm bản ghi kèm theo (ví dụ đề xuất đặt hàng)."""
     payload = {"supplier": int(supplier_id), "ingredient": int(ingredient_id), "quantity": str(quantity),
-               "date": str(expected_date), "note": note}
+               "date": str(expected_date), "note": note, **(extra_payload or {})}
+    if status != PurchaseOrder.Status.ORDERED:
+        payload["status"] = status
 
     def action():
         supplier = Supplier.objects.get(pk=payload["supplier"])
         ingredient = Ingredient.objects.get(pk=payload["ingredient"])
         po = PurchaseOrder.objects.create(store=ingredient.store, supplier=supplier, ingredient=ingredient,
                                           quantity=_dec(quantity, "Số lượng"), expected_date=expected_date, note=note,
-                                          created_by=user)
+                                          created_by=user, status=status, order_by=order_by,
+                                          ordered_at=timezone.now() if status == PurchaseOrder.Status.ORDERED else None)
         record(Action.CREATE, actor=user, obj=po, object_type="inventory.PurchaseOrder",
                after={"nha_cung_cap": supplier.name, "nguyen_lieu": ingredient.name, "so_luong": str(po.quantity),
-                      "ngay_giao": expected_date})
+                      "ngay_giao": expected_date, "trang_thai": po.get_status_display()})
+        if on_created is not None:
+            on_created(po)
+        _plan_changed(ingredient.pk)
         return {"po": po.pk}
 
     result, _ = run_once(operation_key, "purchase_order", payload, action, actor=user)
@@ -127,6 +143,50 @@ def reschedule(user, po_id, new_date):
     po.save(update_fields=["expected_date", "status", "updated_at"])
     record(Action.UPDATE, actor=user, obj=po, object_type="inventory.PurchaseOrder",
            before={"ngay_giao": before}, after={"ngay_giao": new_date, "trang_thai": po.get_status_display()})
+    _plan_changed(po.ingredient_id)
+    return po
+
+
+@transaction.atomic
+def mark_ordered(user, po_id, expected_date=None):
+    """Đã báo nhà cung cấp: đơn Nháp chuyển sang Đã đặt, ghi thời điểm và ngày giao theo xác nhận (mục 9.2).
+
+    Hệ thống không tự gửi gì cho nhà cung cấp; thao tác này chỉ ghi lại việc Chủ quán đã tự báo."""
+    po = PurchaseOrder.objects.select_for_update().get(pk=po_id)
+    if po.status != PurchaseOrder.Status.DRAFT:
+        if po.status == PurchaseOrder.Status.ORDERED and po.ordered_at:
+            return po  # gửi lại cùng thao tác
+        raise ValidationError("Chỉ đơn Nháp mới chuyển sang Đã đặt.")
+    before = {"trang_thai": po.get_status_display(), "ngay_giao": po.expected_date}
+    po.status, po.ordered_at = PurchaseOrder.Status.ORDERED, timezone.now()
+    if expected_date:
+        po.expected_date = expected_date
+    po.settle_status()
+    po.save(update_fields=["status", "ordered_at", "expected_date", "updated_at"])
+    record(Action.STATUS_CHANGE, actor=user, obj=po, object_type="inventory.PurchaseOrder", before=before,
+           after={"trang_thai": po.get_status_display(), "ngay_giao": po.expected_date},
+           reason="Chủ quán đã báo nhà cung cấp")
+    _plan_changed(po.ingredient_id)
+    return po
+
+
+@transaction.atomic
+def cancel_order(user, po_id, reason):
+    """Hủy đơn chưa nhận hàng; giữ lại để truy vết, không còn tính là hàng đang về."""
+    reason = (reason or "").strip()
+    if not reason:
+        raise ValidationError("Ghi lý do hủy đơn.")
+    po = PurchaseOrder.objects.select_for_update().get(pk=po_id)
+    if po.status == PurchaseOrder.Status.CANCELLED:
+        return po
+    if po.received_quantity > 0 or po.status == PurchaseOrder.Status.DELIVERED:
+        raise ValidationError("Đơn đã nhận hàng không hủy được.")
+    before = po.get_status_display()
+    po.status = PurchaseOrder.Status.CANCELLED
+    po.save(update_fields=["status", "updated_at"])
+    record(Action.STATUS_CHANGE, actor=user, obj=po, object_type="inventory.PurchaseOrder",
+           before={"trang_thai": before}, after={"trang_thai": po.get_status_display()}, reason=reason)
+    _plan_changed(po.ingredient_id)
     return po
 
 
@@ -164,23 +224,37 @@ def create_receipt(user, operation_key, supplier_id, lines, payment_type, *, inv
             po = None
             if raw.get("purchase_order"):
                 po = PurchaseOrder.objects.select_for_update().get(pk=raw["purchase_order"], ingredient=ingredient)
-            parsed.append((ingredient, qty, price, po))
-        total = sum(int((q * p).to_integral_value()) for _, q, p, _ in parsed)
+                if po.status == PurchaseOrder.Status.CANCELLED:
+                    raise ValidationError(f"Lần đặt {ingredient.name} đã hủy; chọn lần đặt khác.")
+            expiry = raw.get("expiry_date") or None
+            if expiry and isinstance(expiry, str):
+                try:
+                    expiry = date.fromisoformat(expiry)
+                except ValueError:
+                    raise ValidationError(f"Hạn sử dụng của {ingredient.name} không hợp lệ.")
+            parsed.append((ingredient, qty, price, po, expiry))
+        total = sum(int((q * p).to_integral_value()) for _, q, p, _, _ in parsed)
         if not invoice_photo:
             # FR-24 và AC-55: phiếu nhập phải có ảnh hóa đơn khi lưu, không phụ thuộc giá trị.
             raise ValidationError("Chụp ảnh hóa đơn hoặc phiếu giao hàng trước khi lưu phiếu nhập.")
         receipt = Receipt.objects.create(store=supplier.store, code=_next_receipt_code(), supplier=supplier,
                                          payment_type=payment_type, total=total, invoice_photo=invoice_photo or "",
                                          created_by=user, operation_key=operation_key)
-        for ingredient, qty, price, po in parsed:
+        warnings = []
+        for ingredient, qty, price, po, expiry in parsed:
             ReceiptLine.objects.create(receipt=receipt, ingredient=ingredient, quantity=qty, unit_price=price,
-                                       purchase_order=po)
+                                       purchase_order=po, expiry_date=expiry)
             stock.move(ingredient.pk, qty, kind=StockMovement.Kind.RECEIPT, actor=user, store=supplier.store,
                        source_type="phieu_nhap", source_id=receipt.code, note=supplier.name)
             if po is not None:
+                if po.status == PurchaseOrder.Status.DRAFT:
+                    po.status, po.ordered_at = PurchaseOrder.Status.ORDERED, po.ordered_at or timezone.now()
                 po.received_quantity += qty
                 po.settle_status()
-                po.save(update_fields=["received_quantity", "status", "updated_at"])  # AC-52, AC-69
+                po.save(update_fields=["received_quantity", "status", "ordered_at", "updated_at"])  # AC-52, AC-69
+                if po.over_received > 0:  # vẫn ghi nhận, nhưng báo để Chủ quán biết (mục 8.1)
+                    warnings.append(f"{ingredient.name}: nhận vượt số đặt {stock.fmt_qty(po.over_received)} "
+                                    f"{ingredient.get_unit_display()}.")
         today = timezone.localdate()
         payable = Payable.objects.create(store=supplier.store, receipt=receipt, supplier=supplier, amount=total,
                                          due_date=today + timedelta(days=payload["due"] if payment_type == "tra_sau" else 0))
@@ -196,8 +270,9 @@ def create_receipt(user, operation_key, supplier_id, lines, payment_type, *, inv
         record(Action.CREATE, actor=user, obj=receipt, object_type="inventory.Receipt",
                after={"ma": receipt.code, "nha_cung_cap": supplier.name, "gia_tri": total,
                       "thanh_toan": receipt.get_payment_type_display(),
-                      "dong": [f"{q} {i.get_unit_display()} {i.name} × {p}" for i, q, p, _ in parsed]})
-        return {"receipt": receipt.pk, "code": receipt.code, "total": total}
+                      "dong": [f"{q} {i.get_unit_display()} {i.name} × {p}" for i, q, p, _, _ in parsed],
+               "canh_bao": warnings})
+        return {"receipt": receipt.pk, "code": receipt.code, "total": total, "warnings": warnings}
 
     return run_once(operation_key, "receipt", payload, action, actor=user)
 
@@ -232,8 +307,11 @@ def overdue_payables(today=None):
 
 # ---------------- Hao hụt (FR-26, BRU-19) ----------------
 
-def record_waste(user, operation_key, ingredient_id, quantity, reason, note=""):
+def record_waste(user, operation_key, ingredient_id, quantity, reason, note="", is_one_off=False):
+    """is_one_off: Chủ quán đánh dấu sự cố đơn lẻ, không tính vào tỷ lệ hao hụt thường lệ khi dự báo."""
     payload = {"ingredient": int(ingredient_id), "quantity": str(quantity), "reason": reason, "note": note}
+    if is_one_off:
+        payload["one_off"] = True
 
     def action():
         ingredient = Ingredient.objects.get(pk=payload["ingredient"])
@@ -241,7 +319,8 @@ def record_waste(user, operation_key, ingredient_id, quantity, reason, note=""):
             raise ValidationError("Chọn lý do hao hụt.")  # AC-59
         qty = _dec(quantity, "Số lượng")
         waste = Waste.objects.create(store=ingredient.store, ingredient=ingredient, quantity=qty, reason=reason,
-                                     note=note[:255], actor=user, operation_key=operation_key)
+                                     note=note[:255], actor=user, operation_key=operation_key,
+                                     is_one_off=bool(is_one_off and user.is_owner))
         stock.move(ingredient.pk, -qty, kind=StockMovement.Kind.WASTE, actor=user, store=ingredient.store,
                    source_type="hao_hut", source_id=waste.pk, note=waste.get_reason_display())
         record(Action.CREATE, actor=user, obj=waste, object_type="inventory.Waste",

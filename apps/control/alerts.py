@@ -6,9 +6,10 @@ Mỗi loại cảnh báo có một hàm thu thập các đối tượng đang th
 - điều kiện không còn: tự đóng kèm ghi chú tự động;
 - quá hạn: chuyển cấp lên Chủ quán, hoặc nhắc lại nếu Chủ quán là người xử lý chính.
 Mỗi đối tượng có tối đa một cảnh báo đang mở cho cùng một loại. Đóng tay phải có ghi chú; đối tượng
-đã được đóng tay thì không tự mở lại cho đến khi điều kiện mới phát sinh trên đối tượng khác.
+đã được đóng tay thì không tự mở lại. Vì vậy khóa đối tượng phải phân biệt từng lần phát sinh: cảnh báo Cần đặt hàng
+khóa theo nguyên liệu và đợt rủi ro (mục 8.4 thiết kế mua nguyên liệu), nên khi tồn đã lên lại rồi xuống, đợt mới có
+cảnh báo mới dù cảnh báo đợt cũ đã đóng tay.
 Cảnh báo mức Thông tin (Sắp hết, khung giờ quá tải) không tạo ở đây; chúng hiện ở bảng điều khiển và báo cáo.
-Loại "Cần đặt hàng" chờ logic dự báo nên chưa có.
 """
 
 from datetime import datetime, time, timedelta
@@ -25,7 +26,7 @@ from apps.core.models import Store
 
 from .models import Alert, ExceptionCase
 
-OWNER, MANAGER, BARISTA = Role.CHU_QUAN, Role.QUAN_LY_CA, Role.PHA_CHE
+OWNER, BARISTA = Role.CHU_QUAN, Role.PHA_CHE
 
 
 def _end_of_day(day):
@@ -44,7 +45,7 @@ def _out_of_stock(now):
         yield {"subject": f"bao-het-{r.pk}", "title": f"{r.ingredient.name} đã hết",
                "detail": f"Báo bởi {r.reporter} lúc {timezone.localtime(r.created_at):%H:%M}. Báo nhân viên ngừng nhận "
                          f"món bị ảnh hưởng hoặc mua bổ sung, ghi kết quả.",
-               "assignee": shift.approver if shift else None, "role": MANAGER, "severity": Alert.Severity.URGENT,
+               "assignee": None, "role": OWNER, "severity": Alert.Severity.URGENT,
                "due": r.created_at + timedelta(minutes=params.get("alert_out_of_stock_minutes")),
                "link": "/kho/", "escalate": True}
 
@@ -63,7 +64,7 @@ def _backup_pending(now):
         missing = backup.unprocessed_numbers(rng)
         if missing:
             yield {"subject": f"pdp-{rng.pk}", "title": f"Phiếu dự phòng chưa nhập bù: {', '.join(backup.fmt(n) for n in missing)}",
-                   "detail": "Nhập bù hoặc khai báo phiếu hủy có lý do.", "assignee": rng.shift.approver, "role": MANAGER,
+                   "detail": "Nhập bù hoặc khai báo phiếu hủy có lý do.", "assignee": None, "role": OWNER,
                    "severity": Alert.Severity.IMPORTANT,
                    "due": now + timedelta(hours=params.get("backup_entry_hours")), "link": "/du-phong/", "escalate": True}
 
@@ -78,7 +79,7 @@ def _late_data(now):
             hours = params.get("shift_report_hours", at=shift.ends_at)
             yield {"subject": f"ca-{shift.pk}", "title": f"Dữ liệu ca trễ hạn: {shift}",
                    "detail": "; ".join(status["issues"]) + ". Gửi báo cáo cuối ca hoặc hoàn tất dữ liệu ca.",
-                   "assignee": shift.approver, "role": MANAGER, "severity": Alert.Severity.IMPORTANT,
+                   "assignee": None, "role": OWNER, "severity": Alert.Severity.IMPORTANT,
                    "due": status["deadline"] + timedelta(hours=hours), "link": f"/ca/{shift.pk}/", "escalate": True}
 
 
@@ -88,8 +89,8 @@ def _discrepancy(now):
     for d in Discrepancy.objects.current().filter(over_threshold=True, decision="").select_related("shift", "manager"):
         if not d.explanation:
             yield {"subject": f"cl-{d.pk}", "title": f"Chênh lệch vượt ngưỡng chờ giải trình: {d}",
-                   "detail": "Quản lý ca giải trình; sau đó Chủ quán chọn Chấp nhận hoặc Không chấp nhận.",
-                   "assignee": d.manager, "role": MANAGER, "severity": Alert.Severity.IMPORTANT,
+                   "detail": "Người lập báo cáo cuối ca hoặc Chủ quán ghi giải trình, sau đó Chủ quán chọn Chấp nhận hoặc Không chấp nhận.",
+                   "assignee": None, "role": OWNER, "severity": Alert.Severity.IMPORTANT,
                    "due": d.created_at + timedelta(hours=params.get("discrepancy_explain_hours")),
                    "link": f"/ca/{d.shift_id}/", "escalate": True}
         else:
@@ -104,7 +105,7 @@ def _exceptions(now):
     for exc in ExceptionCase.objects.filter(status=ExceptionCase.Status.OPEN):
         if exc.kind == ExceptionCase.Kind.CONSUMPTION_OVER:
             yield {"subject": f"nl-{exc.pk}", "title": f"Kiểm tra chênh lệch tiêu hao: {exc.ingredient}",
-                   "detail": exc.detail, "assignee": None, "role": MANAGER, "severity": Alert.Severity.IMPORTANT,
+                   "detail": exc.detail, "assignee": None, "role": OWNER, "severity": Alert.Severity.IMPORTANT,
                    "due": exc.created_at + timedelta(hours=params.get("consumption_check_hours")),
                    "link": f"/kiem-soat/ngoai-le/{exc.pk}/", "escalate": True}
         else:
@@ -146,8 +147,7 @@ def _recount(now):
                "detail": f"{req.requested_by} báo đơn bị từ chối vì thiếu nhưng quầy cho là còn hàng. "
                          f"Kiểm kê lại nguyên liệu này và ghi kết quả.",
                "assignee": None, "role": BARISTA, "severity": Alert.Severity.IMPORTANT, "due": due,
-               "link": "/kho/kiem-ke/", "escalate": True, "escalate_to": MANAGER,
-               "escalate_user": req.shift.approver if req.shift else None}
+               "link": "/kho/kiem-ke/", "escalate": True, "escalate_to": OWNER, "escalate_user": None}
 
 
 def _late_count(now):
@@ -169,6 +169,21 @@ def _late_count(now):
                    "link": "/kho/kiem-ke/", "escalate": True}
 
 
+def _order_needed(now):
+    """FR-29, mục 9.3 thiết kế mua nguyên liệu: ngày phải đặt chậm nhất là hôm nay hoặc đã qua; tự đóng khi đã có đơn
+    Nháp hoặc đơn đặt che được rủi ro. Đơn Nháp tới ngày phải đặt mà chưa báo nhà cung cấp cũng được nhắc."""
+    from apps.forecast.planning import alert_items
+
+    for item in alert_items(timezone.localdate(now)):
+        ing = item["ingredient"]
+        title = (f"Đơn nháp chưa báo nhà cung cấp: {ing.name}" if item["episode"].startswith("nhap-")
+                 else f"Cần đặt hàng: {ing.name}")
+        yield {"subject": f"dat-{ing.pk}-{item['episode']}"[:60], "title": title, "detail": item["detail"],
+               "assignee": None, "role": OWNER, "severity": Alert.Severity.IMPORTANT,
+               "due": _end_of_day(max(item["order_by"], timezone.localdate(now))),
+               "link": f"/du-bao/ke-hoach-mua/{ing.pk}/", "escalate": False, "kind": Alert.Kind.ORDER_NEEDED}
+
+
 COLLECTORS = [
     (Alert.Kind.OUT_OF_STOCK, _out_of_stock),
     (Alert.Kind.BACKUP_PENDING, _backup_pending),
@@ -176,6 +191,7 @@ COLLECTORS = [
     (Alert.Kind.DISCREPANCY, _discrepancy),
     (Alert.Kind.EXCEPTION, _exceptions),
     (None, _inventory_owner),
+    (Alert.Kind.ORDER_NEEDED, _order_needed),
     (Alert.Kind.RECOUNT, _recount),
     (Alert.Kind.LATE_COUNT, _late_count),
 ]
@@ -226,12 +242,12 @@ def sync(now=None):
 
 def _escalate(alert, now, escalate_to=None, escalate_user=None):
     if escalate_to and alert.assignee_role != escalate_to and alert.level == 0:
-        # Bảng 5.4: một số loại chuyển cấp lên Quản lý ca chứ không lên Chủ quán (ví dụ kiểm kê lại).
+        # Việc giao Pha chế (ví dụ kiểm kê lại) quá hạn thì chuyển Chủ quán.
         alert.assignee_role, alert.assignee, alert.escalated_at = escalate_to, escalate_user, now
         alert.due_at = now + timedelta(hours=1)
         alert.save(update_fields=["assignee_role", "assignee", "escalated_at", "due_at", "updated_at"])
         record(Action.STATUS_CHANGE, obj=alert, object_type="control.Alert", actor_label="hệ thống",
-               after={"cap": alert.handler_label()}, reason="Quá hạn: chuyển cấp đến Quản lý ca")
+               after={"cap": alert.handler_label()}, reason="Quá hạn: chuyển cấp đến Chủ quán")
         _push(alert)
         return
     if alert.can_escalate and alert.level == 0 and alert.assignee_role != OWNER:
@@ -273,7 +289,7 @@ def visible_to(user):
     from django.db.models import Q
 
     q = Q(assignee=user)
-    for role in (MANAGER, BARISTA):
+    for role in (BARISTA,):
         if user.has_role(role):
             q |= Q(assignee__isnull=True, assignee_role=role)
     if user.is_owner:

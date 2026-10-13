@@ -19,7 +19,7 @@
 {% if pending_refunds %}
 <section class="panel panel-warn" aria-labelledby="refund-title">
   <h2 id="refund-title">Hoàn tiền đã duyệt, chờ trả khách</h2>
-  <p class="muted">Bấm "Đã hoàn tiền" khi thực sự đưa tiền mặt hoặc chuyển khoản lại cho khách. Khoản hoàn được ghi vào ca đang mở lúc bấm.</p>
+  <details class="help-tip"><summary>Giải thích</summary><p>Bấm "Đã hoàn tiền" khi thực sự đưa tiền mặt hoặc chuyển khoản lại cho khách. Khoản hoàn được ghi vào ca đang mở lúc bấm.</p></details>
   <ul class="ruled-list compact">
     {% for r, op in pending_refunds %}
     <li class="row-between"><span>Đơn {{ r.order_code }} · {{ r.amount|intcomma }} đ · {{ r.get_method_display|lower }} · duyệt bởi {{ r.approved_by }} {{ r.created_at|date:"H:i d/m" }}</span>
@@ -34,7 +34,7 @@
 
 {% if not shift %}
 <h1>Ca của tôi</h1>
-<div class="empty"><p><strong>Hiện không có ca nào đang mở.</strong></p><p>Chủ quán tạo ca ở Dữ liệu nền › Ca làm việc, chỉ định người duyệt, người duyệt dự phòng và người được ủy quyền thanh toán.</p></div>
+<div class="empty"><p><strong>Hiện không có ca nào đang mở.</strong></p><p>Chủ quán tạo ca ở <a href="{% url 'masterdata:list' 'ca' %}">Quản trị › Ca làm việc</a>, chỉ định người duyệt, người duyệt dự phòng và người được ủy quyền thanh toán.</p></div>
 {% else %}
 <header class="page-head">
   <h1>{{ shift.name }} <span class="muted">{{ shift.starts_at|date:"H:i" }}–{{ shift.ends_at|date:"H:i d/m" }}</span></h1>
@@ -167,7 +167,7 @@
   {% endfor %}</ul>{% endif %}
   <form data-draft="dinh-chinh" method="post" action="{% url 'shifts:correction' shift.pk %}" class="mini-form" data-once>{% csrf_token %}
     <input type="hidden" name="operation_key" value="{{ op_correction }}">
-    <p class="hint">Báo cáo gốc được giữ nguyên. Đính chính cần lý do và Chủ quán duyệt; sau khi duyệt hệ thống đối soát lại theo số mới, không tính trùng chênh lệch.</p>
+    <details class="help-tip"><summary>Giải thích</summary><p>Báo cáo gốc được giữ nguyên. Đính chính cần lý do và Chủ quán duyệt; sau khi duyệt hệ thống đối soát lại theo số mới, không tính trùng chênh lệch.</p></details>
     <div class="field"><label for="c-cash">Tiền mặt đếm thực tế (đồng)</label><input class="input" id="c-cash" name="counted_cash" inputmode="numeric" value="{{ effective.counted_cash }}" required></div>
     <div class="field"><label for="c-in">Chuyển khoản nhận theo sao kê (đồng)</label><input class="input" id="c-in" name="transfer_received" inputmode="numeric" value="{{ effective.transfer_received }}" required></div>
     <div class="field"><label for="c-out">Hoàn chuyển khoản theo sao kê (đồng)</label><input class="input" id="c-out" name="transfer_refunded" inputmode="numeric" value="{{ effective.transfer_refunded }}"></div>

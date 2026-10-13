@@ -14,7 +14,7 @@ class ExceptionCase(StoreScopedModel):
         ADJUST_COUNT = "nhieu_dieu_chinh", "Số yêu cầu điều chỉnh sau pha chế vượt mức"
         POST_PREP_VALUE = "gia_tri_huy", "Giá trị hủy sau pha chế của ca vượt mức"
         RECEIVED_ITEMS_PAYMENT = "tt_mon_thuc_nhan", "Thanh toán theo món thực nhận"
-        ACCUMULATED_MANAGER = "tich_luy_qlc", "Chênh lệch tích lũy của Quản lý ca"
+        ACCUMULATED_MANAGER = "tich_luy_qlc", "Chênh lệch tích lũy của người phụ trách ca"
         ACCUMULATED_STORE = "tich_luy_quan", "Chênh lệch tích lũy của toàn quán"
         COUNT_ACCUMULATED = "kiem_ke_tich_luy", "Chênh lệch kiểm kê tích lũy"
         BACKUP_VOIDED = "pdp_huy", "Phiếu dự phòng bị hủy"
@@ -206,6 +206,7 @@ class Alert(StoreScopedModel):
         PAYABLE_DUE = "phai_tra", "Khoản phải trả đến hạn"
         RECOUNT = "kiem_ke_lai", "Nguyên liệu cần kiểm kê lại"
         LATE_COUNT = "kiem_ke_tre", "Kiểm kê nhóm trọng yếu trễ hạn"
+        ORDER_NEEDED = "can_dat_hang", "Cần đặt hàng"
 
     class Severity(models.TextChoices):
         URGENT = "khan", "Khẩn"
@@ -257,7 +258,7 @@ class Alert(StoreScopedModel):
             return "Chủ quán (đã chuyển cấp)"
         if self.assignee_id:
             return str(self.assignee)
-        return "Chủ quán" if self.assignee_role == "chu_quan" else "Quản lý ca"
+        return "Chủ quán" if self.assignee_role == "chu_quan" else "Pha chế"
 
     @property
     def handling_minutes(self):

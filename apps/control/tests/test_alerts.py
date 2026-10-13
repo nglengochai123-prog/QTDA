@@ -23,53 +23,54 @@ class AlertTests(Base):
         with mock.patch("apps.inventory.operations.in_opening_hours", return_value=True):
             return alerts.sync(now)
 
-    def test_ac102_assigned_to_manager_then_escalated_and_timed(self):
+    def test_ac102_assigned_to_owner_and_timed(self):
+        # Bỏ Quản lý ca (12/10/2026): báo Đã hết giao thẳng Chủ quán; quá hạn thì nhắc lại.
         self.out_of_stock()
         self.sync()
         alert = Alert.objects.get(kind="da_het")
-        self.assertEqual((alert.assignee, alert.level, alert.severity), (self.manager, 0, "khan"))
-        self.assertIn(alert, alerts.visible_to(self.manager))
-        self.assertNotIn(alert, alerts.visible_to(self.d["owner"]))  # Chủ quán chưa thấy khi chưa quá hạn
+        self.assertEqual((alert.assignee_role, alert.level, alert.severity), ("chu_quan", 0, "khan"))
+        self.assertIn(alert, alerts.visible_to(self.d["owner"]))
+        self.assertNotIn(alert, alerts.visible_to(self.cashier))
         self.sync(timezone.now() + timedelta(minutes=16))
         alert.refresh_from_db()
-        self.assertEqual(alert.level, 1)
-        self.assertIn(alert, alerts.visible_to(self.d["owner"]))
+        self.assertEqual(alert.reminded_count, 1)
         report = alert.subject.split("-")[-1]
-        ops.acknowledge(self.manager, int(report), "Đã mua thêm 2 hộp")
+        ops.acknowledge(self.d["owner"], int(report), "Đã mua thêm 2 hộp")
         self.sync()
         alert.refresh_from_db()
         self.assertEqual((alert.status, alert.auto_closed), ("da_dong", True))
         self.assertIsNotNone(alert.handling_minutes)
 
-    def test_ac103_close_needs_note_and_owner_sees_only_own(self):
-        shift_services.add_cash_entry(self.manager, key(), self.shift.pk, "dau_ca", 0)
-        shift_services.close_shift(self.manager, self.shift.pk)
+    def test_ac103_close_needs_note(self):
+        shift_services.add_cash_entry(self.cashier, key(), self.shift.pk, "dau_ca", 0)
+        shift_services.close_shift(self.cashier, self.shift.pk)
         later = self.shift.ends_at + timedelta(hours=2, minutes=1)
-        self.sync(later)  # thiếu báo cáo cuối ca: giao Quản lý ca
+        self.sync(later)  # thiếu báo cáo cuối ca: giao Chủ quán
         alert = Alert.objects.get(kind="du_lieu_tre")
-        self.assertEqual(alert.assignee, self.manager)
-        self.assertNotIn(alert, alerts.visible_to(self.d["owner"]))
+        self.assertIn(alert, alerts.visible_to(self.d["owner"]))
+        self.assertNotIn(alert, alerts.visible_to(self.d["barista"]))
         with self.assertRaises(ValidationError):
-            alerts.close(self.manager, alert.pk, "")
-        alerts.take(self.manager, alert.pk)
-        alerts.close(self.manager, alert.pk, "Đã nhắc gửi báo cáo")
+            alerts.close(self.d["owner"], alert.pk, "")
+        alerts.take(self.d["owner"], alert.pk)
+        alerts.close(self.d["owner"], alert.pk, "Đã nhắc gửi báo cáo")
         alert.refresh_from_db()
         self.assertEqual(alert.status, "da_dong")
         self.sync(later)  # vẫn thiếu báo cáo nhưng đã đóng tay: không mở lại
         self.assertEqual(Alert.objects.filter(kind="du_lieu_tre").count(), 1)
 
     def test_one_open_alert_per_subject_and_owner_reminder(self):
-        shift_services.add_cash_entry(self.manager, key(), self.shift.pk, "dau_ca", 500000)
-        shift_services.close_shift(self.manager, self.shift.pk)
-        shift_services.submit_report(self.manager, self.shift.pk, 400000, 0)
+        shift_services.add_cash_entry(self.cashier, key(), self.shift.pk, "dau_ca", 500000)
+        shift_services.close_shift(self.cashier, self.shift.pk)
+        shift_services.submit_report(self.cashier, self.shift.pk, 400000, 0)
         self.sync()
         self.sync()
         alert = Alert.objects.get(kind="chenh_lech_tien")
-        self.assertEqual(alert.assignee, self.manager)
+        self.assertEqual(alert.assignee_role, "chu_quan")
         from apps.shifts.models import Discrepancy
 
         d = Discrepancy.objects.get()
-        shift_services.explain(self.manager, d.pk, "Thối nhầm")
+        self.assertEqual(d.manager, self.cashier)  # người lập báo cáo chịu trách nhiệm khoản chênh lệch
+        shift_services.explain(self.cashier, d.pk, "Thối nhầm")
         self.sync()
         alert.refresh_from_db()
         self.assertEqual((alert.assignee_role, alert.assignee), ("chu_quan", None))  # chuyển Chủ quán quyết định

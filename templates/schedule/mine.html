@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Lịch của tôi · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head"><h1>Lịch của tôi</h1></header>
+{% if items %}
+<div class="table-wrap"><table class="data-table">
+  <thead><tr><th scope="col">Ngày</th><th scope="col">Ca</th><th scope="col">Giờ</th><th scope="col">Vị trí</th></tr></thead>
+  <tbody>{% for a in items %}<tr><th scope="row">{{ a.day }} {{ a.shift.date|date:"d/m" }}</th><td>{{ a.shift.name }}</td><td>{{ a.shift.start|time:"H:i" }}–{{ a.shift.end|time:"H:i" }}</td><td>{{ a.role_label }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<div class="empty"><p><strong>Chưa có lịch đã công bố.</strong></p><p><a href="{% url 'schedule:register' %}">Đăng ký ca tuần sau</a></p></div>{% endif %}
+{% endblock %}

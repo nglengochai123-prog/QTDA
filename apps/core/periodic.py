@@ -16,10 +16,26 @@ def run_all(now=None):
     return {
         "chuyen_cap_yeu_cau": adjustments.escalate_due(now),
         "dat_hang_giao_cham": [po.pk for po in inventory_ops.refresh_late(timezone.localdate(now))],
-        "nhac_ca_thieu_du_phong": remind_missing_backup(now),
         "nhac_thieu_gio_ra": _remind_missing_out(now),
+        "du_bao": _daily_forecast(now),
+        "ke_hoach_mua": _purchase_plans(now),
         "canh_bao": _sync_alerts(now),
     }
+
+
+def _daily_forecast(now):
+    """Mỗi ngày phát hành dự báo một lần sau khi dữ liệu ngày trước đã chốt (mục 6.1 khung dự báo)."""
+    from apps.forecast.services import ensure_today_release
+
+    rel = ensure_today_release(now)
+    return rel.pk if rel else None
+
+
+def _purchase_plans(now):
+    """Tính toàn bộ kế hoạch mua nguyên liệu một lần sau mỗi giờ đóng cửa (mục 5.1 thiết kế mua nguyên liệu)."""
+    from apps.forecast.planning import ensure_daily
+
+    return ensure_daily(now)
 
 
 def _sync_alerts(now):
@@ -32,30 +48,3 @@ def _remind_missing_out(now):
     from apps.staff.timekeeping import remind_missing
 
     return remind_missing(now)
-
-
-def remind_missing_backup(now=None):
-    """GD-08: ghi nhắc Chủ quán một lần cho mỗi ca chưa có người duyệt dự phòng (màn hình Trang chủ luôn hiện)."""
-    from apps.accounts.models import User
-    from apps.audit.models import Action, AuditLog
-    from apps.audit.services import record
-    from apps.core.push import notify_later
-    from apps.shifts.services import shifts_missing_backup
-
-    reminded = []
-    for shift in shifts_missing_backup(now):
-        if AuditLog.objects.filter(object_type="shifts.Shift", object_id=str(shift.pk),
-                                   reason=MISSING_BACKUP_REASON).exists():
-            continue
-        record(Action.STATUS_CHANGE, obj=shift, object_type="shifts.Shift", actor_label="hệ thống",
-               after={"con_thieu": "người duyệt dự phòng"}, reason=MISSING_BACKUP_REASON)
-        reminded.append(shift.pk)
-        # AC-113: nhắc cả trên điện thoại Chủ quán, một lần mỗi ca (cùng điều kiện với dòng nhật ký ở trên).
-        notify_later([u.pk for u in User.objects.filter(is_active=True) if u.is_owner],
-                     "Ca chưa có người duyệt dự phòng",
-                     f"{shift} bắt đầu {timezone.localtime(shift.starts_at):%H:%M %d/%m}: bổ sung người duyệt dự phòng.",
-                     "/")
-    return reminded
-
-
-MISSING_BACKUP_REASON = "Nhắc Chủ quán bổ sung người duyệt dự phòng trước giờ ca"

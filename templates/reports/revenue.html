@@ -2,7 +2,7 @@
 {% load humanize %}
 {% block title %}Báo cáo doanh thu · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<h1>Báo cáo doanh thu</h1>
+<header class="page-head"><h1>Báo cáo doanh thu</h1></header>
 <form method="get" class="inline-form" aria-label="Chọn kỳ">
   <label for="p-from">Từ</label><input class="input input-sm" id="p-from" type="date" name="tu" value="{{ start|date:'Y-m-d' }}">
   <label for="p-to">đến</label><input class="input input-sm" id="p-to" type="date" name="den" value="{{ end|date:'Y-m-d' }}">
@@ -23,5 +23,5 @@
   <tbody>{% for r in rows %}<tr><th scope="row">{{ r.key }}</th><td class="num">{% if r.link %}<a href="{% url 'orders:lookup' %}?{{ r.link }}" title="Xem các đơn của dòng này">{{ r.orders }}</a>{% else %}{{ r.orders }}{% endif %}</td><td class="num">{{ r.cups }}</td><td class="num">{{ r.revenue|intcomma }} đ</td></tr>{% endfor %}</tbody>
 </table></div>
 {% else %}<div class="empty"><p><strong>Chưa có đơn đã thanh toán trong kỳ.</strong></p></div>{% endif %}
-<p class="muted">Bấm số đơn để xem danh sách đơn gốc của dòng đó. Doanh thu là số khách đã trả trong kỳ (giá trị món tính tiền, theo thời điểm thanh toán), kể cả đơn sau đó bị hủy hóa đơn. Hoàn tiền tính theo thời điểm thực hoàn và chỉ trừ một lần ở doanh thu thuần.</p>
+<details class="help-tip"><summary>Giải thích</summary><p>Bấm số đơn để xem danh sách đơn gốc của dòng đó. Doanh thu là số khách đã trả trong kỳ (giá trị món tính tiền, theo thời điểm thanh toán), kể cả đơn sau đó bị hủy hóa đơn. Hoàn tiền tính theo thời điểm thực hoàn và chỉ trừ một lần ở doanh thu thuần.</p></details>
 {% endblock %}

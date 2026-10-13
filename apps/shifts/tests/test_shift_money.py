@@ -23,7 +23,7 @@ def key():
 class ShiftBase(TestCase):
     def setUp(self):
         self.d = build_menu()
-        self.manager = User.objects.create_user("qlca_a", password=PASSWORD, role=Role.QUAN_LY_CA)
+        self.manager = User.objects.create_user("qlca_a", password=PASSWORD, role=Role.THU_NGAN)
         self.cashier = User.objects.create_user("thungan", password=PASSWORD, role=Role.THU_NGAN)
         now = timezone.now()
         self.shift = Shift.objects.create(store=self.d["store"], name="Ca chiều", starts_at=now - timedelta(hours=2),

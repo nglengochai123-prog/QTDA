@@ -75,6 +75,9 @@ INSTALLED_APPS = [
     "apps.orders",
     "apps.control",
     "apps.reports",
+    "apps.masterdata.apps.MasterdataConfig",
+    "apps.forecast.apps.ForecastConfig",
+    "apps.schedule.apps.ScheduleConfig",
 ]
 
 MIDDLEWARE = [
@@ -205,7 +208,11 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 
 LAM_BACKUP_DIR = Path(env("LAM_BACKUP_DIR") or BASE_DIR / "backups")  # để trống trong .env vẫn dùng mặc định
 LAM_BACKUP_KEEP = int(env("LAM_BACKUP_KEEP") or 30)
-LAM_PG_BIN = env("LAM_PG_BIN", "")  # thư mục chứa pg_dump, pg_restore khi chúng không nằm trong PATH
+LAM_PG_BIN = env("LAM_PG_BIN", "")
+
+# Chỉ bật trên cơ sở dữ liệu chạy thử: dự báo dùng cả dữ liệu mô phỏng đã nhập (mục 5.1 khung dự báo: chỉ để kiểm tra
+# phần mềm). Máy chủ thật không đặt biến này.
+LAM_FORECAST_INCLUDE_SIMULATED = env_bool("LAM_FORECAST_INCLUDE_SIMULATED", False)  # thư mục chứa pg_dump, pg_restore khi chúng không nằm trong PATH
 
 
 # --- Thông tin cửa hàng (NFR-18: dữ liệu chính có mã cửa hàng) -------------------

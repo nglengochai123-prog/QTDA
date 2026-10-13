@@ -80,7 +80,7 @@ class Command(BaseCommand):
 
         rnd = random.Random(2026)
         u = {name: User.objects.get(username=f"demo_{name}") for name in
-             ("chuquan", "quanlyca", "thungan", "phucvu", "phache")}
+             ("chuquan", "thungan", "phucvu", "phache")}
         from apps.core.models import Store
 
         store = Store.get_default()
@@ -98,15 +98,14 @@ class Command(BaseCommand):
             if is_today and clock.now > real_now:
                 clock.now = real_now - timedelta(minutes=30)
             shift = Shift.objects.filter(starts_at__date=day).first() or Shift.objects.create(
-                store=store, name="Ca ngày", starts_at=clock.now, ends_at=clock.now + timedelta(hours=16), approver=u["quanlyca"],
-                backup_approver=u["chuquan"], payment_authorizer=u["thungan"])
+                store=store, name="Ca ngày", starts_at=clock.now, ends_at=clock.now + timedelta(hours=16), approver=u["chuquan"],
+                payment_authorizer=u["thungan"])
             shift.ends_at = clock.now + timedelta(hours=16)
             shift.name = "Ca ngày"
             shift.save()
-            for role, name in (("pha_che", "phache"), ("phuc_vu", "phucvu"), ("thu_ngan", "thungan"),
-                               ("quan_ly_ca", "quanlyca")):
+            for role, name in (("pha_che", "phache"), ("phuc_vu", "phucvu"), ("thu_ngan", "thungan")):
                 Attendance.objects.create(store=store, user=u[name], role=role, clock_in=clock.tick(1))
-            shifts.add_cash_entry(u["quanlyca"], key(), shift.pk, "dau_ca", 500000)
+            shifts.add_cash_entry(u["thungan"], key(), shift.pk, "dau_ca", 500000)
             with override_settings(MEDIA_ROOT=media):  # nhập hàng buổi sáng, có ảnh hóa đơn
                 lines = [{"ingredient": i.pk, "quantity": str(i.pack_size * 3), "unit_price": 30} for i in critical]
                 ops.create_receipt(u["phache"], key(), supplier.pk, lines, "tra_ngay",
@@ -155,13 +154,13 @@ class Command(BaseCommand):
                 shifts.confirm_refund(u["thungan"], key(), refund.pk, "Đã trả khách")
             if offset == 4:  # một lần mất mạng, bán bằng phiếu dự phòng
                 clock.at(day, 15, 0)
-                rng = backup.issue_range(u["chuquan"], shift.pk, 101, 110, u["quanlyca"].pk)
+                rng = backup.issue_range(u["chuquan"], shift.pk, 101, 110, u["thungan"].pk)
                 size = sizes[0]
-                backup.enter_slip(u["quanlyca"], key(), {
+                backup.enter_slip(u["chuquan"], key(), {
                     "number": 101, "sold_at": clock.now - timedelta(minutes=30), "restored_at": clock.now,
                     "method": "tien_mat", "table": tables[0].pk,
                     "lines": [{"item": size.item_id, "size": size.pk, "options": [], "quantity": 2}]})
-                backup.declare_last_used(u["quanlyca"], rng.pk, 101)
+                backup.declare_last_used(u["chuquan"], rng.pk, 101)
             if is_today:
                 break
             clock.at(day, 21, 30)
@@ -172,11 +171,11 @@ class Command(BaseCommand):
                 att.clock_out = clock.tick(1)
                 att.save(update_fields=["clock_out"])
             clock.at(day, 22, 0)
-            shifts.close_shift(u["quanlyca"], shift.pk)
+            shifts.close_shift(u["thungan"], shift.pk)
             f = shifts.figures(shift)
             short = 20000 if offset % 6 == 3 else 0  # vài ngày thiếu tiền nhỏ
             clock.tick(20)
-            shifts.submit_report(u["quanlyca"], shift.pk, f["expected_cash"] - short, f["revenue_transfer"],
+            shifts.submit_report(u["thungan"], shift.pk, f["expected_cash"] - short, f["revenue_transfer"],
                                  f["refunds_transfer"])
         clock.now = real_now
         periodic.run_all(real_now)
