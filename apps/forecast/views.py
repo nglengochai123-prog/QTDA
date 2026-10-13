@@ -225,7 +225,7 @@ def _plan_view(plan):
 
     r = dict(plan.result or {})
     cfg = r.get("settings") or {}
-    for k in ("risk_date", "stockout_date", "order_by", "next_review", "today"):
+    for k in ("risk_date", "stockout_date", "order_by", "next_review", "today", "expedite_day"):
         r[k] = _d(r.get(k))
     for k in ("window_s", "window_S"):
         r[k] = [_d(x) for x in r.get(k) or []]

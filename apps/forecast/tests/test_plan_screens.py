@@ -50,3 +50,12 @@ class PlanScreenTests(PlanBase):
         self.assertEqual(po.status, "da_dat")
         r = self.client.post(reverse("forecast:plans"), {"action": "tinh_lai"})
         self.assertEqual(r.status_code, 302)
+        self.assertContains(detail, "Tồn trước khi hàng về")
+        season = self.client.post(reverse("masterdata:create", args=["dieu-chinh-mua"]), {
+            "ingredient": self.milk.pk, "start": self.today.isoformat(),
+            "end": (self.today + timedelta(days=30)).isoformat(), "percent": "-15", "basis": "Nghỉ hè",
+            "is_active": "on"})
+        self.assertEqual(season.status_code, 302)
+        from apps.forecast.models import SeasonalAdjustment
+
+        self.assertEqual(SeasonalAdjustment.objects.get().created_by, self.owner)

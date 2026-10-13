@@ -317,3 +317,39 @@ class IngredientPlan(TimeStampedModel):
 
     def __str__(self):
         return f"{self.ingredient.name} · {self.get_action_display()} · {self.calc_date:%d/%m/%Y}"
+
+
+class SeasonalAdjustment(StoreScopedModel):
+    """Điều chỉnh theo mùa do Chủ quán đưa ra có căn cứ (ví dụ sinh viên nghỉ hè), áp vào nhu cầu dự báo của các ngày
+    trong khoảng thời gian, cho một nguyên liệu hoặc mọi nguyên liệu. Mô hình hiện chưa học được hiệu ứng mùa, nên
+    giai đoạn đầu dùng nhận định này; khi có đủ lịch sử thật mới đánh giá việc học hiệu ứng mùa."""
+
+    ingredient = models.ForeignKey("inventory.Ingredient", verbose_name="Nguyên vật liệu", on_delete=models.PROTECT,
+                                   null=True, blank=True, related_name="seasonal_adjustments",
+                                   help_text="Để trống: áp cho mọi nguyên liệu.")
+    start = models.DateField("Từ ngày")
+    end = models.DateField("Đến hết ngày")
+    percent = models.SmallIntegerField("Thay đổi nhu cầu (%)", help_text="Ví dụ −15 là giảm 15%.")
+    basis = models.CharField("Căn cứ", max_length=255, help_text="Bắt buộc: nguồn hoặc lý do của điều chỉnh.")
+    is_active = models.BooleanField("Đang áp dụng", default=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người đặt", on_delete=models.PROTECT,
+                                   null=True, blank=True, related_name="+")
+
+    class Meta:
+        verbose_name = "Điều chỉnh theo mùa"
+        verbose_name_plural = "Điều chỉnh theo mùa"
+        ordering = ["-start"]
+
+    def __str__(self):
+        target = self.ingredient.name if self.ingredient_id else "Mọi nguyên liệu"
+        return f"{target}: {self.percent:+d}% từ {self.start:%d/%m/%Y} đến {self.end:%d/%m/%Y}"
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        if self.start and self.end and self.end < self.start:
+            raise ValidationError("Ngày kết thúc phải sau ngày bắt đầu.")
+        if self.percent is not None and not -90 <= self.percent <= 200:
+            raise ValidationError("Thay đổi phải trong khoảng −90% đến +200%.")
+        if not (self.basis or "").strip():
+            raise ValidationError("Ghi căn cứ của điều chỉnh.")

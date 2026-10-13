@@ -95,7 +95,10 @@ class Ingredient(StoreScopedModel):
         help_text="Không nhỏ hơn R. Để trống: nhóm A 2 ngày, nhóm B bằng R.")
     review_weekday = models.PositiveSmallIntegerField(
         "Ngày kiểm tra trong tuần", null=True, blank=True, choices=Weekday.choices,
-        help_text="Chỉ dùng cho nhóm B. Để trống: tối Chủ nhật.")
+        help_text="Dùng khi chu kỳ là bội của 7 ngày và chưa khai ngày kiểm tra gốc. Để trống: tối Chủ nhật.")
+    review_anchor = models.DateField(
+        "Ngày kiểm tra gốc", null=True, blank=True,
+        help_text="Lịch kiểm tra định kỳ là ngày này cộng các bội của R. Nên khai khi R không phải 1 hay 7 ngày.")
     moq_packs = models.PositiveSmallIntegerField("Lượng đặt tối thiểu (số gói)", default=1,
                                                  validators=[MinValueValidator(1)])
     exposure_days = models.PositiveSmallIntegerField(
@@ -108,6 +111,9 @@ class Ingredient(StoreScopedModel):
                                          help_text="Ước tính của Chủ quán, dùng khi chưa đủ dữ liệu.")
     weekly_high = models.DecimalField("Tuần dùng nhiều (theo đơn vị tính)", max_digits=12, decimal_places=2, null=True,
                                       blank=True, help_text="Khoảng 1 trong 20 tuần cao hơn.")
+    weekly_estimate_at = models.DateTimeField(
+        "Ước tính tuần có hiệu lực từ", null=True, blank=True, editable=False,
+        help_text="Tự ghi khi đổi ước tính; đánh giá dự báo quá khứ không dùng ước tính trước thời điểm này.")
 
     class Meta:
         verbose_name = "Nguyên vật liệu"
@@ -117,6 +123,15 @@ class Ingredient(StoreScopedModel):
 
     def __str__(self):
         return f"{self.name} ({self.get_unit_display()})"
+
+    def save(self, *args, **kwargs):
+        estimate = (self.weekly_low, self.weekly_typical, self.weekly_high)
+        stored = (Ingredient.objects.filter(pk=self.pk).values_list("weekly_low", "weekly_typical", "weekly_high")
+                  .first() if self.pk else None)
+        if any(v is not None for v in estimate) and (stored is None or tuple(
+                None if v is None else Decimal(str(v)) for v in estimate) != tuple(stored)):
+            self.weekly_estimate_at = timezone.now()
+        super().save(*args, **kwargs)
 
     def clean(self):
         super().clean()

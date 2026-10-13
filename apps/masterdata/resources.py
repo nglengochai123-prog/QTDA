@@ -195,7 +195,8 @@ register(Resource(
             "shelf_life_days", "storage_capacity", "safety_stock", "safety_stock_is_provisional", "is_critical",
             "count_accumulated_threshold", "is_active",
             # Chính sách mua (thiết kế mua nguyên liệu mục 7.4)
-            "policy_group", "service_level", "review_period_days", "target_cycle_days", "review_weekday", "moq_packs",
+            "policy_group", "service_level", "review_period_days", "target_cycle_days", "review_weekday",
+            "review_anchor", "moq_packs",
             "exposure_days", "weekly_low", "weekly_typical", "weekly_high"],
     columns=[("Tên", "name"), ("Đơn vị", "unit"), ("Nhà cung cấp", "main_supplier"),
              ("Tồn an toàn", "safety_stock"), ("Trọng yếu", "is_critical"), ("Đang dùng", "is_active")],
@@ -305,3 +306,34 @@ def _judgement_resource():
 
 
 register(_judgement_resource())
+
+
+def _save_season(request, form, created):
+    from apps.core.models import Store
+
+    a = form.save(commit=False)
+    a.store = a.store if a.store_id else (request.user.store or Store.get_default())
+    if created:
+        a.created_by = request.user
+    a.save()
+    return a
+
+
+def _season_resource():
+    from apps.forecast.models import SeasonalAdjustment
+
+    return Resource(
+        key="dieu-chinh-mua", title="Điều chỉnh theo mùa", singular="Điều chỉnh theo mùa", model=SeasonalAdjustment,
+        cap=Cap.FORECASTS, fields=["ingredient", "start", "end", "percent", "basis", "is_active"],
+        columns=[("Nguyên liệu", lambda a: a.ingredient.name if a.ingredient_id else "Mọi nguyên liệu"),
+                 ("Từ", "start"), ("Đến", "end"), ("Thay đổi (%)", "percent"), ("Căn cứ", "basis"),
+                 ("Người đặt", lambda a: f"{a.created_by or ''} · {_local(a.created_at)}"), ("Đang áp dụng", "is_active")],
+        search=("basis", "ingredient__name"), filters=[("dang-ap-dung", "Đang áp dụng", "is_active", YES_NO)],
+        queryset=lambda: SeasonalAdjustment.objects.select_related("ingredient", "created_by").order_by("-start"),
+        save=_save_season,
+        note="Dùng khi Chủ quán biết trước nhu cầu sẽ đổi theo mùa (ví dụ sinh viên nghỉ hè) mà mô hình chưa học được. "
+             "Bắt buộc ghi căn cứ; số liệu giả định không phải căn cứ. Áp vào nhu cầu dự báo của các ngày trong khoảng.",
+    )
+
+
+register(_season_resource())

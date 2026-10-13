@@ -28,7 +28,7 @@ from .models import IngredientPlan, OrderSuggestion, PlanRun
 log = logging.getLogger(__name__)
 
 # Đổi khi cách tính thay đổi, để bản tính cũ không được trả lại cho cùng dữ liệu sau khi nâng cấp phần mềm.
-ENGINE_VERSION = "ke-hoach-mua-1"
+ENGINE_VERSION = "ke-hoach-mua-2"
 
 PARAM_KEYS = ("plan_csl_critical_percent", "plan_csl_normal_percent", "plan_group_a_shelf_days", "plan_a_review_days",
               "plan_a_target_days", "plan_b_review_days", "plan_b_review_weekday", "plan_horizon_days",
@@ -59,7 +59,9 @@ def settings_for(ing):
     estimate = None
     if None not in (ing.weekly_low, ing.weekly_typical, ing.weekly_high):
         estimate = (float(ing.weekly_low), float(ing.weekly_typical), float(ing.weekly_high))
+    since = timezone.localdate(ing.weekly_estimate_at) if ing.weekly_estimate_at else None
     return {"group": group, "group_source": group_src, "R": int(R), "T": int(max(T, R)), "weekday": int(weekday),
+            "anchor": ing.review_anchor, "estimate_since": since,
             "csl": int(csl), "exposure": int(ing.exposure_days), "moq": int(ing.moq_packs or 1),
             "pack": float(ing.pack_size or 1), "pack_label": ing.pack_label or "gói", "unit": ing.get_unit_display(),
             "shelf": ing.shelf_life_days, "capacity": float(ing.storage_capacity) if ing.storage_capacity else None,
@@ -100,15 +102,19 @@ def build_forecasts(now=None, ingredients=None):
         prev = (IngredientPlan.objects.filter(ingredient=ing, is_current=True).values_list("forecast", flat=True)
                 .first() or {})
         fc = methods.forecast_ingredient(
-            series, today=today, horizon=horizon, estimate=cfg["estimate"], delta_level=dl, delta_season=ds,
+            series, today=today, horizon=horizon, estimate=cfg["estimate"],
+            # Ước tính không rõ thời điểm thì coi như mới có hôm nay: không dùng để đánh giá quá khứ.
+            estimate_since=cfg["estimate_since"] or today, delta_level=dl, delta_season=ds,
             previous_method=prev.get("method"), decision_h=cfg["R"] + cfg["exposure"],
+            target_h=cfg["T"] + cfg["exposure"],
             k=policy.k_for(cfg["csl"]), csl=cfg["csl"], blocked_share=rates["blocked_share"],
             blocked_limit=params.get("plan_blocked_limit_percent") / 100,
             switch_gain=params.get("plan_switch_gain_percent") / 100, switch_days=7 * params.get("plan_switch_weeks"),
             bias_limit=params.get("plan_bias_limit_percent") / 100)
         days = [today + timedelta(days=j) for j in range(horizon)]
         fc.update(first_day=today.isoformat(), rates=rates, factor=rates["factor"],
-                  recipe_ratio={d.isoformat(): r for d, r in usage.recipe_ratio(data, ing.pk, days, now).items()})
+                  recipe_ratio={d.isoformat(): r for d, r in usage.recipe_ratio(data, ing.pk, days, now).items()},
+                  seasonal=seasonal_for(ing, today, days[-1]))
         if rates["recon"]["flag"]:
             fc["warnings"].append(
                 f"Đối soát lệch {rates['recon']['gap'] * 100:.1f}%: tiêu hao tính từ dòng bán và hủy sau pha chế "
@@ -120,12 +126,29 @@ def build_forecasts(now=None, ingredients=None):
     return out
 
 
+def seasonal_for(ing, first, last):
+    """Điều chỉnh theo mùa của Chủ quán còn hiệu lực trong tầm dự báo (riêng nguyên liệu hoặc chung)."""
+    from django.db.models import Q
+
+    from .models import SeasonalAdjustment
+
+    rows = (SeasonalAdjustment.objects.filter(is_active=True, start__lte=last, end__gte=first)
+            .filter(Q(ingredient=ing) | Q(ingredient__isnull=True)).order_by("start", "pk"))
+    return [{"id": a.pk, "start": a.start.isoformat(), "end": a.end.isoformat(), "percent": a.percent,
+             "basis": a.basis, "ingredient": a.ingredient_id, "created_at": a.created_at.isoformat()} for a in rows]
+
+
 def demand(fc, t):
-    """d(t) = Û b(t) × (1 + r h + r vh + r k) × hệ số đổi định mức của ngày t."""
+    """d(t) = Û b(t) × (1 + r h + r vh + r k) × hệ số đổi định mức của ngày t × điều chỉnh mùa của Chủ quán."""
     base = fc.get("daily", {}).get(t.isoformat())
     if base is None:
         return None
-    return base * fc.get("factor", 1.0) * fc.get("recipe_ratio", {}).get(t.isoformat(), 1.0)
+    season = 1.0
+    iso = t.isoformat()
+    for a in fc.get("seasonal") or []:
+        if a["start"] <= iso <= a["end"]:
+            season *= 1 + a["percent"] / 100
+    return base * fc.get("factor", 1.0) * fc.get("recipe_ratio", {}).get(iso, 1.0) * season
 
 
 # ---------------- dữ liệu tồn và đơn ----------------
@@ -215,7 +238,8 @@ def compute(ing, fc, now=None, run=None):
         "bien_dong": StockMovement.objects.filter(ingredient=ing).order_by("-id").values_list("id", flat=True).first(),
         "don_dat": [po_rows.count(), str(max(po_rows.values_list("updated_at", flat=True), default=""))],
         "du_bao": fc.get("version"), "tham_so": params_version(ing, cfg),
-        "ton": [physical, reserved, c], "sau_dong_cua": f0 == 0, "cach_tinh": ENGINE_VERSION,
+        # f0 làm tròn 2 chữ số: cùng dữ liệu nhưng phần nhu cầu còn lại của hôm nay đổi thì tính lại.
+        "ton": [physical, reserved, c], "con_lai_hom_nay": round(f0, 2), "cach_tinh": ENGINE_VERSION,
     }
     data_hash = _digest(parts)
     existing = IngredientPlan.objects.filter(ingredient=ing, calc_date=today, data_hash=data_hash).first()
@@ -249,9 +273,10 @@ def evaluate(ing, cfg, fc, today, f0, physical, reserved, c):
         review_days=cfg["R"], target_days=cfg["T"], review_weekday=cfg["weekday"], exposure=cfg["exposure"],
         pack=cfg["pack"], pack_label=cfg["pack_label"], unit=cfg["unit"], moq=cfg["moq"], shelf_life=cfg["shelf"],
         capacity=cfg["capacity"], manual_ss=cfg["manual_ss"], quantiles=quantiles,
-        sigma_label=fc.get("sigma_label", ""))
+        sigma_label=fc.get("sigma_label", ""), sigma_measured=fc.get("sigma_measured"),
+        review_anchor=cfg["anchor"])
     result = policy.compute(inp)
-    result["periods"] = periods(daily, sigma, today, f0, cfg)
+    result["periods"] = periods(daily, sigma, today, f0, cfg, fc.get("sigma_measured") or [])
     result["settings"] = cfg
     return result
 
@@ -269,8 +294,9 @@ def _quantile_mode(fc, cfg, factor):
     return {"by_h": ok} if ok else None
 
 
-def periods(daily, sigma, today, f0, cfg):
-    """Nhu cầu tuần này (từ hôm nay), tuần sau và phần còn lại của tháng, kèm khoảng 80% và quy ra số gói."""
+def periods(daily, sigma, today, f0, cfg, measured=()):
+    """Nhu cầu tuần này (từ hôm nay), tuần sau và phần còn lại của tháng, kèm khoảng 80% và quy ra số gói. Khoảng
+    của cửa sổ chưa được đo trực tiếp ghi là ước lượng tạm."""
     def sig(h):
         if h <= 0 or not sigma:
             return 0.0
@@ -284,6 +310,7 @@ def periods(daily, sigma, today, f0, cfg):
         h = sum(1 for d in days if d != today or f0 > 0)
         half = 1.2816 * sig(h)
         return {"label": label, "from": days[0], "to": days[-1], "mean": round(mu, 2),
+                "measured": bool(0 < h <= len(measured) and measured[h - 1]),
                 "low": round(max(mu - half, 0), 2), "high": round(mu + half, 2),
                 "packs": round(mu / cfg["pack"], 1) if cfg["pack"] else None}
 
@@ -445,6 +472,8 @@ def alert_items(today=None):
         unit = plan.ingredient.get_unit_display()
         detail = (f"{plan.get_action_display()}: {plan.packs} {r.get('settings', {}).get('pack_label', 'gói')} "
                   f"({policy.fmt(plan.suggested_quantity)} {unit}). {r.get('reason', '')}")
+        if r.get("infeasible"):
+            detail = "Không khả thi trong sức chứa. " + detail
         out.append({"ingredient": plan.ingredient, "episode": plan.episode_key, "detail": detail,
                     "order_by": plan.order_by})
     for po in PurchaseOrder.objects.filter(status=PurchaseOrder.Status.DRAFT).select_related("ingredient"):

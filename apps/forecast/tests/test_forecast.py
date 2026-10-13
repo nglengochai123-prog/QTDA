@@ -145,8 +145,9 @@ class ServiceTests(ForecastBase):
         self.assertEqual((alert.assignee_role, alert.severity), ("chu_quan", "quan_trong"))
         alerts.sync(morning)
         self.assertEqual(Alert.objects.filter(kind="can_dat_hang").count(), 1)  # không trùng
+        # Lô về cuối ngày mai không che được thiếu hụt trong ngày mai (giả định giao cuối ngày); lô về hôm nay thì có.
         PurchaseOrder.objects.create(store=self.d["store"], supplier=self.supplier, ingredient=milk, quantity=5000,
-                                     expected_date=self.today + timedelta(days=1), created_by=self.owner)
+                                     expected_date=self.today, created_by=self.owner)
         planning.recompute(milk.pk, morning)
         alerts.sync(morning)
         alert.refresh_from_db()

@@ -7,17 +7,24 @@ Quy ước thời gian:
 - Hôm nay là t0; f0 là tỷ lệ bán còn lại của hôm nay theo hồ sơ giờ, bằng 0 sau giờ đóng cửa.
 - Cửa sổ n ngày gồm phần còn lại của hôm nay và n ngày lịch kế tiếp; ngày đóng cửa có nhu cầu 0. Sai số σ_h lấy
   theo h là số ngày mở cửa trong cửa sổ.
-- Lô đang về được cộng vào tồn dự kiến cuối ngày giao dự kiến (giả định xấu: về cuối ngày). Lô mới đặt hôm nay về
-  sau ℓ ngày.
+- Lô đang về được cộng vào tồn dự kiến cuối ngày giao dự kiến (giả định xấu: về cuối ngày), nên mỗi ngày có hai mức:
+  tồn trước khi hàng về (thấp nhất trong ngày) và tồn cuối ngày. Thiếu hàng và rủi ro xét theo tồn trước khi hàng về,
+  để không bỏ sót khoảng thiếu trong chính ngày giao. Lô mới đặt hôm nay về sau ℓ ngày.
+- Lịch kiểm tra định kỳ tính từ ngày kiểm tra gốc và chu kỳ R; giám sát liên tục sau mỗi biến động chỉ kích hoạt khi
+  ngày phải đặt rơi vào trước lần kiểm tra kế tiếp.
 """
 
 import math
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from statistics import NormalDist
 
 WEEKDAYS = ["thứ Hai", "thứ Ba", "thứ Tư", "thứ Năm", "thứ Sáu", "thứ Bảy", "Chủ nhật"]
+
+# Ngày gốc mặc định của lịch kiểm tra khi Chủ quán chưa khai: thứ Hai 05/01/2026 (cộng thêm thứ kiểm tra nếu chu kỳ
+# là bội của 7 ngày).
+EPOCH = date(2026, 1, 5)
 
 BUY, TOP_UP, EXPEDITE, NONE, NO_DATA = "mua", "mua_bo_sung", "thuc_giao", "khong_can", "thieu_du_lieu"
 ACTION_LABELS = {BUY: "Mua", TOP_UP: "Mua bổ sung", EXPEDITE: "Thúc giao", NONE: "Không cần mua",
@@ -55,6 +62,7 @@ class Lot:
     status: str = "da_dat"
     po_id: int = None
     label: str = ""
+    at_start: bool = False  # về trước giờ mở cửa (chỉ dùng khi mô phỏng đề nghị giao sớm)
 
 
 @dataclass
@@ -85,6 +93,8 @@ class Inputs:
     closed: frozenset = frozenset()
     quantiles: dict = None  # {"s": q, "S": q} khi bật cách phân vị
     sigma_label: str = "đo trực tiếp"
+    sigma_measured: list = None  # σ_h có đo trực tiếp đủ gốc hay chỉ là ước lượng tạm, theo h
+    review_anchor: object = None  # ngày kiểm tra gốc của lịch định kỳ
 
 
 class Policy:
@@ -131,7 +141,8 @@ class Policy:
 
     # ---------- dòng tồn ----------
     def timeline(self, horizon, lots=None):
-        """I(t) cuối mỗi ngày từ hôm nay, kèm mức an toàn kσ của cửa sổ từ nay tới t."""
+        """Mỗi ngày từ hôm nay: tồn trước khi hàng về (sau nhu cầu cả ngày, trước lô giao cuối ngày), tồn cuối ngày
+        I(t), và mức an toàn kσ của cửa sổ từ nay tới t."""
         lots = self.i.lots if lots is None else lots
         t0 = self.i.today
         level = self.i.available - self.i.committed
@@ -139,24 +150,29 @@ class Policy:
         for j in range(horizon):
             t = t0 + timedelta(days=j)
             demand = self.i.f0 * self.d(t) if j == 0 else self.d(t)
-            arriving = sum(lot.quantity for lot in lots if lot.arrival == t)
+            early = sum(lot.quantity for lot in lots if lot.arrival == t and lot.at_start)
             if j == 0:
-                arriving += sum(lot.quantity for lot in lots if lot.arrival < t0)
-            level = level + arriving - demand
-            rows.append({"date": t, "demand": round(demand, 2), "arriving": round(arriving, 2),
-                         "level": round(level, 2), "safety": self.ksigma(j) if j > 0 or self.i.f0 > 0 else 0.0,
+                early += sum(lot.quantity for lot in lots if lot.arrival < t0)
+            late = sum(lot.quantity for lot in lots if lot.arrival == t and not lot.at_start)
+            before = level + early - demand
+            level = before + late
+            rows.append({"date": t, "demand": round(demand, 2), "arriving": round(early + late, 2),
+                         "before_arrival": round(before, 2), "level": round(level, 2),
+                         "safety": self.ksigma(j) if j > 0 or self.i.f0 > 0 else 0.0,
                          "closed": t in self.i.closed})
         return rows
 
     def scan(self, rows):
-        """Ngày rủi ro: I(t) < kσ(nay..t) lần đầu; ngày dự kiến hết: I(t) < 0 lần đầu."""
+        """Ngày rủi ro: tồn trước khi hàng về < kσ(nay..t) lần đầu; ngày dự kiến hết: tồn trước khi hàng về < 0 lần đầu.
+        Tồn cuối ngày dương không che được khoảng thiếu trước lô giao cuối ngày."""
         risk = stockout = None
         for j, r in enumerate(rows):
             if j == 0 and self.i.f0 <= 0:
                 continue
-            if risk is None and r["level"] < r["safety"]:
+            low = r["before_arrival"]
+            if risk is None and low < r["safety"]:
                 risk = r["date"]
-            if stockout is None and r["level"] < 0:
+            if stockout is None and low < 0:
                 stockout = r["date"]
         return risk, stockout
 
@@ -173,12 +189,15 @@ class Policy:
         """(R hiệu lực tới lần kiểm tra kế tiếp, T hiệu lực, hôm nay có phải ngày kiểm tra, ngày kiểm tra kế tiếp)."""
         i = self.i
         R, T = max(i.review_days, 1), max(i.target_days, i.review_days, 1)
-        if i.group == "B" and R == 7:
-            ahead = (i.review_weekday - i.today.weekday()) % 7
-            review_today = ahead == 0
-            r_eff = ahead or 7
+        if R == 1:
+            review_today, r_eff = True, 1
         else:
-            review_today, r_eff = True, R
+            anchor = i.review_anchor
+            if anchor is None:
+                anchor = EPOCH + timedelta(days=(i.review_weekday if R % 7 == 0 else 0))
+            k = (i.today - anchor).days % R
+            review_today = k == 0
+            r_eff = R - k if k else R
         t_eff = max(r_eff, T - (R - r_eff))
         return r_eff, t_eff, review_today, i.today + timedelta(days=r_eff)
 
@@ -216,19 +235,31 @@ class Policy:
         risk, stockout = self.scan(rows)
         order_by = self.business_days_before(risk, ell + 1) if risk else None
         order_now = order_by is not None and order_by <= i.today
+        arrival = i.today + timedelta(days=ell)
+        # Kiểm tra định kỳ: chỉ vào ngày kiểm tra, so vị thế tồn với s. Giám sát liên tục: bất kỳ lúc nào, khi ngày phải
+        # đặt rơi vào trước lần kiểm tra kế tiếp (đợi tới lần kiểm tra sau thì hàng về không kịp).
         triggered = review_today and ip_s <= s
         late_risk = order_by is not None and order_by < next_review
         need = triggered or late_risk
+        trigger = "định kỳ" if triggered else "giám sát liên tục" if late_risk else None
+        # Thiếu trước khi đơn đặt hôm nay kịp về: mua thường không cứu được, phải thúc giao hoặc mua gấp.
+        urgent = risk is not None and risk <= arrival
         q0 = max(0.0, S - ip_S)
-        arrival = i.today + timedelta(days=ell)
         # Lô về sau ngày rủi ro nằm trong cửa sổ vẫn được IP tính; dòng tồn theo ngày mới thấy khoảng thiếu trước khi
-        # lô đó về, nên lấy kết luận khắt khe hơn (mục 6.6, 8.2).
+        # lô đó về, nên lấy kết luận khắt khe hơn (mục 6.6, 8.2). Lô mới về cuối ngày `arrival`: ngày đó chỉ được bù ở
+        # tồn cuối ngày, các ngày sau được bù cả tồn trước khi hàng về.
         end_S = i.today + timedelta(days=n_S)
-        gap = max([r["safety"] - r["level"] for r in rows if arrival <= r["date"] <= end_S] or [0.0])
+        gap = max([r["safety"] - (r["level"] if r["date"] == arrival else r["before_arrival"])
+                   for r in rows if arrival <= r["date"] <= end_S] or [0.0])
         if gap > q0 + 1e-9 and risk is not None:
             notes.append(f"Dòng tồn thiếu {fmt(gap)} {i.unit} trước khi lô đang về tới; lượng đặt tính theo dòng tồn.")
             q0 = gap
-        before = rows[(arrival - i.today).days - 1]["level"] if (arrival - i.today).days >= 1 else rows[0]["level"]
+        if urgent:
+            short = max([r["safety"] - r["before_arrival"] for r in rows if r["date"] <= arrival] or [0.0])
+            if short > q0:
+                q0 = short
+        idx = (arrival - i.today).days
+        before = rows[idx - 1]["level"] if idx >= 1 else rows[0]["level"]
         old_stock = max(0.0, before)
         caps = {}
         if i.shelf_life:
@@ -237,37 +268,77 @@ class Policy:
         if i.capacity:
             caps["sức chứa"] = round(max(0.0, i.capacity - old_stock), 2)
         packs, binding, expiry_excess = 0, None, 0.0
+        infeasible, conflict, options = False, None, []
         pack = i.pack if i.pack and i.pack > 0 else 1.0
+        action, expedite_po, expedite_day = self.choose_action(need, risk, n_S, horizon, arrival)
         if need and q0 > 0:
             if i.group == "B" and q0 < pack / 2 and not order_now:
                 need = False
                 notes.append(f"Lượng thiếu {fmt(q0)} {i.unit} dưới nửa {i.pack_label}: không mua tuần này.")
             else:
                 packs = max(_ceil(q0 / pack), i.moq)
-                limit = min(caps.values()) if caps else None
-                if limit is not None and packs * pack > limit + 1e-9:
-                    binding = min(caps, key=caps.get)
-                    floor_packs = _floor(limit / pack)
-                    if floor_packs >= max(i.moq, 1) and ip_s + floor_packs * pack >= s:
-                        packs = floor_packs
-                        notes.append(f"Giới hạn bởi {binding}: mua {packs} {i.pack_label}, lần mua kế tiếp sẽ sớm hơn "
+                reach = max(_ceil(max(s - ip_s, 0) / pack), i.moq)  # số gói nhỏ nhất giữ vị thế tồn không dưới s
+                room = caps.get("sức chứa")
+                if room is not None and packs * pack > room + 1e-9:
+                    # Sức chứa là giới hạn vật lý: không bao giờ đề xuất vượt.
+                    binding = "sức chứa"
+                    fit = _floor(room / pack)
+                    if fit >= i.moq and ip_s + fit * pack >= s:
+                        packs = fit
+                        notes.append(f"Giới hạn bởi sức chứa: mua {packs} {i.pack_label}, lần mua kế tiếp sẽ sớm hơn "
                                      f"{t_eff} ngày.")
                     else:
-                        packs = max(_ceil(max(s - ip_s, 0) / pack), i.moq)
-                        if caps.get("hạn dùng") is not None:
-                            expiry_excess = max(0.0, packs * pack - caps["hạn dùng"])
-                        notes.append(f"Giới hạn bởi {binding} nhưng cần {packs} {i.pack_label} để giữ vị thế tồn "
-                                     f"không dưới s" + (f"; dự kiến hết hạn khoảng {fmt(expiry_excess)} {i.unit}."
-                                                         if expiry_excess > 0 else "."))
-        elif need:
+                        infeasible = True
+                        packs = fit if fit >= i.moq else 0
+                        options = [
+                            f"Chia thành nhiều lần giao nhỏ hơn, mỗi lần không quá {fmt(room)} {i.unit}.",
+                            f"Đổi sang quy cách nhỏ hơn {fmt(pack)} {i.unit} hoặc bỏ lượng đặt tối thiểu {i.moq} "
+                            f"{i.pack_label}.",
+                            "Đổi nhà cung cấp có quy cách hoặc lịch giao phù hợp.",
+                            "Bổ sung chỗ bảo quản rồi khai lại sức chứa.",
+                        ]
+                        notes.append(f"Không khả thi trong sức chứa: cần khoảng {reach} {i.pack_label} để giữ mức phục "
+                                     f"vụ nhưng chỉ chứa thêm được {fmt(room)} {i.unit}"
+                                     + (f"; tạm đề xuất {packs} {i.pack_label} vừa sức chứa." if packs else "."))
+                shelf = caps.get("hạn dùng")
+                if not infeasible and shelf is not None and packs * pack > shelf + 1e-9:
+                    fit = _floor(shelf / pack)
+                    if room is not None:
+                        fit = min(fit, _floor(room / pack))
+                    binding = binding or "hạn dùng"
+                    if fit >= i.moq and ip_s + fit * pack >= s:
+                        packs = fit
+                        binding = "hạn dùng"
+                        notes.append(f"Giới hạn bởi hạn dùng: mua {packs} {i.pack_label}, lần mua kế tiếp sẽ sớm hơn "
+                                     f"{t_eff} ngày.")
+                    else:
+                        # Hạn dùng là giới hạn mềm: xung đột với mức phục vụ, trình cả hai cách cho Chủ quán chọn.
+                        conflict = binding = "hạn dùng"
+                        packs = min(reach, packs)
+                        expiry_excess = max(0.0, packs * pack - shelf)
+                        options = [
+                            f"Mua {packs} {i.pack_label}: giữ mức phục vụ {i.csl}%, dự kiến hết hạn khoảng "
+                            f"{fmt(expiry_excess)} {i.unit}.",
+                            f"Mua {max(fit, 0)} {i.pack_label}: không hết hạn, nhưng có thể thiếu trước lần mua kế tiếp "
+                            f"(mức phục vụ thấp hơn {i.csl}%).",
+                        ]
+                        notes.append(f"Giới hạn bởi hạn dùng xung đột với mức phục vụ; đề xuất {packs} "
+                                     f"{i.pack_label}, dự kiến hết hạn khoảng {fmt(expiry_excess)} {i.unit}.")
+        elif need and action != EXPEDITE and not urgent:
             need = False  # vị thế tồn đã đủ tới mức mục tiêu
+        if not need:
+            action, expedite_po, expedite_day = NONE, None, None
+        elif action != EXPEDITE and urgent:
+            notes.append("Có thể thiếu trước khi đơn đặt hôm nay kịp về: cân nhắc mua gấp hoặc nhờ giao ngay.")
         quantity = round(packs * pack, 2)
         delta = round(quantity - q0, 2) if packs else 0.0
-        action, expedite_po = self.choose_action(need, risk, rows, n_S, horizon)
-        if not need:
-            action = NONE
-        if action == EXPEDITE:
+        if action == EXPEDITE and packs:
             notes.append("Nếu nhà cung cấp không giao sớm được, mua bổ sung theo số đề xuất.")
+        sig_flags = i.sigma_measured or []
+
+        def measured(h):
+            return bool(sig_flags[h - 1]) if 0 < h <= len(sig_flags) else (i.sigma_measured is None)
+
         result = {
             "today": i.today, "f0": round(i.f0, 3), "k": self.k, "csl": i.csl, "group": i.group,
             "review_days": i.review_days, "target_days": i.target_days, "review_today": review_today,
@@ -285,6 +356,9 @@ class Policy:
             "order_by": order_by, "order_now": order_now, "triggered": triggered, "need": need, "q0": round(q0, 2),
             "caps": caps, "binding": binding, "packs": packs, "quantity": quantity, "delta": delta,
             "expiry_excess": round(expiry_excess, 2), "action": action, "expedite_po": expedite_po,
+            "expedite_day": expedite_day, "urgent": bool(urgent and need), "trigger": trigger if need else None,
+            "infeasible": infeasible, "conflict": conflict, "options": options,
+            "sigma_s_measured": measured(h_s), "sigma_S_measured": measured(h_S),
             "notes": notes, "cover_days": self.cover_days(rows), "stockout_part": self.stockout_part(rows, stockout),
         }
         result["reason"] = reason(result, i)
@@ -300,42 +374,42 @@ class Policy:
             total += self.d(t) if t in self.i.daily else filler
         return total
 
-    def choose_action(self, need, risk, rows, n_S, horizon):
-        """Mua, Mua bổ sung (đã có lô đang về hoặc lô về sau ngày rủi ro), Thúc giao (đưa lô về sau ngày rủi ro lên sớm
-        thì hết rủi ro trong cửa sổ mục tiêu)."""
+    def choose_action(self, need, risk, n_S, horizon, arrival):
+        """Mua, Mua bổ sung (đã có lô đang về hoặc lô về sau ngày rủi ro), Thúc giao (đề nghị nhà cung cấp giao trước giờ
+        mở cửa một ngày sớm hơn thì hết rủi ro trong cửa sổ mục tiêu). Trả (hành động, mã đơn, ngày đề nghị giao)."""
         i = self.i
         if not need:
-            return NONE, None
-        arrival = i.today + timedelta(days=i.exposure)
+            return NONE, None, None
         end = i.today + timedelta(days=n_S)
-        late_lots = [lot for lot in i.lots if risk and lot.arrival > risk and lot.status != "nhap"]
+        first_day = i.today if i.f0 > 0 else i.today + timedelta(days=1)
+        late_lots = [lot for lot in i.lots if risk and lot.arrival >= risk and lot.status != "nhap"]
         late_lots += [lot for lot in i.excluded if lot.status == "giao_cham"]
         for lot in sorted(late_lots, key=lambda x: x.arrival):
-            moved = [x for x in i.lots if x is not lot] + [Lot(lot.quantity, arrival, lot.status, lot.po_id)]
+            day = max(min(lot.arrival, arrival), first_day)
+            moved = [x for x in i.lots if x is not lot] + [Lot(lot.quantity, day, lot.status, lot.po_id, at_start=True)]
             r2, _ = self.scan(self.timeline(horizon, moved))
             if r2 is None or r2 > end:
-                return EXPEDITE, lot.po_id
+                return EXPEDITE, lot.po_id, day
         if i.lots or i.excluded:
-            return TOP_UP, None
-        return BUY, None
+            return TOP_UP, None, None
+        return BUY, None, None
 
     def cover_days(self, rows):
         """Số ngày bán đủ dùng theo nhu cầu kỳ vọng tính từ bây giờ, có phần lẻ của ngày hết hàng."""
         f0 = self.i.f0
         start = self.i.available - self.i.committed
-        if f0 > 0 and rows[0]["level"] < 0:
+        if f0 > 0 and rows[0]["before_arrival"] < 0:
             today_demand = rows[0]["demand"]
             return round(f0 * max(0.0, start) / today_demand, 1) if today_demand > 0 else 0.0
         prev = rows[0]["level"]
         for j, r in enumerate(rows):
             if j == 0:
                 continue
-            if r["level"] < 0:
+            if r["before_arrival"] < 0:
                 frac = prev / r["demand"] if r["demand"] > 0 else 0
                 return round((f0 if f0 > 0 else 0) + j - 1 + max(0.0, min(1.0, frac)), 1)
             prev = r["level"]
         return None
-
 
     def stockout_part(self, rows, stockout):
         """Phần của ngày hết hàng đã bán được trước khi hết (0 là đầu ngày, 1 là cuối ngày)."""
@@ -384,9 +458,12 @@ def reason(r, i):
             target = f"; có thể thiếu từ {day_label(r['risk_date'])} trước khi hàng về, nên cân nhắc mua gấp"
         else:
             target = ""
-        parts.append(f"Cần đặt {when} {r['packs']} {i.pack_label}{target}.")
+        if r["infeasible"]:
+            parts.append(f"Không khả thi trong sức chứa; xem các cách xử lý.")
+        else:
+            parts.append(f"Cần đặt {when} {r['packs']} {i.pack_label}{target}.")
     elif r["action"] == EXPEDITE:
-        parts.append(f"Đề nghị nhà cung cấp giao sớm, không muộn hơn {day_label(r['risk_date'])}.")
+        parts.append(f"Đề nghị nhà cung cấp giao trước giờ mở cửa {day_label(r['expedite_day'])}.")
     elif r["risk_date"]:
         parts.append(f"Chưa cần mua; ngày phải đặt chậm nhất {day_label(r['order_by'])}.")
     else:
