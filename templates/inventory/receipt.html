@@ -13,6 +13,7 @@
     <select class="input" name="ingredient_{{ n }}" aria-label="Nguyên liệu dòng {{ forloop.counter }}"><option value="">Nguyên liệu</option>{% for i in ingredients %}<option value="{{ i.pk }}">{{ i.name }} ({{ i.get_unit_display }})</option>{% endfor %}</select>
     <input class="input" name="quantity_{{ n }}" inputmode="decimal" placeholder="Số lượng thực nhận" aria-label="Số lượng dòng {{ forloop.counter }}">
     <input class="input" name="price_{{ n }}" inputmode="numeric" placeholder="Đơn giá (đ / đơn vị tính)" aria-label="Đơn giá dòng {{ forloop.counter }}">
+    <input class="input" type="date" name="expiry_{{ n }}" aria-label="Hạn sử dụng của lô dòng {{ forloop.counter }} (không bắt buộc)" title="Hạn sử dụng của lô (không bắt buộc)">
     <select class="input" name="po_{{ n }}" aria-label="Lần đặt dòng {{ forloop.counter }}"><option value="">Không theo lần đặt</option>{% for po in open_pos %}<option value="{{ po.pk }}">{{ po }} · còn {{ po.remaining|floatformat:"-2g" }} · {{ po.get_status_display }}</option>{% endfor %}</select>
   </fieldset>
   {% endfor %}

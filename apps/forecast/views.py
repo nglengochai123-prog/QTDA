@@ -204,3 +204,120 @@ def history_import(request):
         return redirect("forecast:history")
     return render(request, "forecast/history.html", {"batches": HistoryBatch.objects.select_related("imported_by"),
                                                      "kinds": HistoryBatch.Kind.choices})
+
+
+# ---------------- Kế hoạch mua nguyên liệu (thiết kế mua nguyên liệu mục 9) ----------------
+
+def _d(value):
+    """Ngày lưu dạng ISO trong kết quả tính → date để hiển thị."""
+    from datetime import date
+
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def _plan_view(plan):
+    from . import methods, policy
+
+    r = dict(plan.result or {})
+    cfg = r.get("settings") or {}
+    for k in ("risk_date", "stockout_date", "order_by", "next_review", "today"):
+        r[k] = _d(r.get(k))
+    for k in ("window_s", "window_S"):
+        r[k] = [_d(x) for x in r.get(k) or []]
+    r["window_S_end"] = r["window_S"][-1] if r["window_S"] else None
+    for k in ("counted_lots", "uncounted_lots", "excluded_lots"):
+        r[k] = [{**lot, "arrival": _d(lot.get("arrival"))} for lot in r.get(k) or []]
+    r["timeline"] = [{**row, "date": _d(row.get("date"))} for row in r.get("timeline") or []]
+    r["periods"] = [{**p, "from": _d(p.get("from")), "to": _d(p.get("to"))} for p in r.get("periods") or []]
+    fc = plan.forecast or {}
+    return {"plan": plan, "r": r, "cfg": cfg, "fc": fc, "action_label": policy.ACTION_LABELS.get(plan.action, ""),
+            "method_label": methods.METHOD_LABELS.get(fc.get("method"), "Chưa có"),
+            "stage_label": methods.STAGE_LABELS.get(fc.get("stage"), ""),
+            "group": planning_group(plan)}
+
+
+def planning_group(plan):
+    from . import planning
+
+    return planning.group_label(plan, timezone.localdate())
+
+
+@capability_required(Cap.FORECASTS)
+@require_http_methods(["GET", "POST"])
+def plans(request):
+    """Danh sách nguyên liệu theo ngày phải đặt: Đặt ngay, Đặt trong 2 ngày, Theo dõi, Đủ hàng (mục 9.2)."""
+    from . import planning
+    from .models import PlanRun
+
+    if request.method == "POST" and request.POST.get("action") == "tinh_lai":
+        run = planning.run_full(user=request.user, kind=PlanRun.Kind.MANUAL)
+        record(Action.CREATE, request=request, obj=run, object_type="forecast.PlanRun", after=run.summary)
+        messages.success(request, f"Đã tính lại kế hoạch mua cho {run.summary.get('nguyen_lieu', 0)} nguyên liệu.")
+        return redirect("forecast:plans")
+    today = timezone.localdate()
+    rows = sorted(planning.current_plans(), key=lambda p: planning.sort_key(p, today))
+    groups = OrderedDict()
+    for p in rows:
+        groups.setdefault(planning.group_label(p, today), []).append(_plan_view(p))
+    last_run = PlanRun.objects.filter(kind__in=[PlanRun.Kind.FULL, PlanRun.Kind.MANUAL]).first()
+    return render(request, "forecast/plans.html", {"groups": groups, "last_run": last_run, "today": today})
+
+
+@capability_required(Cap.FORECASTS)
+@require_http_methods(["GET", "POST"])
+def plan_detail(request, ingredient_id):
+    """Chi tiết một nguyên liệu và bốn thao tác: Chấp nhận, Sửa rồi chấp nhận, Bỏ qua, Đã báo nhà cung cấp."""
+    from apps.inventory import operations as ops
+    from apps.inventory.models import Ingredient, PurchaseOrder
+
+    from . import planning
+    from .models import IngredientPlan
+
+    ing = get_object_or_404(Ingredient.objects.select_related("main_supplier"), pk=ingredient_id)
+    if request.method == "POST":
+        p = request.POST
+        action = p.get("action")
+        try:
+            if action in ("chap_nhan", "bo_qua"):
+                plan = get_object_or_404(IngredientPlan, pk=p.get("plan"), ingredient=ing)
+                if action == "chap_nhan":
+                    qty = Decimal(str(p.get("quantity", "")).replace(",", "."))
+                    expected = timezone.datetime.fromisoformat(p.get("expected_date", "")).date()
+                    po = planning.accept(request.user, plan, qty, p.get("note", ""), expected,
+                                         p.get("operation_key") or uuid.uuid4().hex)
+                    messages.success(request, f"Đã tạo đơn Nháp {po.quantity.normalize():f} {ing.get_unit_display()} "
+                                              f"{ing.name}. Báo nhà cung cấp rồi bấm Đã báo nhà cung cấp.")
+                else:
+                    planning.skip(request.user, plan, p.get("reason", ""), p.get("operation_key") or uuid.uuid4().hex)
+                    messages.success(request, f"Đã bỏ qua đề xuất {ing.name}; đề xuất vẫn được lưu để đánh giá.")
+            elif action == "da_bao_ncc":
+                expected = p.get("expected_date")
+                ops.mark_ordered(request.user, p.get("po"),
+                                 timezone.datetime.fromisoformat(expected).date() if expected else None)
+                messages.success(request, "Đơn đã chuyển sang Đã đặt.")
+            elif action == "huy_don":
+                ops.cancel_order(request.user, p.get("po"), p.get("reason", ""))
+                messages.success(request, "Đã hủy đơn.")
+        except (InvalidOperation, ValueError):
+            messages.error(request, "Nhập số lượng và ngày giao dự kiến hợp lệ.")
+        except (ValidationError, OperationKeyError) as error:
+            for m in getattr(error, "messages", [str(error)]):
+                messages.error(request, m)
+        return redirect("forecast:plan", ingredient_id=ing.pk)
+    plan = IngredientPlan.objects.filter(ingredient=ing, is_current=True).first()
+    ctx = _plan_view(plan) if plan else {"plan": None}
+    ctx.update({
+        "ing": ing, "operation_key": uuid.uuid4().hex,
+        "expected_date": timezone.localdate() + timedelta(days=ing.exposure_days),
+        "orders": PurchaseOrder.objects.filter(ingredient=ing).exclude(
+            status__in=[PurchaseOrder.Status.DELIVERED, PurchaseOrder.Status.CANCELLED]).order_by("expected_date"),
+        "decisions": OrderSuggestion.objects.filter(ingredient=ing, plan__isnull=False).select_related(
+            "decided_by", "purchase_order")[:10],
+        "today": timezone.localdate(),
+    })
+    return render(request, "forecast/plan.html", ctx)

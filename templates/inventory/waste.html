@@ -12,6 +12,7 @@
   <fieldset class="option-group"><legend>Lý do</legend><div class="choice-row">
     {% for v, l in reasons %}<label class="pick"><input type="radio" name="reason" value="{{ v }}" required><span>{{ l }}</span></label>{% endfor %}</div></fieldset>
   <div class="field"><label for="w-note">Ghi chú</label><input class="input" id="w-note" name="note" maxlength="255"></div>
+  {% if is_owner %}<label class="pick"><input type="checkbox" name="one_off" value="1"><span>Sự cố đơn lẻ, không tính vào hao hụt thường lệ khi dự báo</span></label>{% endif %}
   <button class="btn btn-primary btn-block" type="submit">Lưu hao hụt</button>
 </form>
 {% if recent %}

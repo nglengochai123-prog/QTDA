@@ -11,4 +11,6 @@ urlpatterns = [
     path("du-bao/danh-gia/", views.evaluation, name="evaluation"),
     path("du-bao/cach-tinh/<int:size_id>/", views.choose_method, name="choose_method"),
     path("du-bao/lich-su/", views.history_import, name="history"),
+    path("du-bao/ke-hoach-mua/", views.plans, name="plans"),
+    path("du-bao/ke-hoach-mua/<int:ingredient_id>/", views.plan_detail, name="plan"),
 ]

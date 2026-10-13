@@ -193,7 +193,10 @@ register(Resource(
     key="nguyen-lieu", title="Nguyên vật liệu", singular="Nguyên vật liệu", model=Ingredient, cap=Cap.MASTER_INVENTORY,
     fields=["name", "unit", "pack_size", "pack_label", "main_supplier", "lead_time_days", "order_cycle_days",
             "shelf_life_days", "storage_capacity", "safety_stock", "safety_stock_is_provisional", "is_critical",
-            "count_accumulated_threshold", "is_active"],
+            "count_accumulated_threshold", "is_active",
+            # Chính sách mua (thiết kế mua nguyên liệu mục 7.4)
+            "policy_group", "service_level", "review_period_days", "target_cycle_days", "review_weekday", "moq_packs",
+            "exposure_days", "weekly_low", "weekly_typical", "weekly_high"],
     columns=[("Tên", "name"), ("Đơn vị", "unit"), ("Nhà cung cấp", "main_supplier"),
              ("Tồn an toàn", "safety_stock"), ("Trọng yếu", "is_critical"), ("Đang dùng", "is_active")],
     search=("name",), filters=[("trong-yeu", "Trọng yếu", "is_critical", YES_NO),
