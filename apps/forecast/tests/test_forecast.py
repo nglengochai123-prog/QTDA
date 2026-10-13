@@ -123,16 +123,23 @@ class ServiceTests(ForecastBase):
         self.assertEqual(self.release().series.get(size=self.size).method, "bayes")
 
     def test_ac66_ac67_order_needed_alert_counts_only_timely_lots_and_closes(self):
-        self.release()
-        morning = timezone.make_aware(timezone.datetime.combine(self.today, timezone.datetime.min.time())) + timedelta(hours=8)
+        """Cảnh báo Cần đặt hàng theo kế hoạch mua: lô về sau cửa sổ không che rủi ro; đặt đủ thì tự đóng."""
+        from apps.forecast import planning
+
         milk = self.d["milk"]
-        # Lô giao sau 5 ngày không kịp thời gian giao 2 ngày nên không tính
+        milk.weekly_low, milk.weekly_typical, milk.weekly_high = 3500, 4200, 5000  # khoảng 600 ml mỗi ngày
+        milk.save()
+        morning = timezone.make_aware(timezone.datetime.combine(self.today, timezone.datetime.min.time())) + timedelta(hours=8)
+        # Lô giao sau 5 ngày nằm ngoài cửa sổ kích hoạt nên không được tính
         PurchaseOrder.objects.create(store=self.d["store"], supplier=self.supplier, ingredient=milk, quantity=5000,
                                      expected_date=self.today + timedelta(days=5), created_by=self.owner)
-        st = services.ordering_status(milk, now=morning)
-        self.assertEqual(st["lots_by_arrival"], 0)
-        self.assertTrue(st["need_order"])  # 1.000 ml − nhu cầu 2 ngày < 300 + ... với nhu cầu ~600 ml/ngày
-        self.assertEqual(st["latest_order_date"], self.today)
+        planning.run_full(morning)
+        plan = milk.plans.get(is_current=True)
+        self.assertEqual(plan.result["ip_s"], 1000)
+        self.assertEqual(plan.action, "thuc_giao")  # đưa lô 5.000 ml về sớm là hết rủi ro
+        self.assertGreater(plan.packs, 0)  # phương án mua bổ sung nếu không giao sớm được
+        self.assertTrue(plan.alert_on)
+        self.assertLessEqual(plan.order_by, self.today)
         alerts.sync(morning)
         alert = Alert.objects.get(kind="can_dat_hang")
         self.assertEqual((alert.assignee_role, alert.severity), ("chu_quan", "quan_trong"))
@@ -140,6 +147,7 @@ class ServiceTests(ForecastBase):
         self.assertEqual(Alert.objects.filter(kind="can_dat_hang").count(), 1)  # không trùng
         PurchaseOrder.objects.create(store=self.d["store"], supplier=self.supplier, ingredient=milk, quantity=5000,
                                      expected_date=self.today + timedelta(days=1), created_by=self.owner)
+        planning.recompute(milk.pk, morning)
         alerts.sync(morning)
         alert.refresh_from_db()
         self.assertEqual((alert.status, alert.auto_closed), ("da_dong", True))

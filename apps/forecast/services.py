@@ -100,7 +100,9 @@ def option_counts(start, end):
 
 
 def shortage_flags(start, end):
-    """{size_id: {ngày}}: ngày có trường hợp thiếu một nguyên liệu nằm trong định mức của kích cỡ đó."""
+    """{size_id: {ngày}}: ngày có trường hợp thiếu một nguyên liệu nằm trong định mức của kích cỡ đó, hoặc của một tùy
+    chọn của món (thiếu nguyên liệu của tùy chọn cũng giới hạn số bán của mọi kích cỡ của món)."""
+    from apps.catalog.models import ItemSize
     from apps.inventory.models import RecipeLine, ShortageCase
 
     by_ing = defaultdict(set)
@@ -109,9 +111,14 @@ def shortage_flags(start, end):
     out = defaultdict(set)
     if not by_ing:
         return out
-    for line in RecipeLine.objects.filter(ingredient_id__in=by_ing, version__status="ap_dung").select_related("size"):
+    by_item = defaultdict(set)
+    for line in RecipeLine.objects.filter(ingredient_id__in=by_ing, version__status="ap_dung").select_related("version"):
         if line.size_id:
             out[line.size_id] |= by_ing[line.ingredient_id]
+        elif line.option_id:
+            by_item[line.version.item_id] |= by_ing[line.ingredient_id]
+    for size in ItemSize.objects.filter(item_id__in=by_item):
+        out[size.pk] |= by_item[size.item_id]
     return out
 
 
@@ -526,8 +533,8 @@ def ordering_status(ingredient, rel=None, now=None):
             break
     result["latest_order_date"] = today if result["need_order"] else latest
     # Khoảng 80% của nhu cầu trong thời gian giao, từ đường mô phỏng (thông tin thêm, không thay quy tắc BRU-22)
-    idx = lead + offset
-    if fc.paths_sample and idx < len(fc.paths_sample[0]):
+    idx = lead + offset - 1  # cùng cửa sổ với cột kỳ vọng: từ hôm nay, đủ `lead` ngày
+    if lead > 0 and fc.paths_sample and idx < len(fc.paths_sample[0]):
         base = [p[offset - 1] if offset > 0 else 0 for p in fc.paths_sample]
         vals = sorted(p[idx] - b for p, b in zip(fc.paths_sample, base))
         result["lead_demand_q90"] = dglm.quantile(vals, 0.9)

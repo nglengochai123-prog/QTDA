@@ -73,14 +73,19 @@ def ordering(request):
         if ing.main_supplier_id is None:
             messages.error(request, f"{ing.name} chưa có nhà cung cấp chính.")
             return redirect("forecast:ordering")
+        def save_suggestion(po):
+            # Lưu đề xuất trong cùng thao tác chạy một lần: gửi lại biểu mẫu chỉ trả về đơn đã tạo.
+            OrderSuggestion.objects.create(
+                store=ing.store, release=rel, ingredient=ing, components=_jsonable(st, sug),
+                suggested_quantity=suggested, final_quantity=qty, purchase_order=po, decided_by=request.user,
+                decision_note=note,
+                decision=OrderSuggestion.Decision.ACCEPT if qty == suggested else OrderSuggestion.Decision.EDIT)
+
         try:
             with transaction.atomic():
-                po = ops.create_purchase_order(request.user, ing.main_supplier_id, ing.pk, qty, expected,
-                                               operation_key=request.POST.get("operation_key") or uuid.uuid4().hex)
-                OrderSuggestion.objects.create(
-                    store=ing.store, release=rel, ingredient=ing, components=_jsonable(st, sug),
-                    suggested_quantity=suggested, final_quantity=qty, purchase_order=po, decided_by=request.user,
-                    decision_note=note)
+                ops.create_purchase_order(request.user, ing.main_supplier_id, ing.pk, qty, expected,
+                                          operation_key=request.POST.get("operation_key") or uuid.uuid4().hex,
+                                          on_created=save_suggestion)
         except (ValidationError, OperationKeyError) as error:
             for m in getattr(error, "messages", [str(error)]):
                 messages.error(request, m)

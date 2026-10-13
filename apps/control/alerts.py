@@ -6,9 +6,10 @@ Mỗi loại cảnh báo có một hàm thu thập các đối tượng đang th
 - điều kiện không còn: tự đóng kèm ghi chú tự động;
 - quá hạn: chuyển cấp lên Chủ quán, hoặc nhắc lại nếu Chủ quán là người xử lý chính.
 Mỗi đối tượng có tối đa một cảnh báo đang mở cho cùng một loại. Đóng tay phải có ghi chú; đối tượng
-đã được đóng tay thì không tự mở lại cho đến khi điều kiện mới phát sinh trên đối tượng khác.
+đã được đóng tay thì không tự mở lại. Vì vậy khóa đối tượng phải phân biệt từng lần phát sinh: cảnh báo Cần đặt hàng
+khóa theo nguyên liệu và đợt rủi ro (mục 8.4 thiết kế mua nguyên liệu), nên khi tồn đã lên lại rồi xuống, đợt mới có
+cảnh báo mới dù cảnh báo đợt cũ đã đóng tay.
 Cảnh báo mức Thông tin (Sắp hết, khung giờ quá tải) không tạo ở đây; chúng hiện ở bảng điều khiển và báo cáo.
-Loại "Cần đặt hàng" chờ logic dự báo nên chưa có.
 """
 
 from datetime import datetime, time, timedelta
@@ -169,19 +170,18 @@ def _late_count(now):
 
 
 def _order_needed(now):
-    """FR-29, BRU-22, AC-66, AC-67: tồn dự kiến khi hàng về thấp hơn tồn an toàn; tự đóng khi đã đặt đủ."""
-    from apps.forecast.services import orders_needed
+    """FR-29, mục 9.3 thiết kế mua nguyên liệu: ngày phải đặt chậm nhất là hôm nay hoặc đã qua; tự đóng khi đã có đơn
+    Nháp hoặc đơn đặt che được rủi ro. Đơn Nháp tới ngày phải đặt mà chưa báo nhà cung cấp cũng được nhắc."""
+    from apps.forecast.planning import alert_items
 
-    for st in orders_needed(now):
-        ing = st["ingredient"]
-        unit = ing.get_unit_display()
-        latest = st["latest_order_date"]
-        detail = (f"Tồn có thể dùng {st['available']:,.0f} {unit}, hàng đang về kịp {st['lots_by_arrival']:,.0f}, "
-                  f"nhu cầu ước tính {st['lead'] } ngày giao hàng {st['lead_demand']:,.0f}; tồn dự kiến khi hàng về "
-                  f"{st['projected']:,.0f} dưới tồn an toàn {st['safety']:,.0f}. Đặt muộn nhất {latest:%d/%m/%Y}.").replace(",", ".")
-        yield {"subject": f"dat-{ing.pk}", "title": f"Cần đặt hàng: {ing.name}", "detail": detail, "assignee": None,
-               "role": OWNER, "severity": Alert.Severity.IMPORTANT, "due": _end_of_day(latest),
-               "link": "/du-bao/dat-hang/", "escalate": False, "kind": Alert.Kind.ORDER_NEEDED}
+    for item in alert_items(timezone.localdate(now)):
+        ing = item["ingredient"]
+        title = (f"Đơn nháp chưa báo nhà cung cấp: {ing.name}" if item["episode"].startswith("nhap-")
+                 else f"Cần đặt hàng: {ing.name}")
+        yield {"subject": f"dat-{ing.pk}-{item['episode']}"[:60], "title": title, "detail": item["detail"],
+               "assignee": None, "role": OWNER, "severity": Alert.Severity.IMPORTANT,
+               "due": _end_of_day(max(item["order_by"], timezone.localdate(now))),
+               "link": f"/du-bao/ke-hoach-mua/{ing.pk}/", "escalate": False, "kind": Alert.Kind.ORDER_NEEDED}
 
 
 COLLECTORS = [

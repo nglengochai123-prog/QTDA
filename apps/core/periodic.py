@@ -18,6 +18,7 @@ def run_all(now=None):
         "dat_hang_giao_cham": [po.pk for po in inventory_ops.refresh_late(timezone.localdate(now))],
         "nhac_thieu_gio_ra": _remind_missing_out(now),
         "du_bao": _daily_forecast(now),
+        "ke_hoach_mua": _purchase_plans(now),
         "canh_bao": _sync_alerts(now),
     }
 
@@ -28,6 +29,13 @@ def _daily_forecast(now):
 
     rel = ensure_today_release(now)
     return rel.pk if rel else None
+
+
+def _purchase_plans(now):
+    """Tính toàn bộ kế hoạch mua nguyên liệu một lần sau mỗi giờ đóng cửa (mục 5.1 thiết kế mua nguyên liệu)."""
+    from apps.forecast.planning import ensure_daily
+
+    return ensure_daily(now)
 
 
 def _sync_alerts(now):

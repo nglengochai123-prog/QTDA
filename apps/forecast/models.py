@@ -125,9 +125,20 @@ class MethodDecision(StoreScopedModel):
 
 
 class OrderSuggestion(StoreScopedModel):
-    """Đề xuất số lượng đặt (BRU-24) cùng quyết định cuối cùng của Chủ quán (NFR-22: lưu cả hai)."""
+    """Đề xuất số lượng đặt (BRU-24) cùng quyết định cuối cùng của Chủ quán (NFR-22: lưu cả hai).
 
-    release = models.ForeignKey(ForecastRelease, on_delete=models.PROTECT, related_name="+")
+    Đề xuất từ kế hoạch nguyên liệu (thiết kế mua nguyên liệu mục 9.2) gắn với bản tính `plan`; đề xuất cũ gắn với lần
+    phát hành dự báo theo món `release`."""
+
+    class Decision(models.TextChoices):
+        ACCEPT = "chap_nhan", "Chấp nhận"
+        EDIT = "sua", "Sửa rồi chấp nhận"
+        SKIP = "bo_qua", "Bỏ qua"
+
+    release = models.ForeignKey(ForecastRelease, on_delete=models.PROTECT, null=True, blank=True, related_name="+")
+    plan = models.ForeignKey("forecast.IngredientPlan", verbose_name="Bản tính", on_delete=models.PROTECT, null=True,
+                             blank=True, related_name="decisions")
+    decision = models.CharField("Quyết định", max_length=12, choices=Decision.choices, blank=True)
     ingredient = models.ForeignKey("inventory.Ingredient", on_delete=models.PROTECT, related_name="+")
     components = models.JSONField("Các thành phần của phép tính", default=dict)
     suggested_quantity = models.DecimalField("Số lượng đề xuất", max_digits=12, decimal_places=2)
@@ -203,3 +214,106 @@ class SeriesConfig(models.Model):
     evidence = models.JSONField(default=dict)
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, related_name="+")
     approved_at = models.DateTimeField(null=True)
+
+
+class IngredientDailyUsage(models.Model):
+    """Chuỗi tiêu hao một nguyên liệu trong một ngày (thiết kế mua nguyên liệu mục 5), dựng lại mỗi lần tính toàn bộ.
+
+    `sales` là tiêu hao của ly có tính tiền quy theo định mức hiện hành (U b), `sales_as_sold` theo lượng chụp trên dòng
+    đơn lúc bán; `voided` là ly đã pha rồi hủy (U h). Hao hụt vận hành và hao hụt do tồn kho tách riêng. Cờ ngày quyết
+    định ngày có được dùng để học và đo sai số hay không.
+    """
+
+    class Source(models.TextChoices):
+        SYSTEM = "he_thong", "Dữ liệu bán trên hệ thống"
+        IMPORTED = "tep", "Lịch sử bán nhập từ tệp"
+
+    ingredient = models.ForeignKey("inventory.Ingredient", on_delete=models.CASCADE, related_name="daily_usage")
+    date = models.DateField("Ngày")
+    source = models.CharField("Nguồn", max_length=10, choices=Source.choices, default=Source.SYSTEM)
+    day_status = models.CharField("Trạng thái ngày", max_length=14)
+    sales = models.FloatField("Tiêu hao bán hàng theo định mức hiện hành", default=0)
+    sales_as_sold = models.FloatField("Tiêu hao bán hàng theo định mức lúc bán", default=0)
+    voided = models.FloatField("Ly đã pha rồi hủy", default=0)
+    waste_operational = models.FloatField("Hao hụt vận hành", default=0)
+    waste_one_off = models.FloatField("Hao hụt sự cố đơn lẻ", default=0)
+    waste_stock = models.FloatField("Hư hỏng và hết hạn", default=0)
+    count_adjust = models.FloatField("Điều chỉnh kiểm kê", default=0)
+    consumed_ledger = models.FloatField("Tiêu hao pha chế trong sổ kho", default=0)
+    own_stockout = models.BooleanField("Hết hàng chính nguyên liệu này", default=False)
+    indirect_block = models.BooleanField("Bị chặn gián tiếp do thiếu nguyên liệu khác", default=False)
+    eligible = models.BooleanField("Dùng để học và đo sai số", default=False)
+
+    class Meta:
+        verbose_name = "Tiêu hao nguyên liệu theo ngày"
+        verbose_name_plural = "Tiêu hao nguyên liệu theo ngày"
+        ordering = ["ingredient", "date"]
+        constraints = [models.UniqueConstraint(fields=["ingredient", "date"], name="uniq_usage_ingredient_day")]
+
+
+class PlanRun(TimeStampedModel):
+    """Một lần tính kế hoạch mua: toàn bộ sau khi chốt ngày, theo yêu cầu, hoặc riêng một nguyên liệu sau biến động."""
+
+    class Kind(models.TextChoices):
+        FULL = "toan_bo", "Tính toàn bộ sau khi chốt ngày"
+        MANUAL = "theo_yeu_cau", "Chủ quán yêu cầu tính lại"
+        MOVEMENT = "bien_dong", "Sau biến động tồn"
+
+    kind = models.CharField("Loại", max_length=14, choices=Kind.choices)
+    started_at = models.DateTimeField("Bắt đầu lúc", db_index=True)
+    triggered_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+                                     related_name="+")
+    summary = models.JSONField("Tóm tắt", default=dict)
+
+    class Meta:
+        verbose_name = "Lần tính kế hoạch mua"
+        verbose_name_plural = "Lần tính kế hoạch mua"
+        ordering = ["-started_at"]
+
+
+class IngredientPlan(TimeStampedModel):
+    """Kết quả tính cho một nguyên liệu (mục 9.1): cửa sổ, vị thế tồn, tồn an toàn, s, S, dòng tồn, ngày phải đặt,
+    lượng đề xuất và hành động. Khóa chống trùng là nguyên liệu, ngày tính và mã phiên bản dữ liệu (mục 8.4): cùng dữ
+    liệu thì trả về đúng bản đã có; dữ liệu đổi thì tạo bản mới và đánh dấu bản cũ đã thay thế.
+
+    Lần tính chỉ đọc dữ liệu và ghi kết quả; không lần tính nào tự tạo đơn đặt hàng hay liên hệ nhà cung cấp."""
+
+    class Action(models.TextChoices):
+        BUY = "mua", "Mua"
+        TOP_UP = "mua_bo_sung", "Mua bổ sung"
+        EXPEDITE = "thuc_giao", "Thúc giao"
+        NONE = "khong_can", "Không cần mua"
+        NO_DATA = "thieu_du_lieu", "Chưa đủ dữ liệu"
+
+    ingredient = models.ForeignKey("inventory.Ingredient", on_delete=models.PROTECT, related_name="plans")
+    run = models.ForeignKey(PlanRun, on_delete=models.PROTECT, null=True, blank=True, related_name="plans")
+    calc_date = models.DateField("Ngày tính", db_index=True)
+    calculated_at = models.DateTimeField("Tính lúc")
+    data_hash = models.CharField("Mã phiên bản dữ liệu", max_length=64)
+    data_parts = models.JSONField("Thành phần của mã phiên bản", default=dict)
+    forecast_version = models.CharField("Bản dự báo", max_length=64)
+    forecast = models.JSONField("Dự báo theo ngày và sai số cửa sổ", default=dict)
+    result = models.JSONField("Kết quả tính", default=dict)
+    action = models.CharField("Hành động", max_length=14, choices=Action.choices)
+    order_by = models.DateField("Ngày phải đặt chậm nhất", null=True, blank=True)
+    order_now = models.BooleanField("Đặt ngay", default=False)
+    risk_date = models.DateField("Ngày rủi ro", null=True, blank=True)
+    stockout_date = models.DateField("Ngày dự kiến hết hàng", null=True, blank=True)
+    suggested_quantity = models.DecimalField("Lượng đề xuất", max_digits=14, decimal_places=2, default=0)
+    packs = models.PositiveIntegerField("Số gói đề xuất", default=0)
+    alert_on = models.BooleanField("Cần cảnh báo Cần đặt hàng", default=False)
+    episode_start = models.DateField("Đợt rủi ro bắt đầu", null=True, blank=True)
+    episode_key = models.CharField("Mã đợt rủi ro", max_length=30, blank=True)
+    is_current = models.BooleanField("Bản đang dùng", default=True)
+    superseded_at = models.DateTimeField("Bị thay lúc", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Kế hoạch mua nguyên liệu"
+        verbose_name_plural = "Kế hoạch mua nguyên liệu"
+        ordering = ["-calculated_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(fields=["ingredient", "calc_date", "data_hash"], name="uniq_plan_per_data_version"),
+        ]
+
+    def __str__(self):
+        return f"{self.ingredient.name} · {self.get_action_display()} · {self.calc_date:%d/%m/%Y}"

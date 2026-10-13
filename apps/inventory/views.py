@@ -142,7 +142,8 @@ def receipt(request):
         return redirect("inventory:receipt")
     return render(request, "inventory/receipt.html", {
         "suppliers": Supplier.objects.filter(is_active=True), "ingredients": _ingredients(), "rows": range(4),
-        "open_pos": PurchaseOrder.objects.exclude(status=PurchaseOrder.Status.DELIVERED).select_related("ingredient", "supplier"),
+        "open_pos": PurchaseOrder.objects.exclude(status__in=[PurchaseOrder.Status.DELIVERED,
+                                                              PurchaseOrder.Status.CANCELLED]).select_related("ingredient", "supplier"),
         "sources": SupplierPayment.Source.choices, "operation_key": uuid.uuid4().hex,
     })
 
