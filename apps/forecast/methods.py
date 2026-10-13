@@ -273,7 +273,9 @@ def forecast_ingredient(series, *, today, horizon, estimate=None, delta_level=0.
             vals = [x for _, x, st in series if st == "ok"]
             mean = sum(vals) / len(vals)
             sigma1 = math.sqrt(sum((x - mean) ** 2 for x in vals) / max(len(vals) - 1, 1))
-        out.update(method=method, stage=STAGE_EARLY if eligible >= 14 else STAGE_OWNER,
+        if eligible < 14:
+            warnings.append(f"Mới có {eligible} ngày dữ liệu và chưa có ước tính tuần của Chủ quán: số liệu rất tạm.")
+        out.update(method=method, stage=STAGE_EARLY,
                    sigma=[sigma1 * math.sqrt(h) for h in range(1, H_MAX + 1)],
                    sigma_label="ước lượng tạm, √h × σ1", provisional=True)
         out["daily"] = _predict(series, method, prior, days, delta_level, delta_season)

@@ -1,5 +1,7 @@
 # Dự báo nhu cầu và hỗ trợ đặt hàng
 
+> **Từ 13/10/2026, quyết định mua dùng Kế hoạch mua nguyên liệu** theo `docs/THIET_KE_MUA_NGUYEN_LIEU.md` (màn hình Dự báo › Kế hoạch mua, mã ở `apps/forecast/policy.py`, `methods.py`, `usage.py`, `planning.py`). Cảnh báo Cần đặt hàng lấy từ kế hoạch này. Dự báo số ly theo món dưới đây vẫn giữ cho sắp ca và cho trường hợp món mới, đổi thực đơn (Hướng B của thiết kế); màn hình Đề xuất theo món (cũ) giữ để đối chiếu.
+
 Cập nhật 12/10/2026. Làm theo tệp "Khung lý thuyết dự báo nhu cầu bằng học máy xác suất cho LAM Coffee" của Hai và các quy tắc BRU-21, BRU-22, BRU-24 của BRD. Mã nguồn ở `apps/forecast/`.
 
 ## 1. Cách tính
