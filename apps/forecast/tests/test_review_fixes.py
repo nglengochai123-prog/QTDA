@@ -171,3 +171,49 @@ class SeasonalAdjustmentTests(PlanBase):
         inside = planning.demand(fc, start)
         self.assertAlmostEqual(inside / before, 0.85, places=2)  # cùng thứ, giảm 15%
         self.assertEqual(fc["seasonal"][0]["basis"], "Sinh viên nghỉ hè năm trước")
+
+
+class SeasonNotDoubleCountedTests(SimpleTestCase):
+    def test_season_is_relative_to_off_season_baseline(self):
+        """Rà soát lần 2, điểm 1: nền 100, Chủ quán đặt −15%, mô hình đã học còn 85 thì không giảm thêm (72,25)."""
+        f = methods.residual_season_factor
+        self.assertAlmostEqual(f(-15, 100, 100), 0.85)  # chưa học: áp đủ
+        self.assertAlmostEqual(f(-15, 100, 85) * 85, 85)  # đã học xong: ngừng điều chỉnh
+        self.assertAlmostEqual(f(-15, 100, 92) * 92, 85)  # học một phần: chỉ áp phần còn thiếu
+        self.assertAlmostEqual(f(-15, 100, 80), 1.0)  # mô hình giảm nhiều hơn: không đẩy ngược lên
+        self.assertAlmostEqual(f(20, 100, 110) * 110, 120)
+
+
+class M2SameInitTests(SimpleTestCase):
+    def test_published_m2_uses_same_initialisation_as_evaluated(self):
+        """Rà soát lần 2, điểm 2: ước tính có hiệu lực sau đầu chuỗi thì M2 phát hành cũng khởi tạo từ dữ liệu."""
+        start = date(2026, 3, 2)
+        s = [(start + timedelta(days=j), 100.0 + (j * 37 % 11), "ok") for j in range(90)]
+        day = [s[-1][0] + timedelta(days=1)]
+        late = s[30][0]
+        with_late = methods._predict(s, "M2", None, day, 0.95, 0.99, (700, 760, 820), late)
+        no_estimate = methods._predict(s, "M2", None, day, 0.95, 0.99)
+        self.assertEqual(with_late, no_estimate)
+        from_start = methods._predict(s, "M2", None, day, 0.95, 0.99, (700, 760, 820), start)
+        self.assertNotEqual(from_start, no_estimate)
+        fc = methods.forecast_ingredient(s, today=day[0], horizon=7, estimate=(700, 760, 820), estimate_since=late)
+        self.assertEqual(fc["m2_init"], "du_lieu")
+
+
+class SeasonInPlanTests(PlanBase):
+    def test_adapted_model_is_not_reduced_twice(self):
+        from apps.forecast.models import SeasonalAdjustment
+
+        for j in range(1, 50):
+            day = self.today - timedelta(days=j)
+            self.sell_day(day, 20 if j > 21 else 17)  # mùa bắt đầu 21 ngày trước: giảm 15%
+        SeasonalAdjustment.objects.create(store=self.d["store"], ingredient=self.milk,
+                                          start=self.today - timedelta(days=21), end=self.today + timedelta(days=30),
+                                          percent=-15, basis="Nghỉ hè", created_by=self.owner)
+        fc = planning.build_forecasts(timezone.now())[self.milk.pk]
+        a = fc["seasonal"][0]
+        self.assertEqual(a["baseline"], 600.0)
+        upcoming = sum(list(fc["daily"].values())[:7]) / 7
+        # tổng hiệu lực so với nền không vượt mức Chủ quán đặt
+        self.assertGreaterEqual(upcoming * a["factor"] / a["baseline"], 0.85 - 1e-6)
+

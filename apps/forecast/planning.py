@@ -114,7 +114,10 @@ def build_forecasts(now=None, ingredients=None):
         days = [today + timedelta(days=j) for j in range(horizon)]
         fc.update(first_day=today.isoformat(), rates=rates, factor=rates["factor"],
                   recipe_ratio={d.isoformat(): r for d, r in usage.recipe_ratio(data, ing.pk, days, now).items()},
-                  seasonal=seasonal_for(ing, today, days[-1]))
+                  seasonal=seasonal_for(ing, today, days[-1], series, fc))
+        if prev.get("m2_init") and fc.get("m2_init") and prev["m2_init"] != fc["m2_init"]:
+            fc["warnings"].append("Cách khởi tạo M2 vừa đổi (ước tính Chủ quán có hiệu lực mới); sai số đã được đo lại "
+                                  "theo cách khởi tạo mới, kết quả đánh giá cũ không còn áp dụng.")
         if rates["recon"]["flag"]:
             fc["warnings"].append(
                 f"Đối soát lệch {rates['recon']['gap'] * 100:.1f}%: tiêu hao tính từ dòng bán và hủy sau pha chế "
@@ -126,16 +129,37 @@ def build_forecasts(now=None, ingredients=None):
     return out
 
 
-def seasonal_for(ing, first, last):
-    """Điều chỉnh theo mùa của Chủ quán còn hiệu lực trong tầm dự báo (riêng nguyên liệu hoặc chung)."""
+def seasonal_for(ing, first, last, series=(), fc=None):
+    """Điều chỉnh theo mùa của Chủ quán còn hiệu lực trong tầm dự báo (riêng nguyên liệu hoặc chung).
+
+    Mức Chủ quán đặt là thay đổi so với nền ngoài mùa: trung bình ngày đủ điều kiện trong 28 ngày trước khi mùa bắt
+    đầu. Khi mùa đã bắt đầu, mô hình có thể đã học một phần; phần đã học = trung bình dự báo 7 ngày tới / nền. Chỉ phần
+    còn thiếu được áp, nên không giảm hai lần; mô hình thích nghi xong thì điều chỉnh tự ngừng tác dụng."""
     from django.db.models import Q
 
     from .models import SeasonalAdjustment
 
     rows = (SeasonalAdjustment.objects.filter(is_active=True, start__lte=last, end__gte=first)
             .filter(Q(ingredient=ing) | Q(ingredient__isnull=True)).order_by("start", "pk"))
-    return [{"id": a.pk, "start": a.start.isoformat(), "end": a.end.isoformat(), "percent": a.percent,
-             "basis": a.basis, "ingredient": a.ingredient_id, "created_at": a.created_at.isoformat()} for a in rows]
+    daily = (fc or {}).get("daily") or {}
+    upcoming = [daily[(first + timedelta(days=j)).isoformat()] for j in range(7)
+                if (first + timedelta(days=j)).isoformat() in daily]
+    current = sum(upcoming) / len(upcoming) if len(upcoming) == 7 else None
+    out = []
+    for a in rows:
+        base_days = [x for d, x, st in series if st == "ok" and a.start - timedelta(days=28) <= d < a.start]
+        baseline = sum(base_days) / len(base_days) if len(base_days) >= 14 else None
+        started = a.start <= first
+        if started and baseline:
+            factor = methods.residual_season_factor(a.percent, baseline, current)
+            learned = round((current / baseline - 1) * 100, 1) if current else None
+        else:
+            factor, learned = 1 + a.percent / 100, None
+        out.append({"id": a.pk, "start": a.start.isoformat(), "end": a.end.isoformat(), "percent": a.percent,
+                    "basis": a.basis, "ingredient": a.ingredient_id, "created_at": a.created_at.isoformat(),
+                    "baseline": round(baseline, 2) if baseline else None, "learned_percent": learned,
+                    "factor": round(factor, 4)})
+    return out
 
 
 def demand(fc, t):
@@ -147,7 +171,7 @@ def demand(fc, t):
     iso = t.isoformat()
     for a in fc.get("seasonal") or []:
         if a["start"] <= iso <= a["end"]:
-            season *= 1 + a["percent"] / 100
+            season *= a.get("factor", 1 + a["percent"] / 100)
     return base * fc.get("factor", 1.0) * fc.get("recipe_ratio", {}).get(iso, 1.0) * season
 
 

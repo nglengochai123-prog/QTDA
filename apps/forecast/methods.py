@@ -156,6 +156,20 @@ def m2_model(prior, series, delta_level, delta_season):
                      delta_level, delta_season)
 
 
+def m2_uses_estimate(estimate, since, series):
+    """Một quy tắc duy nhất cho cả đánh giá và dự báo phát hành: M2 chỉ lấy ước tính của Chủ quán làm tiên nghiệm khi
+    ước tính có hiệu lực từ đầu chuỗi (không dùng nhận định có sau dữ liệu để khởi tạo lại quá khứ). Nếu không, M2 khởi
+    tạo từ 7 ngày dữ liệu đầu. Nhờ vậy mô hình được đánh giá và mô hình phát hành là một."""
+    return bool(estimate) and bool(series) and (since is None or since <= series[0][0])
+
+
+def m2_for(estimate, since, series, delta_level, delta_season):
+    """(mô hình M2 khởi tạo theo quy tắc trên, nhãn cách khởi tạo)."""
+    if m2_uses_estimate(estimate, since, series):
+        return m2_model(OwnerEstimate(*estimate, [1 / 7] * 7), series, delta_level, delta_season), "uoc_tinh"
+    return m2_model(None, series, delta_level, delta_season), "du_lieu"
+
+
 # ---------------- đánh giá gốc trượt ----------------
 
 def _next_open(series, start_idx, h_max):
@@ -187,11 +201,10 @@ def rolling(series, method, *, estimate=None, estimate_since=None, delta_level=0
     last = series[-1][0]
     first_origin = last - timedelta(days=lookback)
     since = estimate_since
-    prior_ok = bool(estimate) and (since is None or since <= series[0][0])
+    prior_ok = m2_uses_estimate(estimate, since, series)
     model = None
     if method == "M2":
-        model = m2_model(OwnerEstimate(*estimate, [1 / 7] * 7) if prior_ok else None, series, delta_level,
-                         delta_season)
+        model, _ = m2_for(estimate, since, series, delta_level, delta_season)
     origins, seen_ok = [], 0
     for idx, (d, x, st) in enumerate(series):
         if st == "ok":
@@ -292,8 +305,11 @@ def forecast_ingredient(series, *, today, horizon, estimate=None, estimate_since
                        daily={})
             warnings.append("Chưa có ước tính tuần của Chủ quán và chưa đủ dữ liệu bán để tính.")
             return out
+    m2_init = "uoc_tinh" if m2_uses_estimate(estimate, estimate_since, series) else "du_lieu"
+    out["m2_init"] = m2_init
     if eligible < 56:
-        method = "M2" if prior else "M1"
+        # Giai đoạn bước đầu: M2 có tiên nghiệm M0 khi ước tính có hiệu lực từ đầu chuỗi, nếu không dùng M1.
+        method = "M2" if m2_init == "uoc_tinh" else "M1"
         res = rolling(series, method, estimate=estimate, estimate_since=estimate_since, delta_level=delta_level,
                       delta_season=delta_season, h_max=h_max)
         errors_by_method[method] = res["by_h"]
@@ -307,7 +323,7 @@ def forecast_ingredient(series, *, today, horizon, estimate=None, estimate_since
         out.update(method=method, stage=STAGE_EARLY,
                    sigma=[sigma1 * math.sqrt(h) for h in range(1, h_max + 1)], sigma_measured=unmeasured,
                    sigma_label="ước lượng tạm, √h × σ1", provisional=True)
-        out["daily"] = _predict(series, method, prior, days, delta_level, delta_season)
+        out["daily"] = _predict(series, method, prior, days, delta_level, delta_season, estimate, estimate_since)
         out["errors"] = _jsonable_errors(errors_by_method)
         return out
     candidates = ["M1", "M2"] + (["M0"] if prior else [])
@@ -371,10 +387,26 @@ def forecast_ingredient(series, *, today, horizon, estimate=None, estimate_since
     quantiles, q_cov = _quantile_check(by_h, csl)
     out.update(method=method, stage=STAGE_MODEL, sigma=sigma, sigma_measured=flags, provisional=provisional,
                sigma_label="đo trực tiếp" if not provisional else "ước lượng tạm, √h × σ",
-               daily=_predict(series, method, prior, days, delta_level, delta_season),
+               daily=_predict(series, method, prior, days, delta_level, delta_season, estimate, estimate_since),
                errors=_jsonable_errors(errors_by_method), error_quantiles=quantiles, quantile_coverage=q_cov,
                ksigma_coverage={h: coverage(by_h[h]["errors"], k * by_h[h]["rmse"]) for h in by_h})
     return out
+
+
+def residual_season_factor(percent, baseline, current):
+    """Điều chỉnh mùa là mức thay đổi so với nền ngoài mùa. Phần mô hình đã học (dự báo hiện tại so với nền) được trừ
+    đi, chỉ áp phần còn thiếu, và không vượt quá mức Chủ quán đặt cũng không đổi chiều. Mô hình đã thích nghi hoàn toàn
+    thì hệ số về 1: không giảm hai lần.
+
+    Ví dụ nền 100, Chủ quán đặt −15%: mô hình chưa học (dự báo 100) → 0,85; đã học hết (85) → 1; học một phần (92)
+    → 0,85 / 0,92."""
+    target = 1 + percent / 100
+    if not baseline or baseline <= 0 or current is None or current <= 0:
+        return target
+    learned = current / baseline
+    factor = target / learned
+    lo, hi = (target, 1.0) if target <= 1 else (1.0, target)
+    return min(max(factor, lo), hi)
 
 
 def _recent_gain(inc_origins, new_origins, h, days):
@@ -405,13 +437,14 @@ def _quantile_check(by_h, csl):
     return quantiles, cov
 
 
-def _predict(series, method, prior, days, delta_level, delta_season):
+def _predict(series, method, prior, days, delta_level, delta_season, estimate=None, since=None):
+    """Dự báo phát hành; M2 khởi tạo đúng theo quy tắc đã dùng khi đánh giá (m2_for)."""
     if method == "M0":
         return {d.isoformat(): prior.mean(d) for d in days}
     if method == "M1":
         table = m1_table(series, series[-1][0]) if series else None
         return {d.isoformat(): (table[d.weekday()] if table else 0.0) for d in days}
-    model = m2_model(prior, series, delta_level, delta_season)
+    model, _ = m2_for(estimate, since, series, delta_level, delta_season)
     for d, x, st in series:
         if st == "ok":
             model.update(x, d.weekday())
