@@ -27,6 +27,9 @@ from .models import IngredientPlan, OrderSuggestion, PlanRun
 
 log = logging.getLogger(__name__)
 
+# Đổi khi cách tính thay đổi, để bản tính cũ không được trả lại cho cùng dữ liệu sau khi nâng cấp phần mềm.
+ENGINE_VERSION = "ke-hoach-mua-1"
+
 PARAM_KEYS = ("plan_csl_critical_percent", "plan_csl_normal_percent", "plan_group_a_shelf_days", "plan_a_review_days",
               "plan_a_target_days", "plan_b_review_days", "plan_b_review_weekday", "plan_horizon_days",
               "plan_switch_gain_percent", "plan_switch_weeks", "plan_bias_limit_percent",
@@ -167,13 +170,30 @@ def committed(ing):
     return round(total, 2)
 
 
-def remaining_today(now):
-    """f0: tỷ lệ bán còn lại của hôm nay; 0 từ giờ đóng cửa."""
-    from .services import _remaining_today_fraction
+_profiles = {}
 
-    if timezone.localtime(now).hour >= params.get("close_hour"):
+
+def remaining_today(now):
+    """f0: tỷ lệ bán còn lại của hôm nay theo hồ sơ giờ 8 tuần; 0 từ giờ đóng cửa. Hồ sơ giờ chỉ đổi theo ngày nên
+    được giữ lại trong ngày, để tính lại sau mỗi biến động không phải đọc lại 8 tuần đơn hàng."""
+    from apps.schedule.services import _hourly_profile
+
+    local = timezone.localtime(now)
+    if local.hour >= params.get("close_hour"):
         return 0.0
-    return _remaining_today_fraction(now)
+    day = local.date()
+    if day not in _profiles:
+        _profiles.clear()
+        _profiles[day] = _hourly_profile(day)[0]
+    share = _profiles[day].get(local.weekday() >= 5, {})
+    if share:
+        return min(1.0, share.get(local.hour, 0) * (1 - local.minute / 60)
+                   + sum(v for h, v in share.items() if h > local.hour))
+    open_h, close_h = params.get("open_hour"), params.get("close_hour")
+    hour = local.hour + local.minute / 60
+    if hour <= open_h:
+        return 1.0
+    return max(0.0, (close_h - hour) / (close_h - open_h))
 
 
 # ---------------- tính và lưu ----------------
@@ -195,7 +215,7 @@ def compute(ing, fc, now=None, run=None):
         "bien_dong": StockMovement.objects.filter(ingredient=ing).order_by("-id").values_list("id", flat=True).first(),
         "don_dat": [po_rows.count(), str(max(po_rows.values_list("updated_at", flat=True), default=""))],
         "du_bao": fc.get("version"), "tham_so": params_version(ing, cfg),
-        "ton": [physical, reserved, c], "sau_dong_cua": f0 == 0,
+        "ton": [physical, reserved, c], "sau_dong_cua": f0 == 0, "cach_tinh": ENGINE_VERSION,
     }
     data_hash = _digest(parts)
     existing = IngredientPlan.objects.filter(ingredient=ing, calc_date=today, data_hash=data_hash).first()

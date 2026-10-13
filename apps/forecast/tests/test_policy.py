@@ -59,6 +59,10 @@ class MilkExampleTests(SimpleTestCase):
         self.assertEqual(r["action"], policy.TOP_UP)  # đã có lô về sau ngày rủi ro
         self.assertIn("Cần đặt trong hôm nay 7 hộp", r["reason"])
         self.assertIn("sau ngày rủi ro", r["reason"])
+        # Mẫu câu mục 9.1: hết sau khoảng 40% lượng bán của thứ Bảy
+        self.assertEqual(r["stockout_part"], 0.39)
+        self.assertIn("đủ tới khoảng giữa ngày thứ Bảy 17/10", r["reason"])
+        self.assertIn("để hàng về trước thứ Bảy 17/10", r["reason"])
 
     def test_after_ordering_flow_matches_step_5(self):
         p = policy.Policy(milk_inputs())

@@ -271,6 +271,7 @@ class Policy:
         result = {
             "today": i.today, "f0": round(i.f0, 3), "k": self.k, "csl": i.csl, "group": i.group,
             "review_days": i.review_days, "target_days": i.target_days, "review_today": review_today,
+            "r_eff": r_eff, "t_eff": t_eff,
             "next_review": next_review, "exposure": ell, "window_s_days": n_s, "window_S_days": n_S,
             "window_s": [t for t in self.window(n_s)], "window_S": [t for t in self.window(n_S)],
             "mu_s": mu_s, "mu_S": mu_S, "sigma_s": round(sig_s, 2), "sigma_S": round(sig_S, 2),
@@ -284,7 +285,7 @@ class Policy:
             "order_by": order_by, "order_now": order_now, "triggered": triggered, "need": need, "q0": round(q0, 2),
             "caps": caps, "binding": binding, "packs": packs, "quantity": quantity, "delta": delta,
             "expiry_excess": round(expiry_excess, 2), "action": action, "expedite_po": expedite_po,
-            "notes": notes, "cover_days": self.cover_days(rows),
+            "notes": notes, "cover_days": self.cover_days(rows), "stockout_part": self.stockout_part(rows, stockout),
         }
         result["reason"] = reason(result, i)
         return result
@@ -319,15 +320,31 @@ class Policy:
         return BUY, None
 
     def cover_days(self, rows):
-        """Số ngày đủ dùng theo nhu cầu kỳ vọng, có phần lẻ của ngày hết hàng."""
-        prev = rows[0]["level"] if self.i.f0 <= 0 else self.i.available - self.i.committed
+        """Số ngày bán đủ dùng theo nhu cầu kỳ vọng tính từ bây giờ, có phần lẻ của ngày hết hàng."""
+        f0 = self.i.f0
+        start = self.i.available - self.i.committed
+        if f0 > 0 and rows[0]["level"] < 0:
+            today_demand = rows[0]["demand"]
+            return round(f0 * max(0.0, start) / today_demand, 1) if today_demand > 0 else 0.0
+        prev = rows[0]["level"]
         for j, r in enumerate(rows):
-            if j == 0 and self.i.f0 <= 0:
+            if j == 0:
                 continue
             if r["level"] < 0:
                 frac = prev / r["demand"] if r["demand"] > 0 else 0
-                return round(j - 1 + max(0.0, min(1.0, frac)), 1)
+                return round((f0 if f0 > 0 else 0) + j - 1 + max(0.0, min(1.0, frac)), 1)
             prev = r["level"]
+        return None
+
+
+    def stockout_part(self, rows, stockout):
+        """Phần của ngày hết hàng đã bán được trước khi hết (0 là đầu ngày, 1 là cuối ngày)."""
+        if stockout is None:
+            return None
+        for j, r in enumerate(rows):
+            if r["date"] == stockout:
+                before = rows[j - 1]["level"] if j > 0 else self.i.available - self.i.committed
+                return round(max(0.0, min(1.0, before / r["demand"])), 2) if r["demand"] > 0 else 0.0
         return None
 
 
@@ -348,9 +365,7 @@ def reason(r, i):
     unit = i.unit
     parts = [f"Tồn có thể dùng {fmt(r['available'])} {unit}"]
     if r["stockout_date"]:
-        cover = r["cover_days"]
-        frac = (cover % 1) if cover is not None else 0
-        parts[0] += f", đủ tới khoảng {_part_of_day(frac)} {day_label(r['stockout_date'])}."
+        parts[0] += f", đủ tới khoảng {_part_of_day(r['stockout_part'] or 0)} {day_label(r['stockout_date'])}."
     else:
         parts[0] += ", đủ dùng trong tầm dự báo."
     for lot in r["uncounted_lots"]:
@@ -362,7 +377,13 @@ def reason(r, i):
     if r["action"] in (BUY, TOP_UP):
         when = "trong hôm nay" if r["order_now"] or (r["order_by"] and r["order_by"] <= r["today"]) else \
             f"trước hết {day_label(r['order_by'])}" if r["order_by"] else "trong lần kiểm tra này"
-        target = f" để hàng về trước {day_label(r['risk_date'])}" if r["risk_date"] else ""
+        earliest = r["today"] + timedelta(days=i.exposure)
+        if r["risk_date"] and r["risk_date"] > earliest:
+            target = f" để hàng về trước {day_label(r['risk_date'])}"
+        elif r["risk_date"]:
+            target = f"; có thể thiếu từ {day_label(r['risk_date'])} trước khi hàng về, nên cân nhắc mua gấp"
+        else:
+            target = ""
         parts.append(f"Cần đặt {when} {r['packs']} {i.pack_label}{target}.")
     elif r["action"] == EXPEDITE:
         parts.append(f"Đề nghị nhà cung cấp giao sớm, không muộn hơn {day_label(r['risk_date'])}.")

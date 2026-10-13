@@ -89,24 +89,30 @@ class RecipeBook:
 
 
 def sold_configs(start, end):
-    """{ngày bán: {(món, kích cỡ, tùy chọn): số ly tính tiền}} và {ngày: {nguyên liệu: lượng theo định mức lúc bán}}."""
-    from apps.orders.models import OrderLine
+    """{ngày bán: {(món, kích cỡ, tùy chọn): số ly tính tiền}} và {ngày: {nguyên liệu: lượng theo định mức lúc bán}}.
 
+    Ngày bán của phiếu dự phòng là thời điểm bán ghi trên phiếu. Đọc bằng values_list vì lịch sử có thể hàng chục nghìn
+    dòng."""
+    from apps.orders.models import OrderLine, OrderLineOption
+
+    lo, hi = _aware(start - timedelta(days=2)), _aware(end + timedelta(days=3))
+    options = defaultdict(list)
+    for line_id, option_id in (OrderLineOption.objects.filter(line__order__created_at__gte=lo,
+                                                               line__order__created_at__lt=hi)
+                               .values_list("line_id", "option_id")):
+        options[line_id].append(option_id)
     configs = defaultdict(lambda: defaultdict(int))
     as_sold = defaultdict(lambda: defaultdict(float))
-    lines = (OrderLine.objects.filter(order__created_at__gte=_aware(start - timedelta(days=2)),
-                                      order__created_at__lt=_aware(end + timedelta(days=3)))
-             .select_related("order", "order__backup_slip").prefetch_related("options"))
-    for line in lines:
-        slip = getattr(line.order, "backup_slip", None)
-        sold = slip.sold_at if slip is not None and slip.sold_at else line.order.created_at
-        day = _local_day(sold)
-        cups = line.billable_quantity
+    rows = (OrderLine.objects.filter(order__created_at__gte=lo, order__created_at__lt=hi)
+            .values_list("id", "item_id", "size_id", "quantity", "cancelled_quantity", "voided_done_quantity",
+                         "usage_per_unit", "order__created_at", "order__backup_slip__sold_at"))
+    for line_id, item_id, size_id, qty, cancelled, voided, per_unit, created, sold_at in rows.iterator(chunk_size=5000):
+        cups = qty - cancelled - voided
+        day = _local_day(sold_at or created)
         if not (start <= day <= end) or cups <= 0:
             continue
-        key = (line.item_id, line.size_id, tuple(sorted(o.option_id for o in line.options.all())))
-        configs[day][key] += cups
-        for ing, q in line.usage_per_unit.items():
+        configs[day][(item_id, size_id, tuple(sorted(options.get(line_id, ()))))] += cups
+        for ing, q in (per_unit or {}).items():
             as_sold[day][int(ing)] += float(q) * cups
     return configs, as_sold
 
