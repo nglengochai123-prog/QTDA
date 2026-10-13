@@ -215,5 +215,58 @@ class SeasonInPlanTests(PlanBase):
         self.assertEqual(a["baseline"], 600.0)
         upcoming = sum(list(fc["daily"].values())[:7]) / 7
         # tổng hiệu lực so với nền không vượt mức Chủ quán đặt
-        self.assertGreaterEqual(upcoming * a["factor"] / a["baseline"], 0.85 - 1e-6)
+        factor = planning.season_factor(fc, self.today.isoformat())
+        self.assertGreaterEqual(upcoming * factor / a["baseline"], 0.85 - 1e-6)
+
+
+class SeasonEdgeTests(PlanBase):
+    """Rà soát lần 3: thiếu nền ngoài mùa, điều chỉnh chung và riêng chồng nhau."""
+
+    def adj(self, **kw):
+        from apps.forecast.models import SeasonalAdjustment
+
+        data = dict(store=self.d["store"], ingredient=self.milk, start=self.today - timedelta(days=3),
+                    end=self.today + timedelta(days=30), percent=-15, basis="Nghỉ hè", created_by=self.owner)
+        data.update(kw)
+        a = SeasonalAdjustment(**data)
+        a.full_clean()
+        a.save()
+        return a
+
+    def test_started_season_without_baseline_is_not_applied(self):
+        for j in range(1, 6):
+            self.sell_day(self.today - timedelta(days=j), 17)
+        self.adj()
+        fc = planning.build_forecasts(timezone.now())[self.milk.pk]
+        self.assertEqual(fc["seasonal"][0]["status"], "chua_xac_dinh_nen")
+        self.assertEqual(planning.season_factor(fc, self.today.isoformat()), 1.0)  # không phải 0,85
+        self.assertTrue(any("chưa xác định được nền" in w for w in fc["warnings"]))
+
+    def test_owner_baseline_with_basis_is_used(self):
+        for j in range(1, 6):
+            self.sell_day(self.today - timedelta(days=j), 17)
+        self.adj(baseline_daily=600)
+        fc = planning.build_forecasts(timezone.now())[self.milk.pk]
+        self.assertEqual((fc["seasonal"][0]["baseline_source"], fc["seasonal"][0]["status"]), ("chu_quan", "dang_ap"))
+        self.assertAlmostEqual(planning.season_factor(fc, self.today.isoformat()),
+                               methods.residual_season_factor(-15, 600.0, fc["season_current"]))
+
+    def test_specific_replaces_general_and_same_scope_needs_independence(self):
+        from django.core.exceptions import ValidationError
+
+        future = dict(start=self.today + timedelta(days=5), end=self.today + timedelta(days=20))
+        self.adj(ingredient=None, **future)
+        self.adj(**future)
+        fc = planning.build_forecasts(timezone.now())[self.milk.pk]
+        iso = (self.today + timedelta(days=6)).isoformat()
+        self.assertAlmostEqual(planning.season_factor(fc, iso), 0.85)  # không phải 0,7225
+        self.assertTrue(any("điều chỉnh riêng" in w for w in fc["warnings"]))
+        with self.assertRaises(ValidationError):
+            self.adj(percent=-10, **future)  # cùng phạm vi, chưa xác nhận độc lập
+        from apps.forecast.models import SeasonalAdjustment
+
+        SeasonalAdjustment.objects.filter(ingredient=self.milk).update(independent=True)
+        self.adj(percent=-10, independent=True, **future)
+        fc = planning.build_forecasts(timezone.now())[self.milk.pk]
+        self.assertAlmostEqual(planning.season_factor(fc, iso), 0.85 * 0.9)
 

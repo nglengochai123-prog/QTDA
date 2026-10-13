@@ -114,7 +114,8 @@ def build_forecasts(now=None, ingredients=None):
         days = [today + timedelta(days=j) for j in range(horizon)]
         fc.update(first_day=today.isoformat(), rates=rates, factor=rates["factor"],
                   recipe_ratio={d.isoformat(): r for d, r in usage.recipe_ratio(data, ing.pk, days, now).items()},
-                  seasonal=seasonal_for(ing, today, days[-1], series, fc))
+                  seasonal=seasonal_for(ing, today, days[-1], series, fc), season_current=season_current(fc, today))
+        fc["warnings"].extend(season_warnings(fc["seasonal"]))
         if prev.get("m2_init") and fc.get("m2_init") and prev["m2_init"] != fc["m2_init"]:
             fc["warnings"].append("Cách khởi tạo M2 vừa đổi (ước tính Chủ quán có hiệu lực mới); sai số đã được đo lại "
                                   "theo cách khởi tạo mới, kết quả đánh giá cũ không còn áp dụng.")
@@ -132,33 +133,78 @@ def build_forecasts(now=None, ingredients=None):
 def seasonal_for(ing, first, last, series=(), fc=None):
     """Điều chỉnh theo mùa của Chủ quán còn hiệu lực trong tầm dự báo (riêng nguyên liệu hoặc chung).
 
-    Mức Chủ quán đặt là thay đổi so với nền ngoài mùa: trung bình ngày đủ điều kiện trong 28 ngày trước khi mùa bắt
-    đầu. Khi mùa đã bắt đầu, mô hình có thể đã học một phần; phần đã học = trung bình dự báo 7 ngày tới / nền. Chỉ phần
-    còn thiếu được áp, nên không giảm hai lần; mô hình thích nghi xong thì điều chỉnh tự ngừng tác dụng."""
+    Mức Chủ quán đặt là thay đổi so với nền ngoài mùa. Nền lấy theo thứ tự: số Chủ quán nhập có căn cứ (chỉ cho điều
+    chỉnh riêng một nguyên liệu), hoặc trung bình ngày đủ điều kiện trong 28 ngày trước khi mùa bắt đầu (cần ít nhất 14
+    ngày). Khi mùa đã bắt đầu mà không xác định được nền thì ghi trạng thái và không áp, vì không biết mô hình đã học
+    mùa tới đâu. Cách gộp các điều chỉnh cùng ngày ở `season_factor`."""
     from django.db.models import Q
 
     from .models import SeasonalAdjustment
 
     rows = (SeasonalAdjustment.objects.filter(is_active=True, start__lte=last, end__gte=first)
             .filter(Q(ingredient=ing) | Q(ingredient__isnull=True)).order_by("start", "pk"))
-    daily = (fc or {}).get("daily") or {}
-    upcoming = [daily[(first + timedelta(days=j)).isoformat()] for j in range(7)
-                if (first + timedelta(days=j)).isoformat() in daily]
-    current = sum(upcoming) / len(upcoming) if len(upcoming) == 7 else None
     out = []
     for a in rows:
-        base_days = [x for d, x, st in series if st == "ok" and a.start - timedelta(days=28) <= d < a.start]
-        baseline = sum(base_days) / len(base_days) if len(base_days) >= 14 else None
-        started = a.start <= first
-        if started and baseline:
-            factor = methods.residual_season_factor(a.percent, baseline, current)
-            learned = round((current / baseline - 1) * 100, 1) if current else None
+        if a.ingredient_id and a.baseline_daily:
+            baseline, source = float(a.baseline_daily), "chu_quan"
         else:
-            factor, learned = 1 + a.percent / 100, None
+            base_days = [x for d, x, st in series if st == "ok" and a.start - timedelta(days=28) <= d < a.start]
+            baseline, source = (sum(base_days) / len(base_days), "du_lieu") if len(base_days) >= 14 else (None, None)
+        started = a.start <= first
         out.append({"id": a.pk, "start": a.start.isoformat(), "end": a.end.isoformat(), "percent": a.percent,
-                    "basis": a.basis, "ingredient": a.ingredient_id, "created_at": a.created_at.isoformat(),
-                    "baseline": round(baseline, 2) if baseline else None, "learned_percent": learned,
-                    "factor": round(factor, 4)})
+                    "basis": a.basis, "ingredient": a.ingredient_id, "independent": a.independent,
+                    "created_at": a.created_at.isoformat(), "started": started,
+                    "baseline": round(baseline, 2) if baseline else None, "baseline_source": source,
+                    "status": ("chua_xac_dinh_nen" if started and baseline is None else
+                               "chua_bat_dau" if not started else "dang_ap")})
+    return out
+
+
+def season_current(fc, first):
+    """Mức dự báo hiện tại (trung bình 7 ngày tới) để biết mô hình đã học mùa tới đâu."""
+    daily = (fc or {}).get("daily") or {}
+    vals = [daily[(first + timedelta(days=j)).isoformat()] for j in range(7)
+            if (first + timedelta(days=j)).isoformat() in daily]
+    return sum(vals) / len(vals) if len(vals) == 7 else None
+
+
+def applicable_seasons(seasonal, iso):
+    """Các điều chỉnh dùng cho một ngày. Điều chỉnh riêng của nguyên liệu thay thế điều chỉnh chung. Nhiều điều chỉnh
+    cùng phạm vi chỉ cộng tác động khi Chủ quán đã xác nhận tất cả là nguyên nhân độc lập; nếu không chỉ dùng điều
+    chỉnh ghi gần nhất."""
+    active = [a for a in seasonal or [] if a["start"] <= iso <= a["end"]]
+    use = [a for a in active if a["ingredient"]] or [a for a in active if not a["ingredient"]]
+    if len(use) > 1 and not all(a.get("independent") for a in use):
+        use = [max(use, key=lambda a: a["created_at"])]
+    return use
+
+
+def season_factor(fc, iso):
+    use = applicable_seasons(fc.get("seasonal"), iso)
+    if not use:
+        return 1.0
+    target = 1.0
+    for a in use:
+        target *= 1 + a["percent"] / 100
+    first = min(use, key=lambda a: a["start"])
+    if not first.get("started"):
+        return target  # mùa chưa bắt đầu: mô hình chưa thể học mùa, áp đủ
+    if not first.get("baseline"):
+        return 1.0  # chưa xác định được nền ngoài mùa: không áp, đã ghi trạng thái để Chủ quán bổ sung
+    return methods.residual_season_factor((target - 1) * 100, first["baseline"], fc.get("season_current"))
+
+
+def season_warnings(seasonal):
+    out = []
+    for a in seasonal or []:
+        if a["status"] == "chua_xac_dinh_nen":
+            out.append(f"Điều chỉnh mùa {a['percent']:+d}% từ {a['start']}: chưa xác định được nền ngoài mùa (cần 14 "
+                       f"ngày dữ liệu trong 28 ngày trước mùa), tạm không áp. Nhập nền ngoài mùa có căn cứ nếu muốn áp.")
+    specific = [a for a in seasonal or [] if a["ingredient"]]
+    for g in [a for a in seasonal or [] if not a["ingredient"]]:
+        if any(x["start"] <= g["end"] and g["start"] <= x["end"] for x in specific):
+            out.append(f"Điều chỉnh chung {g['percent']:+d}% bị điều chỉnh riêng của nguyên liệu thay thế trong phần "
+                       f"thời gian trùng.")
     return out
 
 
@@ -167,12 +213,8 @@ def demand(fc, t):
     base = fc.get("daily", {}).get(t.isoformat())
     if base is None:
         return None
-    season = 1.0
     iso = t.isoformat()
-    for a in fc.get("seasonal") or []:
-        if a["start"] <= iso <= a["end"]:
-            season *= a.get("factor", 1 + a["percent"] / 100)
-    return base * fc.get("factor", 1.0) * fc.get("recipe_ratio", {}).get(iso, 1.0) * season
+    return base * fc.get("factor", 1.0) * fc.get("recipe_ratio", {}).get(iso, 1.0) * season_factor(fc, iso)
 
 
 # ---------------- dữ liệu tồn và đơn ----------------

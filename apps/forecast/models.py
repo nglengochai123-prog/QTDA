@@ -331,6 +331,13 @@ class SeasonalAdjustment(StoreScopedModel):
     end = models.DateField("Đến hết ngày")
     percent = models.SmallIntegerField("Thay đổi nhu cầu (%)", help_text="Ví dụ −15 là giảm 15%.")
     basis = models.CharField("Căn cứ", max_length=255, help_text="Bắt buộc: nguồn hoặc lý do của điều chỉnh.")
+    baseline_daily = models.DecimalField(
+        "Nền ngoài mùa mỗi ngày (theo đơn vị tính)", max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Chỉ cho điều chỉnh riêng một nguyên liệu. Để trống: lấy trung bình 28 ngày trước mùa; thiếu dữ liệu "
+                  "thì điều chỉnh không được áp khi mùa đã bắt đầu.")
+    independent = models.BooleanField(
+        "Nguyên nhân độc lập với điều chỉnh khác", default=False,
+        help_text="Chỉ khi đánh dấu, các điều chỉnh cùng phạm vi trùng thời gian mới được cộng tác động.")
     is_active = models.BooleanField("Đang áp dụng", default=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người đặt", on_delete=models.PROTECT,
                                    null=True, blank=True, related_name="+")
@@ -353,3 +360,12 @@ class SeasonalAdjustment(StoreScopedModel):
             raise ValidationError("Thay đổi phải trong khoảng −90% đến +200%.")
         if not (self.basis or "").strip():
             raise ValidationError("Ghi căn cứ của điều chỉnh.")
+        if self.baseline_daily is not None and not self.ingredient_id:
+            raise ValidationError("Nền ngoài mùa chỉ nhập cho điều chỉnh riêng một nguyên liệu.")
+        if self.is_active and self.start and self.end:
+            overlap = (SeasonalAdjustment.objects.filter(is_active=True, start__lte=self.end, end__gte=self.start,
+                                                         ingredient_id=self.ingredient_id).exclude(pk=self.pk))
+            clash = [o for o in overlap if not (self.independent and o.independent)]
+            if clash:
+                raise ValidationError(f"Trùng thời gian với điều chỉnh cùng phạm vi: {clash[0]}. Sửa khoảng ngày, hoặc "
+                                      f"đánh dấu cả hai là nguyên nhân độc lập nếu tác động cộng dồn.")

@@ -324,7 +324,8 @@ def _season_resource():
 
     return Resource(
         key="dieu-chinh-mua", title="Điều chỉnh theo mùa", singular="Điều chỉnh theo mùa", model=SeasonalAdjustment,
-        cap=Cap.FORECASTS, fields=["ingredient", "start", "end", "percent", "basis", "is_active"],
+        cap=Cap.FORECASTS, fields=["ingredient", "start", "end", "percent", "basis", "baseline_daily", "independent",
+                                   "is_active"],
         columns=[("Nguyên liệu", lambda a: a.ingredient.name if a.ingredient_id else "Mọi nguyên liệu"),
                  ("Từ", "start"), ("Đến", "end"), ("Thay đổi (%)", "percent"), ("Căn cứ", "basis"),
                  ("Người đặt", lambda a: f"{a.created_by or ''} · {_local(a.created_at)}"), ("Đang áp dụng", "is_active")],
@@ -332,7 +333,8 @@ def _season_resource():
         queryset=lambda: SeasonalAdjustment.objects.select_related("ingredient", "created_by").order_by("-start"),
         save=_save_season,
         note="Dùng khi Chủ quán biết trước nhu cầu sẽ đổi theo mùa (ví dụ sinh viên nghỉ hè) mà mô hình chưa học được. "
-             "Bắt buộc ghi căn cứ; số liệu giả định không phải căn cứ. Áp vào nhu cầu dự báo của các ngày trong khoảng.",
+             "Bắt buộc ghi căn cứ; số liệu giả định không phải căn cứ. Mức thay đổi tính so với nền ngoài mùa; phần mô "
+             "hình đã học được trừ đi. Điều chỉnh riêng một nguyên liệu thay thế điều chỉnh chung.",
     )
 
 
