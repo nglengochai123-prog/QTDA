@@ -207,6 +207,7 @@ class Alert(StoreScopedModel):
         RECOUNT = "kiem_ke_lai", "Nguyên liệu cần kiểm kê lại"
         LATE_COUNT = "kiem_ke_tre", "Kiểm kê nhóm trọng yếu trễ hạn"
         ORDER_NEEDED = "can_dat_hang", "Cần đặt hàng"
+        LOT_EXPIRED = "lo_qua_han", "Lô hàng quá hạn còn trong kho"
 
     class Severity(models.TextChoices):
         URGENT = "khan", "Khẩn"

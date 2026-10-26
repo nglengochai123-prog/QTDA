@@ -37,25 +37,35 @@ def _as_decimal(totals):
     return {int(k): Decimal(str(v)) for k, v in totals.items() if Decimal(str(v)) != 0}
 
 
-def move(ingredient_id, delta, *, kind, actor, store, source_type, source_id="", note="", from_reserved=False):
-    """Ghi một biến động tồn vật lý và cập nhật số dư trong cùng giao dịch.
+def move(ingredient_id, delta, *, kind, actor, store, source_type, source_id="", note="", from_reserved=False,
+         lot=None, prefer_lot=None, expired_first=False):
+    """Ghi một biến động tồn vật lý, cập nhật số dư và phân bổ vào lô trong cùng giao dịch.
 
     from_reserved=True khi lượng giảm là lượng đang giữ cho món chờ pha (pha chế xong).
+    lot: thông tin lô mới khi nhập (mã, số lô trên bao bì, hạn, đơn giá, dòng phiếu nhập, nhà cung cấp).
+    prefer_lot, expired_first: lô được chọn lấy trước, hoặc lấy lô quá hạn trước (xem inventory.lots).
     """
+    from . import lots
+
     delta = Decimal(str(delta))
     row = _lock([ingredient_id])[int(ingredient_id)]
+    before = row.physical
     row.physical += delta
     if from_reserved:
         row.reserved += delta  # delta âm: bỏ đúng phần đã giữ
     row.save(update_fields=["physical", "reserved", "updated_at"])
-    return StockMovement.objects.create(
+    movement = StockMovement.objects.create(
         store=store, ingredient_id=ingredient_id, kind=kind, quantity=delta, balance_after=row.physical,
         source_type=source_type, source_id=str(source_id), actor=actor, note=note[:255])
+    if delta:
+        lots.record(row.ingredient, movement, before, delta, new_lot=lot, prefer=prefer_lot,
+                    expired_first=expired_first)
+    return movement
 
 
 @transaction.atomic
-def record_opening(ingredient, quantity, actor, note=""):
-    """Tồn đầu kỳ: chỉ ghi một lần, trước mọi biến động khác của nguyên liệu."""
+def record_opening(ingredient, quantity, actor, note="", expiry_date=None, supplier_lot=""):
+    """Tồn đầu kỳ: chỉ ghi một lần, trước mọi biến động khác của nguyên liệu. Tạo một lô Tồn đầu kỳ."""
     quantity = Decimal(str(quantity))
     if quantity < 0:
         raise ValidationError("Tồn đầu kỳ không được âm.")
@@ -63,7 +73,7 @@ def record_opening(ingredient, quantity, actor, note=""):
     if StockMovement.objects.filter(ingredient=ingredient).exists():
         raise ValidationError(f"{ingredient.name} đã có tồn đầu kỳ hoặc biến động; hãy dùng kiểm kê để điều chỉnh.")
     return move(ingredient.pk, quantity, kind=StockMovement.Kind.OPENING, actor=actor, store=ingredient.store,
-                source_type="ton_dau_ky", note=note)
+                source_type="ton_dau_ky", note=note, lot={"expiry_date": expiry_date, "supplier_lot": supplier_lot})
 
 
 def reserve(totals):
@@ -115,7 +125,7 @@ def snapshot_for(ingredient_ids=None):
 
 
 def ledger_problems():
-    """Kiểm tra toàn vẹn: tồn vật lý = tổng biến động; đang giữ = tổng lượng của món chờ pha."""
+    """Kiểm tra toàn vẹn: tồn vật lý = tổng biến động; đang giữ = tổng lượng của món chờ pha; lô khớp tồn."""
     from django.db.models import Sum
 
     from apps.orders.models import OrderLine
@@ -132,7 +142,9 @@ def ledger_problems():
         if expected_reserved.get(row.ingredient_id, Decimal(0)) != row.reserved:
             problems.append(f"{row.ingredient.name}: đang giữ {row.reserved} khác món chờ pha "
                             f"{expected_reserved.get(row.ingredient_id, 0)}")
-    return problems
+    from .lots import problems as lot_problems
+
+    return problems + lot_problems()
 
 
 def ensure_stock_rows():

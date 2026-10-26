@@ -1,4 +1,4 @@
-"""Màn hình ca của tôi (Quản lý ca, thu ngân) và tình trạng ca (Chủ quán, Quản lý ca)."""
+"""Màn hình ca của tôi (thu ngân, Chủ quán) và tình trạng ca (Chủ quán)."""
 
 import uuid
 
@@ -37,7 +37,7 @@ def _flash(request, fn, ok_message):
 @capability_required(Cap.CASH_FUND)
 @require_GET
 def my_shift(request, shift_id=None):
-    shift = get_object_or_404(Shift, pk=shift_id) if shift_id else Shift.objects.current()
+    shift = get_object_or_404(Shift, pk=shift_id) if shift_id else Shift.objects.operating()
     if shift is None:
         shift = Shift.objects.filter(status=Shift.Status.CLOSED, report__isnull=True).first()
     context = {"shift": shift, "categories": [c for c in ExpenseCategory.choices if c[0] != ExpenseCategory.MATERIALS]}

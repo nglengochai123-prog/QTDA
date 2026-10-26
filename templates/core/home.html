@@ -1,39 +1,44 @@
 {% extends "base.html" %}
 {% block content %}
-<header class="page-head"><h1>Tóm tắt của tôi</h1></header>
+<header class="page-head"><div><h1>Xin chào, {{ user.given_name|default:user.username }}</h1><p class="page-sub">{% now "l, d/m/Y" %} · {{ user.get_role_display }}</p></div></header>
 
 {% if notice_pending %}
 <div class="notice notice-info" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
   <div>Vui lòng đọc <a href="{% url 'core:data_notice' %}">thông báo xử lý dữ liệu cá nhân</a> và bấm xác nhận.</div></div>
 {% endif %}
 
-<div class="widget-grid">
-  {% if tasks %}
-  <section class="panel">
-    <h2>Việc chờ tôi xử lý</h2>
-    <div class="table-wrap"><table class="data-table">
-      <thead><tr><th scope="col">Việc</th><th scope="col" class="num">Số lượng</th></tr></thead>
-      <tbody>{% for t in tasks %}<tr><th scope="row"><a href="{{ t.url }}">{{ t.label }}</a></th>
-        <td class="num{% if t.urgent %} text-danger{% endif %}">{{ t.count }}</td></tr>{% endfor %}</tbody>
-    </table></div>
-  </section>
-  {% endif %}
-  {% if master_data %}
-  <section class="panel">
-    <h2>Dữ liệu nền</h2>
-    <div class="table-wrap"><table class="data-table">
-      <thead><tr><th scope="col">Danh mục</th><th scope="col" class="num">Hiện có</th></tr></thead>
-      <tbody>{% for label, url, count, attention in master_data %}<tr><th scope="row"><a href="{{ url }}">{{ label }}</a></th>
-        <td class="num{% if attention %} text-warn{% endif %}">{{ count }}</td></tr>{% endfor %}</tbody>
-    </table></div>
-  </section>
-  {% else %}
-  <section class="panel">
-    <h2>Lối tắt</h2>
-    <div class="shortcut-grid">{% for item in NAV_ITEMS %}{% if item.key != "home" %}
-      <a class="shortcut" href="{{ item.url }}"><svg class="icon" aria-hidden="true"><use href="#i-{{ item.key }}"/></svg>{{ item.label }}</a>
-    {% endif %}{% endfor %}</div>
-  </section>
-  {% endif %}
-</div>
+{% if tasks %}
+<section class="home-section" aria-labelledby="h-tasks">
+  <h2 class="section-title" id="h-tasks">Việc chờ tôi xử lý</h2>
+  <div class="task-grid">{% for t in tasks %}
+    <a class="task-tile{% if t.urgent %} is-urgent{% elif not t.count %} is-zero{% endif %}" href="{{ t.url }}"><span class="task-count">{{ t.count }}</span><span class="task-label">{{ t.label }}</span></a>
+  {% endfor %}</div>
+</section>
+{% endif %}
+
+<section class="home-section" aria-labelledby="h-apps">
+  <h2 class="section-title" id="h-apps">Chức năng</h2>
+  <div class="apps-bar">
+    <nav class="seg" aria-label="Lọc theo phân hệ" data-app-filter>
+      <a href="#chuc-nang" aria-current="true" data-group="">Tất cả</a>{% for g in NAV_GROUPS %}<a href="#chuc-nang" data-group="{{ g.label }}">{{ g.short }}</a>{% endfor %}
+    </nav>
+    <label class="search-field"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><span class="visually-hidden">Tìm chức năng</span><input type="search" placeholder="Tìm chức năng" autocomplete="off" data-app-search></label>
+  </div>
+  <div class="app-grid" id="chuc-nang">{% for item in NAV_ITEMS %}{% if item.key != "home" %}
+    <a class="app-card" href="{{ item.url }}" data-group="{{ item.group|default:'Tổng quan' }}" data-search="{{ item.label|lower }} {{ item.description|lower }}">
+      <span class="app-icon tone-{{ item.tone }}" aria-hidden="true"><svg class="icon"><use href="#i-{{ item.icon }}"/></svg></span>
+      <span class="app-text"><strong>{{ item.label }}</strong><span class="app-desc">{{ item.description }}</span><span class="app-tag">{{ item.group|default:"Tổng quan" }}</span></span>
+    </a>
+  {% endif %}{% endfor %}</div>
+  <p class="app-empty" data-app-empty hidden>Không có chức năng nào khớp.</p>
+</section>
+
+{% if master_data %}
+<section class="card home-section">
+  <div class="card-head"><h2>Dữ liệu nền</h2></div>
+  <ul class="list">{% for label, url, count, attention in master_data %}
+    <li class="list-row"><a href="{{ url }}">{{ label }}</a><span class="{% if attention %}status-warn{% else %}muted{% endif %}">{{ count }}</span></li>
+  {% endfor %}</ul>
+</section>
+{% endif %}
 {% endblock %}

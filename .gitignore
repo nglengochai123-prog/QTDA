@@ -14,3 +14,4 @@ backups/
 logs/
 thu_du_bao.sqlite3*
 thuc_don_lam.sqlite3*
+test_db_*.sqlite3*

@@ -25,6 +25,23 @@ from django.test import override_settings
 from django.utils import timezone
 
 DAYS = 14
+# Lịch nhập mẫu: tên nguyên liệu → (nhà cung cấp, chu kỳ ngày, ngày lệch, lượng mỗi lần, hạn in trên bao bì tính từ
+# ngày nhập (các giá trị có thể), đơn giá mỗi đơn vị). Kem muối nhập dư so với lượng dùng để báo cáo thấy hao hụt
+# do hết hạn; đào ngâm mỗi lô một hạn nên lô nhập sau có thể hết hạn trước (FEFO khác FIFO).
+SUPPLY = {
+    "Sữa tươi": ("Đại lý sữa An Phát", 2, 1, 3000, (6, 7, 8), 32),
+    "Sữa đặc": ("Đại lý sữa An Phát", 7, 4, 2660, (150, 180, 200), 62),
+    "Kem muối": ("Đại lý sữa An Phát", 5, 3, 1000, (5,), 115),
+    "Cà phê rang xay": ("Xưởng rang Hồng Lam", 6, 3, 2000, (45, 60), 260),
+    "Trà đen": ("Xưởng rang Hồng Lam", 10, 6, 1000, (200, 365), 210),
+    "Bột matcha": ("Xưởng rang Hồng Lam", 7, 5, 200, (150,), 1150),
+    "Đào ngâm": ("Tạp hóa Bích Ngọc", 5, 2, 2460, (35, 90, 240), 95),
+    "Trân châu": ("Tạp hóa Bích Ngọc", 7, 3, 1000, (150, 180), 45),
+    "Ly nhựa": ("Bao bì Thành Công", 7, 4, 250, (None,), 900),
+}
+# Sự cố hao hụt mẫu: ngày thứ → (nguyên liệu, lượng, lý do, ghi chú).
+SPILLS = {3: ("Sữa tươi", 500, "do_vo", "Rơi hộp sữa khi xếp tủ"), 6: ("Đào ngâm", 300, "hu_hong", "Hộp móp, phồng nắp"),
+          9: ("Cà phê rang xay", 60, "pha_hong", "Chỉnh cối xay, bỏ ba lần chiết")}
 
 
 def key():
@@ -70,8 +87,10 @@ class Command(BaseCommand):
         from apps.accounts.models import User
         from apps.catalog.models import ItemSize, MenuItem, Table
         from apps.core import periodic
+        from apps.catalog.models import Option
+        from apps.inventory import lots as lot_rules
         from apps.inventory import operations as ops
-        from apps.inventory.models import Ingredient, Supplier
+        from apps.inventory.models import Ingredient, StockLot, Supplier
         from apps.orders import adjustments, backup, payments, services
         from apps.orders.models import AdjustmentReason, Order
         from apps.shifts import services as shifts
@@ -84,7 +103,10 @@ class Command(BaseCommand):
         from apps.core.models import Store
 
         store = Store.get_default()
-        supplier = Supplier.objects.create(store=store, name="Nhà cung cấp mẫu")
+        suppliers = {name: Supplier.objects.create(store=store, name=name)
+                     for name in dict.fromkeys(v[0] for v in SUPPLY.values())}
+        by_name = {i.name: i for i in Ingredient.objects.all()}
+        toppings = list(Option.objects.filter(group__name="Topping"))
         tables = list(Table.objects.all())
         sizes = list(ItemSize.objects.select_related("item").filter(item__status=MenuItem.Status.ON_SALE))
         changed = AdjustmentReason.objects.get(name="Khách đổi ý")
@@ -106,11 +128,28 @@ class Command(BaseCommand):
             for role, name in (("pha_che", "phache"), ("phuc_vu", "phucvu"), ("thu_ngan", "thungan")):
                 Attendance.objects.create(store=store, user=u[name], role=role, clock_in=clock.tick(1))
             shifts.add_cash_entry(u["thungan"], key(), shift.pk, "dau_ca", 500000)
+            if not is_today:  # đầu ngày hủy lô đã quá hạn (hôm nay để lại cho Chủ quán thấy cảnh báo)
+                for lot in StockLot.objects.filter(remaining__gt=0, expiry_date__lt=day):
+                    ops.dispose_lot(u["phache"], key(), lot.pk)
+            due = {}
+            for name, (sup, cycle, phase, qty, shelf, price) in SUPPLY.items():
+                if offset % cycle == phase and name in by_name:
+                    days_left = rnd.choice(shelf)
+                    due.setdefault(sup, []).append({
+                        "ingredient": by_name[name].pk, "quantity": str(qty), "unit_price": price,
+                        "expiry_date": (day + timedelta(days=days_left)).isoformat() if days_left else None,
+                        "supplier_lot": f"{rnd.randint(10, 99)}{day:%m%d}" if days_left else ""})
             with override_settings(MEDIA_ROOT=media):  # nhập hàng buổi sáng, có ảnh hóa đơn
-                lines = [{"ingredient": i.pk, "quantity": str(i.pack_size * 3), "unit_price": 30} for i in critical]
-                ops.create_receipt(u["phache"], key(), supplier.pk, lines, "tra_ngay",
-                                   invoice_photo=SimpleUploadedFile("hd.jpg", b"jpeg", content_type="image/jpeg"),
-                                   paid_source="chuyen_khoan")
+                for sup, lines in due.items():
+                    clock.tick(5)
+                    ops.create_receipt(u["phache"], key(), suppliers[sup].pk, lines,
+                                       "tra_ngay" if offset % 2 else "tra_sau",
+                                       invoice_photo=SimpleUploadedFile("hd.jpg", b"jpeg", content_type="image/jpeg"),
+                                       paid_source="chuyen_khoan")
+            if offset in SPILLS:
+                name, qty, reason, note = SPILLS[offset]
+                clock.at(day, 10, 15)
+                ops.record_waste(u["phache"], key(), by_name[name].pk, qty, reason, note)
             last_hour = min(20, timezone.localtime(real_now).hour - 1) if is_today else 20
             busy = 3 if day.weekday() >= 5 else 2
             orders = []
@@ -118,8 +157,11 @@ class Command(BaseCommand):
                 for _ in range(rnd.randint(0, busy + (2 if hour in (8, 9, 19, 20) else 0))):
                     clock.at(day, hour, rnd.randint(0, 50))
                     size = rnd.choice(sizes)
+                    extra = ([rnd.choice(toppings).pk] if toppings and rnd.random() < 0.25
+                             and size.item.option_groups.filter(name="Topping").exists() else [])
                     payload = {"table": rnd.choice(tables).pk, "note": "",
-                               "lines": [{"item": size.item_id, "size": size.pk, "options": [], "quantity": rnd.randint(1, 2)}]}
+                               "lines": [{"item": size.item_id, "size": size.pk, "options": extra,
+                                          "quantity": rnd.randint(1, 2)}]}
                     try:
                         result, _ = services.submit_order(u["phucvu"], key(), payload)
                     except Exception:  # thiếu nguyên liệu: bỏ qua đơn này như khách đổi ý

@@ -12,13 +12,12 @@ Python/Django theo BRD (Báo cáo Sprint 1, Bảng 3.8): Django auth và Django 
 
 ## Users
 
-LAM Coffee là quán cà phê phục vụ tại chỗ ở 136 Nguyễn Đình Tựu, An Khê, Đà Nẵng; khách chủ yếu là người trung niên và gia đình có trẻ nhỏ. Người dùng hệ thống là nội bộ quán, gồm 5 vai trò:
+LAM Coffee là quán cà phê phục vụ tại chỗ ở 136 Nguyễn Đình Tựu, An Khê, Đà Nẵng; khách chủ yếu là người trung niên và gia đình có trẻ nhỏ. Người dùng hệ thống là nội bộ quán, gồm 4 vai trò đang dùng (BRD có 5; vai trò Quản lý ca đã bỏ theo quyết định GD-27 ngày 12/10/2026, Chủ quán trực tiếp quản lý ca):
 
 - **Phục vụ**: chủ yếu dùng điện thoại cá nhân. Tạo đơn tại bàn, gửi yêu cầu điều chỉnh đơn, báo nhanh nguyên liệu, chấm công. Thao tác khi đang đứng, đang di chuyển, một tay, giờ cao điểm 20 đến 25 đơn mỗi giờ.
 - **Pha chế**: chủ yếu dùng máy tính tại quầy. Nhận món theo mã đơn, đánh dấu Đã pha chế (trừ kho), in phiếu pha chế, nhập hàng, kiểm kê, ghi hao hụt.
 - **Thu ngân**: chủ yếu dùng máy tính tại quầy. Thanh toán tiền mặt và chuyển khoản theo bàn, quỹ tiền ca, chi và nộp giữa ca, kết ca.
-- **Quản lý ca**: dùng điện thoại. Phê duyệt điều chỉnh đơn, xử lý cảnh báo được giao, xác nhận tiền, kết ca, xem tải và thời gian chờ.
-- **Chủ quán**: dùng cả máy tính và điện thoại. Cấu hình dữ liệu nền (món, định mức, nguyên vật liệu, tham số, phân quyền), xem bảng điều khiển và báo cáo, xem xét ngoại lệ, vụ việc tổn thất, đặt hàng.
+- **Chủ quán**: dùng cả máy tính và điện thoại. Trực tiếp quản lý ca: phê duyệt điều chỉnh đơn, xử lý cảnh báo, xác nhận tiền, xem tải. Cấu hình dữ liệu nền (món, định mức, nguyên vật liệu, tham số, phân quyền), xem bảng điều khiển và báo cáo, xem xét ngoại lệ, vụ việc tổn thất, đặt hàng.
 
 ## Product Purpose
 

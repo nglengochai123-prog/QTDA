@@ -113,6 +113,7 @@ def board(request):
         "next": week + timedelta(days=7), "rows": rows, "gaps": gaps,
         "deadline": sv.deadline_for(week), "published": WeekPublish.objects.filter(week_start=week).first(),
         "days": [(d, DAY_NAMES[d.weekday()]) for d in days], "roles": [(r, sv.ROLE_LABEL[r]) for r in sv.ROLES],
+        "basis_days": [d | {"day": DAY_NAMES[d["date"].weekday()]} for d in sv.basis_by_day(rows)],
         "total_short": sum(c["short"] for r in rows for c in r["cells"]),
         "total_surplus": sum(c["surplus"] for r in rows for c in r["cells"]),
     })

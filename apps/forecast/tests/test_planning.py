@@ -14,6 +14,7 @@ from django.utils import timezone
 
 from apps.control import alerts
 from apps.control.models import Alert
+from apps.core import params
 from apps.forecast import methods, planning, usage
 from apps.forecast.models import IngredientDailyUsage, IngredientPlan, OrderSuggestion, PlanRun
 from apps.inventory import operations as ops
@@ -325,6 +326,28 @@ class PlanRunTests(PlanBase):
         self.assertEqual((po.status, po.remaining, po.over_received), ("da_giao_du", 0, 500))
         self.assertTrue(result["warnings"])
         self.assertEqual(po.receipt_lines.get().expiry_date, self.today + timedelta(days=7))
+
+    def test_on_hand_lots_come_from_stock_lots(self):
+        photo = SimpleUploadedFile("hd.jpg", b"\xff\xd8\xff", content_type="image/jpeg")
+        for qty, expiry in (("2000", None), ("3000", (self.today + timedelta(days=3)).isoformat())):
+            ops.create_receipt(self.owner, key(), self.supplier.pk, [
+                {"ingredient": self.milk.pk, "quantity": qty, "unit_price": 30, "expiry_date": expiry}], "tra_ngay",
+                invoice_photo=photo)
+        # Mỗi dòng phiếu nhập là một lô: hạn ghi trên phiếu, không ghi thì ngày nhập + 7 − 1.
+        lots = planning.on_hand_lots(self.milk)
+        self.assertIn((2000.0, self.today + timedelta(days=6)), lots)
+        self.assertIn((3000.0, self.today + timedelta(days=3)), lots)
+        self.milk.stock.refresh_from_db()
+        self.assertEqual(sum(q for q, _ in lots), float(self.milk.stock.physical))
+
+    def test_long_life_items_get_higher_service_level(self):
+        self.assertEqual(planning.settings_for(self.milk)["csl"], params.get("plan_csl_normal_percent"))  # nhóm A
+        coffee = self.d["coffee"]
+        cfg = planning.settings_for(coffee)  # không có hạn dùng: nhóm B
+        self.assertEqual((cfg["group"], cfg["csl"]), ("B", 98))
+        coffee.service_level = 92
+        coffee.save()
+        self.assertEqual(planning.settings_for(coffee)["csl"], 92)  # Chủ quán đặt riêng thì giữ
 
     def test_stock_movement_triggers_one_coalesced_recompute_after_commit(self):
         planning.run_full(at(self.today, 8))

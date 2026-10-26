@@ -342,7 +342,7 @@ Không cộng thêm kσ vào phân vị. Mỗi nguyên liệu chỉ dùng một 
 
 ### 6.4. Mức phục vụ
 
-**Mức phục vụ chu kỳ** là tham số cài đặt: xác suất một lần bổ sung kết thúc mà tồn có thể dùng chưa về 0. Mặc định 95%, k bằng 1,645, cho nguyên liệu đánh dấu trọng yếu; 90%, k bằng 1,282, cho nguyên liệu khác. Đây là giả định, Chủ quán có thể đổi theo từng nguyên liệu. Với hàng dễ hỏng, nếu biết lãi gộp mất khi thiếu một đơn vị c u và giá vốn mất khi một đơn vị hết hạn c o, có thể chọn CSL theo tỷ số tới hạn của mô hình một kỳ:
+**Mức phục vụ chu kỳ** là tham số cài đặt: xác suất một lần bổ sung kết thúc mà tồn có thể dùng chưa về 0. Thiết kế ban đầu đặt 95%, k bằng 1,645, cho nguyên liệu trọng yếu và 90%, k bằng 1,282, cho nguyên liệu khác. **Từ 26/10/2026** mặc định là 95% cho mọi nguyên liệu và ít nhất 98% cho hàng để lâu (nhóm B), sau khi mô phỏng một năm cho thấy mức cũ cho khoảng 3,4 lần thiếu mỗi tháng khi quy ra cả quán, vượt BO-02 (`docs/KET_QUA_MO_PHONG.md` mục 2). Lý do chia theo nhóm: BO-02 là chỉ tiêu tổng số lần thiếu của cả quán; giữ thêm hàng để lâu gần như không tốn vì không hỏng, nên phần thiếu cho phép được dồn sang hàng tươi (cách phân bổ tổng số lần thiếu của Silver, Pyke và Thomas). Chủ quán vẫn đổi được theo từng nguyên liệu, và số Chủ quán đặt luôn được ưu tiên. Với hàng dễ hỏng, nếu biết lãi gộp mất khi thiếu một đơn vị c u và giá vốn mất khi một đơn vị hết hạn c o, có thể chọn CSL theo tỷ số tới hạn của mô hình một kỳ:
 
 ```latex
 CSL^{*} = \frac{c_u}{c_u + c_o}
@@ -365,6 +365,8 @@ o j là lượng còn phải giao của đơn j, a j là ngày hàng dùng đư�
 - **Ngày dự kiến hết hàng** là ngày đầu tiên I(t) âm.
 - **Ngày rủi ro** là ngày đầu tiên I(t) nhỏ hơn kσ của cửa sổ từ nay tới t, tức xác suất hết hàng trước t vượt 1 trừ CSL.
 - **Ngày phải đặt chậm nhất** là ngày kiểm tra muộn nhất mà đơn đặt hôm đó còn dùng được trước ngày rủi ro, bằng ngày rủi ro lùi ℓ cộng 1 ngày mở cửa. Nếu ngày này đã qua, hệ thống ghi Đặt ngay và đánh dấu khả năng phải mua gấp.
+
+**Hàng có hạn dùng (từ 26/10/2026).** Hệ thống dựng các lô của tồn hiện có từ phiếu nhập theo nhập trước xuất trước: đi ngược từ phiếu mới nhất tới khi đủ tồn vật lý; hạn mỗi lô là hạn ghi trên phiếu, không ghi thì ngày nhập cộng hạn dùng trừ một. Dòng tồn chạy theo lô: nhu cầu lấy từ lô gần hết hạn trước, lô đến hạn mà chưa dùng hết bị loại cuối ngày. Lượng dự kiến hết hạn trong cửa sổ được trừ khỏi vị thế tồn IP, theo chính sách EWA của Broekmeulen và van Donselaar (2009). Tồn không khớp phiếu nhập nào được coi là không hết hạn. Trên mô phỏng một năm, cách này giảm một nửa số lần thiếu của hàng tươi ở cùng mức phục vụ (`docs/KET_QUA_MO_PHONG.md` mục 2.4).
 
 Quy tắc kích hoạt ở mục 6.3 và ngày rủi ro cho cùng kết luận khi các lô đang về đều nằm trong cửa sổ. Khi có lô về sau ngày rủi ro, chỉ dòng tồn theo ngày mới thấy được khoảng thiếu trước khi lô đó về, nên cả hai đều được tính và hệ thống lấy kết luận khắt khe hơn.
 
@@ -420,7 +422,7 @@ Nhu cầu được trình bày theo tuần để Chủ quán dễ đọc, nhưng
 | Ngày kiểm tra | Mỗi tối lúc chốt ngày | Một ngày cố định trong tuần, mặc định tối Chủ nhật |
 | Giới hạn hạn dùng | Luôn kiểm tra | Kiểm tra nếu có khai báo hạn dùng |
 | Giám sát giữa hai lần kiểm tra | Sau mỗi biến động; cảnh báo ngay nếu ngày rủi ro rơi vào trước lần kiểm tra kế tiếp cộng ℓ | Sau mỗi biến động; cùng quy tắc, sinh đề xuất mua gấp nằm ngoài lịch tuần |
-| CSL mặc định | 95% nếu trọng yếu, 90% nếu không | 95% nếu trọng yếu, 90% nếu không |
+| CSL mặc định | 95% (trước 26/10: 95% nếu trọng yếu, 90% nếu không) | Ít nhất 98% (trước 26/10: như nhóm A) |
 
 Trân châu cần lưu ý: trân châu khô mua về có hạn dùng dài nên thuộc nhóm B; trân châu đã nấu chỉ dùng trong vài giờ là bài toán sơ chế trong ngày, không phải bài toán mua, và nằm ngoài phạm vi thiết kế này. Kem muối được xử lý qua nguyên liệu thô của nó là kem tươi, muối và sữa, theo quy tắc quy đổi bán thành phẩm đã có. Danh sách cụ thể của 58 nguyên liệu sẽ do Chủ quán xác nhận khi khai báo quy cách và hạn dùng.
 
@@ -437,7 +439,7 @@ Nếu Chủ quán thực tế mua theo lịch cố định khác, ví dụ nhà 
 | Nhóm chính sách | Theo hạn dùng | Chủ quán có thể đổi |
 | R, T, ngày kiểm tra | Theo bảng 7.2 | Chủ quán có thể đổi |
 | ℓ | 1 | Chủ quán xác nhận; sau 10 đơn thì tính từ lịch sử |
-| CSL | 95% hoặc 90% | Chủ quán có thể đổi |
+| CSL | 95%; nhóm B ít nhất 98% | Chủ quán có thể đổi |
 | Quy cách, MOQ | Phải khai báo; MOQ mặc định 1 gói | Chủ quán |
 | Hạn dùng, sức chứa | Bắt buộc với nhóm A | Chủ quán |
 | Trọng yếu | Theo trường hiện có | Chủ quán |
@@ -743,7 +745,7 @@ Các giả định sau được đưa vào dưới dạng tham số cấu hình,
 
 ### 13.2. Giới hạn
 
-1. **Không theo dõi lô và hạn dùng từng lô.** Giới hạn hạn dùng dựa trên GD6 và GD7 nên chỉ là ước tính. Hệ thống không biết trong tủ có bao nhiêu hộp sắp hết hạn. Trường ngày hết hạn tùy chọn trên phiếu nhập là bước chuẩn bị, không phải quản lý lô.
+1. **Lô chỉ được suy ra, không quản lý từng lô.** Từ 26/10/2026 hệ thống suy các lô từ phiếu nhập theo nhập trước xuất trước (mục 6.6) để biết phần sắp hết hạn. Nếu nhân viên dùng hộp mới trước, hoặc phiếu nhập không ghi hạn mà hạn thật ngắn hơn hạn dùng khai báo, lượng hết hạn thực tế sẽ khác ước tính.
 2. **Không ước tính nhu cầu bị mất.** Ngày hết hàng bị loại khỏi dữ liệu học. Nếu hết hàng thường xuyên, dữ liệu còn lại ít và có thể thiên về các ngày vắng khách.
 3. **Không có dữ liệu chi phí.** Không tối ưu lượng đặt kinh tế, không chọn CSL theo tỷ số tới hạn cho tới khi có giá vốn và lãi gộp theo nguyên liệu.
 4. **Không mô hình hóa thay thế.** Khi hết một nguyên liệu, khách đổi sang món khác làm tăng tiêu hao nguyên liệu khác; hiệu ứng này không được tách riêng.

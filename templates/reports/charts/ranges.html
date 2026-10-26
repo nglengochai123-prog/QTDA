@@ -1,0 +1,9 @@
+{% load l10n %}{% if c %}<div class="chart-box">{% localize off %}<svg class="chart-svg" viewBox="0 0 {{ c.w }} {{ c.h }}" role="img" aria-label="{{ label }}">
+  {% for t in c.ticks %}<line class="grid" x1="{{ t.x }}" x2="{{ t.x }}" y1="16" y2="{{ c.h|add:'-2' }}"/><text class="axis-text" x="{{ t.x }}" y="10" text-anchor="middle">{{ t.text }}</text>{% endfor %}
+  {% for r in c.rows %}<g class="hit" tabindex="0" data-tip="{{ r.tip }}">
+  <text class="axis-text label-text" x="{{ c.label_x }}" y="{{ r.cy }}" dy="0.32em" text-anchor="end">{{ r.label|truncatechars:22 }}</text>
+  <rect class="band" x="{{ r.bx }}" y="{{ r.cy|add:'-4' }}" width="{{ r.bw }}" height="8" rx="4"/>
+  <circle class="dot f-1" cx="{{ r.cx }}" cy="{{ r.cy }}" r="5"/>
+  <text class="value-text" x="{{ r.vx }}" y="{{ r.cy }}" dy="0.32em">{{ r.text }}</text><title>{{ r.tip }}</title></g>{% endfor %}
+</svg>{% endlocalize %}</div>
+<ul class="chart-legend"><li><span class="key key-dot s-1" aria-hidden="true"></span>Kỳ vọng</li><li><span class="key key-band" aria-hidden="true"></span>Khoảng 10–90%: khoảng 8 trong 10 lần thực tế nằm trong dải</li></ul>{% endif %}

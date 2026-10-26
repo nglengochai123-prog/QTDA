@@ -36,20 +36,32 @@ class Command(BaseCommand):
         for n in range(1, 13):
             Table.objects.create(store=store, code=str(n), area="Trong nhà" if n <= 8 else "Sân vườn", sort_order=n)
 
-        def ing(name, unit, pack, opening, critical=False):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        today = timezone.localdate()
+
+        def ing(name, unit, pack, opening, critical=False, shelf=None, opening_expiry=None, rule=""):
+            """shelf: hạn dùng (ngày) của hàng chưa mở; opening_expiry: số ngày tới hạn của lô tồn đầu kỳ."""
             i = Ingredient.objects.create(store=store, name=name, unit=unit, pack_size=pack, lead_time_days=2,
-                                          safety_stock=pack, is_critical=critical)
-            stock.record_opening(i, opening, owner, "Dữ liệu mẫu")
+                                          safety_stock=pack, is_critical=critical, shelf_life_days=shelf,
+                                          issue_rule=rule)
+            stock.record_opening(i, opening, owner, "Dữ liệu mẫu",
+                                 expiry_date=today + timedelta(days=opening_expiry) if opening_expiry else None)
             return i
 
-        coffee = ing("Cà phê rang xay", "g", 1000, 3000, critical=True)
-        condensed = ing("Sữa đặc", "ml", 380, 2000, critical=True)
-        fresh_milk = ing("Sữa tươi", "ml", 1000, 3000, critical=True)
-        tea = ing("Trà đen", "g", 500, 800)
-        peach = ing("Đào ngâm", "g", 820, 1200)
-        matcha = ing("Bột matcha", "g", 100, 60, critical=True)
-        pearl = ing("Trân châu", "g", 1000, 1500)
-        salted_cream = ing("Kem muối", "ml", 500, 600)
+        # Hạn dùng mẫu theo loại hàng: sữa tươi và kem tươi ngắn ngày (xuất FEFO), hàng khô dài ngày (vẫn FEFO vì có
+        # hạn in trên bao bì), ly nhựa không có hạn (LIFO: thùng mới chồng lên trên, lấy thùng trên cùng).
+        coffee = ing("Cà phê rang xay", "g", 1000, 3000, critical=True, shelf=60, opening_expiry=40)
+        condensed = ing("Sữa đặc", "ml", 380, 2000, critical=True, shelf=180, opening_expiry=120)
+        fresh_milk = ing("Sữa tươi", "ml", 1000, 3000, critical=True, shelf=7, opening_expiry=4)
+        tea = ing("Trà đen", "g", 500, 800, shelf=365, opening_expiry=18)
+        peach = ing("Đào ngâm", "g", 820, 1200, shelf=365, opening_expiry=25)
+        matcha = ing("Bột matcha", "g", 100, 60, critical=True, shelf=180, opening_expiry=90)
+        pearl = ing("Trân châu", "g", 1000, 1500, shelf=180, opening_expiry=100)
+        salted_cream = ing("Kem muối", "ml", 500, 600, shelf=5, opening_expiry=3)
+        cup = ing("Ly nhựa", "cai", 50, 300, rule="lifo")
 
         sugar = OptionGroup.objects.create(store=store, name="Đường")
         for name in ("Bình thường", "Ít đường", "Không đường"):
@@ -75,6 +87,7 @@ class Command(BaseCommand):
                 for ingredient, qty in lines:
                     RecipeLine.objects.create(version=version, size=created[size_name], ingredient=ingredient,
                                               quantity=qty)
+                RecipeLine.objects.create(version=version, size=created[size_name], ingredient=cup, quantity=1)
             if toppings:
                 RecipeLine.objects.create(version=version, option=opt_pearl, ingredient=pearl, quantity=40)
                 RecipeLine.objects.create(version=version, option=opt_cream, ingredient=salted_cream, quantity=30)
@@ -93,11 +106,15 @@ class Command(BaseCommand):
              {"M": [(tea, 6), (peach, 60)], "L": [(tea, 8), (peach, 80)]})
         item(tea_group, "Trà sữa", [("M", 32000), ("L", 37000)],
              {"M": [(tea, 6), (fresh_milk, 100)], "L": [(tea, 8), (fresh_milk, 130)]})
+        item(coffee_group, "Cà phê muối", [("M", 32000), ("L", 37000)],
+             {"M": [(coffee, 20), (condensed, 20), (salted_cream, 40)], "L": [(coffee, 26), (condensed, 25), (salted_cream, 50)]})
+        item(coffee_group, "Latte", [("M", 39000), ("L", 44000)],
+             {"M": [(coffee, 18), (fresh_milk, 160)], "L": [(coffee, 24), (fresh_milk, 210)]})
+        item(tea_group, "Trà sữa trân châu", [("M", 38000), ("L", 43000)],
+             {"M": [(tea, 6), (fresh_milk, 100), (pearl, 50)], "L": [(tea, 8), (fresh_milk, 130), (pearl, 60)]})
         item(other_group, "Matcha đá xay", [("M", 45000)], {"M": [(matcha, 8), (fresh_milk, 150)]}, toppings=False)
-
-        from datetime import timedelta
-
-        from django.utils import timezone
+        item(other_group, "Matcha latte", [("M", 42000), ("L", 47000)],
+             {"M": [(matcha, 5), (fresh_milk, 180)], "L": [(matcha, 7), (fresh_milk, 230)]}, toppings=False)
 
         from apps.shifts.models import Shift
 

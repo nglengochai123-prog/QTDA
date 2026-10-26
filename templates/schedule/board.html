@@ -11,7 +11,7 @@
     <form method="post" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}"><button class="btn btn-primary" name="action" value="auto_assign">Xếp theo đăng ký</button></form>
   </div>
 </header>
-<details class="help-tip"><summary>Giải thích</summary><p>1. Thêm ca (giờ) cho các ngày. 2. Bấm "Gợi ý số người cần" hoặc nhập số người cần từng vị trí; khác gợi ý thì ghi lý do. 3. Nhân viên đăng ký trên điện thoại đến hạn {{ deadline|date:"H:i" }} {{ deadline|date:"d/m" }}. 4. Bấm "Xếp theo đăng ký": hệ thống xếp ô khan hiếm trước, ưu tiên người ít giờ trong tuần, không xếp ai vào hai ca trùng giờ; ô bạn đã xếp tay được giữ. 5. Sửa tay trong từng ô rồi Công bố. Gợi ý số người cần = số ly dự báo của ngày × tỷ lệ bán theo giờ × hệ số tải, chia năng suất mỗi người (từ các giờ không quá tải), lấy giờ cao nhất trong ca, không thấp hơn mức tối thiểu ở trang Tham số.</p></details>
+<details class="help-tip"><summary>Giải thích</summary><p>1. Thêm ca (giờ) cho các ngày. 2. Bấm "Gợi ý số người cần" hoặc nhập số người cần từng vị trí; khác gợi ý thì ghi lý do. 3. Nhân viên đăng ký trên điện thoại đến hạn {{ deadline|date:"H:i" }} {{ deadline|date:"d/m" }}. 4. Bấm "Xếp theo đăng ký": hệ thống xếp người đã đăng ký vào ca, không xếp ai vào hai ca trùng giờ; ô bạn đã xếp tay được giữ. 5. Sửa tay trong từng ô rồi Công bố.</p></details>
 
 <div class="summary-bar">
   <span class="chip {% if total_short %}chip-danger{% else %}chip-ok{% endif %}">{% if total_short %}Còn thiếu {{ total_short }} chỗ{% else %}Đủ người{% endif %}</span>
@@ -47,6 +47,20 @@
 </table></div>
 {% else %}
 <div class="empty"><p><strong>Tuần này chưa có ca.</strong></p><p>Thêm ca bên dưới hoặc bấm "Chép ca tuần trước".</p></div>
+{% endif %}
+
+{% if basis_days %}
+<section class="panel"><h2>Số người cần từng giờ</h2>
+  {% for d in basis_days %}
+  <details class="basis-day"><summary><strong>{{ d.day }} {{ d.date|date:"d/m" }}</strong> <span class="muted">{{ d.cups|floatformat:0 }} ly dự kiến; giờ đông nhất cần {% for r in d.roles %}{{ r.peak }} {{ r.label|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}</span></summary>
+    {% if d.uncovered %}<div class="notice notice-warn"><div>Quán mở nhưng chưa có ca nào phủ giờ: {% for h in d.uncovered %}{{ h }}h{% if not forloop.last %}, {% endif %}{% endfor %}.</div></div>{% endif %}
+    <div class="table-wrap"><table class="data-table basis-table">
+      <thead><tr><th scope="col">Vị trí</th>{% for h in d.hours %}<th scope="col" class="num">{{ h }}h</th>{% endfor %}</tr></thead>
+      <tbody>{% for r in d.roles %}<tr><th scope="row">{{ r.label }}</th>{% for n in r.cells %}<td class="num">{{ n|default_if_none:"" }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+    </table></div>
+  </details>
+  {% endfor %}
+</section>
 {% endif %}
 
 <section class="panel"><h2>Thêm ca</h2>

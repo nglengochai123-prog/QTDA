@@ -7,6 +7,49 @@
     navigator.serviceWorker.register(document.body.dataset.swUrl, { scope: "/" }).catch(function () {});
   }
 
+  // --- Thẻ trang cuộn ngang trên điện thoại: đưa thẻ đang mở vào tầm nhìn ---
+  var subTabs = document.querySelector(".sub-tabs");
+  var currentTab = subTabs && subTabs.querySelector('[aria-current="page"]');
+  if (currentTab && subTabs.scrollWidth > subTabs.clientWidth) {
+    subTabs.scrollLeft = currentTab.offsetLeft - (subTabs.clientWidth - currentTab.offsetWidth) / 2;
+  }
+
+  // --- Thanh trên: đưa phân hệ đang mở vào tầm nhìn khi màn hình hẹp ---
+  var topTabs = document.querySelector(".top-tabs");
+  var currentGroup = topTabs && topTabs.querySelector('[aria-current="true"]');
+  if (currentGroup && topTabs.scrollWidth > topTabs.clientWidth) {
+    topTabs.scrollLeft = currentGroup.offsetLeft - (topTabs.clientWidth - currentGroup.offsetWidth) / 2;
+  }
+
+  // --- Trang chủ: lọc thẻ chức năng theo phân hệ và theo chữ gõ ---
+  var appFilter = document.querySelector("[data-app-filter]");
+  var appSearch = document.querySelector("[data-app-search]");
+  if (appFilter && appSearch) {
+    var cards = Array.prototype.slice.call(document.querySelectorAll(".app-card"));
+    var appEmpty = document.querySelector("[data-app-empty]");
+    var group = "";
+    var applyFilter = function () {
+      var words = appSearch.value.trim().toLowerCase();
+      var shown = 0;
+      cards.forEach(function (card) {
+        var ok = (!group || card.dataset.group === group) && (!words || card.dataset.search.indexOf(words) !== -1);
+        card.hidden = !ok;
+        if (ok) shown += 1;
+      });
+      if (appEmpty) appEmpty.hidden = shown > 0;
+    };
+    appFilter.addEventListener("click", function (event) {
+      var tab = event.target.closest("a[data-group]");
+      if (!tab) return;
+      event.preventDefault();
+      group = tab.dataset.group;
+      appFilter.querySelectorAll("a").forEach(function (a) { a.removeAttribute("aria-current"); });
+      tab.setAttribute("aria-current", "true");
+      applyFilter();
+    });
+    appSearch.addEventListener("input", applyFilter);
+  }
+
   // --- Cảnh báo mất kết nối trong vòng 10 giây (NFR-16) ---
   var banner = document.getElementById("offline-banner");
   var healthUrl = document.body.dataset.healthUrl;
@@ -155,6 +198,31 @@
         window.alert("Đang mất kết nối. Thao tác này chỉ ghi khi có mạng; chờ có mạng rồi bấm lại.");
       }
     }, true);
+  });
+
+  // --- Hỏi lại trước thao tác không hoàn tác được (hủy lô) ---
+  document.querySelectorAll("form[data-confirm]").forEach(function (form) {
+    form.addEventListener("submit", function (event) {
+      if (!window.confirm(form.dataset.confirm)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    }, true);
+  });
+
+  // --- Ô chọn lô chỉ hiện lô của nguyên liệu đang chọn (ghi hao hụt) ---
+  document.querySelectorAll("select[data-lots-for]").forEach(function (lotSelect) {
+    var ingredient = document.getElementById(lotSelect.dataset.lotsFor);
+    if (!ingredient) return;
+    function sync() {
+      Array.prototype.forEach.call(lotSelect.options, function (opt) {
+        if (!opt.value) return;
+        opt.hidden = opt.dataset.ingredient !== ingredient.value;
+        if (opt.hidden && opt.selected) lotSelect.value = "";
+      });
+    }
+    ingredient.addEventListener("change", sync);
+    sync();
   });
 
   // --- Chống bấm gửi hai lần ---

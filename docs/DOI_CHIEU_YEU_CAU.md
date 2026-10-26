@@ -78,7 +78,7 @@ Trạng thái: **Đúng** là làm đủ theo BRD và có kiểm thử; **Một 
 | FR-60 | Danh mục món, bảng giá | Đúng | AC-114 |
 | FR-61 | Nhật ký thao tác | Đúng | AC-115; chỉ thêm, chặn sửa xóa cả ở CSDL |
 | NFR-04 | Không ghi trùng | Đúng | Mọi thao tác tạo dữ liệu có mã nghiệp vụ; kiểm thử gửi lại trong `core/tests/test_end_to_end.py` |
-| NFR-14 | Tham số sửa trên ứng dụng | Đúng | Có lịch sử và thời điểm hiệu lực; xem mục 5 |
+| NFR-14 | Tham số sửa trên ứng dụng | Đúng, có điều chỉnh | Tham số nghiệp vụ sửa trên ứng dụng, có lịch sử và thời điểm hiệu lực; xem mục 5. Từ 26/10/2026 theo yêu cầu của Hai, tham số của mô hình dự báo, kế hoạch mua và gợi ý số người chỉ sửa trong `apps/core/params.py`, không hiện trên giao diện |
 | FR-34 | Hồ sơ nhân viên | Đúng | AC-74, AC-75: số điện thoại không trùng, vai trò, đơn giá lương giờ, tài khoản liên kết; Nghỉ việc khóa tài khoản ngay. Quản lý ở trang Dữ liệu nền (chỉ Chủ quán) |
 
 Màn hình tra cứu bổ sung 12/10/2026: Tra cứu đơn (/don/tra-cuu/, lọc theo mã, ngày tạo hoặc ngày thu, trạng thái, phương thức, bàn, ca, nhân viên, món, nhóm, khung giờ; phân trang giữ bộ lọc), Chi tiết đơn (món, điều chỉnh, hoàn tiền, phiếu dự phòng, nhật ký), Sổ kho (/kho/so-kho/, lọc nguyên liệu, loại, ngày, có tổng và liên kết sang đơn), lọc và phân trang Ngoại lệ, Vụ việc.
@@ -94,6 +94,8 @@ Luồng xuyên suốt nhập hàng → tạo đơn → pha một phần → đi�
 | Tự chuyển cấp | "Tự chuyển" khi quá hạn | Cấp đúng ngay khi đọc; ghi nhật ký chuyển cấp khi lệnh `chay_dinh_ky` chạy | Không để việc mở màn hình quyết định dữ liệu. Khi triển khai cần lên lịch lệnh mỗi phút (Task Scheduler hoặc `--lap 60`) |
 | Kiểm thử đồng thời | Hệ thống chạy PostgreSQL | Đã kiểm trên PostgreSQL 16 (12/10/2026), 5 tình huống đạt | Hết khác biệt |
 | Cảnh báo theo Bảng 5.4 | Hệ thống tự giao và tự chuyển cấp | Trung tâm cảnh báo cập nhật khi lệnh `chay_dinh_ky` chạy (nên lên lịch mỗi phút) | Tách kiểm tra quá hạn khỏi việc mở màn hình theo yêu cầu của Chủ quán |
+| Gợi ý số người cần (26/10/2026) | BRU-28: số người = làm tròn lên tải ÷ năng suất, năng suất học từ giờ không quá tải | Số người từng giờ theo hàng đợi Erlang C (ít nhất 70% việc chờ không quá 4 phút), chia vào ca bằng bài toán phủ; sức làm pha chế đo lúc mọi người đều bận | Mô phỏng (`docs/KET_QUA_MO_PHONG.md` mục 3): cách BRU-28 gợi ý 116 giờ công mỗi ngày so với 53 giờ của lịch hiện nay vì năng suất học được chỉ bằng 1/3 sức làm thật; chia thẳng cho sức làm thật thì để người làm 100% công suất và hàng chờ không giới hạn. Vẫn giữ ý BRU-28: tải dự kiến, sức làm do Chủ quán đặt, mức tối thiểu, không học từ giờ quá tải |
+| Mức phục vụ mặc định khi mua (26/10/2026) | Thiết kế mua GD3: 95% trọng yếu, 90% còn lại | 95% cho mọi nguyên liệu, tối thiểu 98% cho hàng để lâu; trừ phần tồn dự kiến hết hạn (EWA) | Mô phỏng một năm (`docs/KET_QUA_MO_PHONG.md` mục 2): mức cũ cho khoảng 3,4 lần thiếu mỗi tháng khi quy ra cả quán, vượt BO-02; mức mới khoảng 0,9 lần |
 
 ## 5. Tham số: căn cứ và quy tắc hiệu lực
 
@@ -133,7 +135,7 @@ Chủ quán trả lời ngày 11/10/2026. Cột "Đã làm" ghi cách hệ thố
 | GD-11 | Đính chính báo cáo cuối ca có lý do, người duyệt và lịch sử; đối soát lại theo số liệu có hiệu lực, không tính trùng chênh lệch | Bản gốc giữ nguyên; mỗi đính chính là một bản ghi có lý do, người đề nghị, Chủ quán duyệt hoặc từ chối. Duyệt xong hệ thống đối soát lại: khoản không đổi giữ nguyên, khoản đổi thì bản cũ hết hiệu lực (giữ lịch sử, giải trình, quyết định) và bản mới thay thế; tích lũy và giá trị kiểm soát chỉ đếm khoản đang có hiệu lực (`test_corrections.CorrectionTests`) |
 | GD-12 | Theo đề xuất: Chủ quán khai báo ca bằng tay trước khi có lịch ca | Đã có |
 | GD-27 (Hai 12/10/2026) | **Bỏ vai trò Quản lý ca**: Chủ quán trực tiếp quản lý ca. Mọi yêu cầu điều chỉnh do Chủ quán duyệt một cấp (Chủ quán tự gửi thì tự duyệt, có nhật ký; nhân viên vẫn không tự duyệt); quá thời hạn thì đánh dấu quá hạn mọi cấp như trước. Ca không còn người duyệt dự phòng (bỏ GD-08). Cảnh báo trước giao Quản lý ca nay giao Chủ quán. Quỹ ca, kết ca, báo cáo cuối ca do Thu ngân hoặc Chủ quán; khoản chênh lệch thuộc người lập báo cáo cuối ca, người đó hoặc Chủ quán giải trình, Chủ quán quyết định. Tài khoản, hồ sơ mang vai trò Quản lý ca chuyển sang Thu ngân; dữ liệu cũ giữ nguyên | Khác BRD Bảng 5.3, BRU-09 (chuyển cấp ba bậc), AC-22, AC-113 | Giữ theo quyết định của Hai | Không |
-| GD-13 | Giữ trạng thái chờ Chủ quán cho phép cài PostgreSQL | Chưa cài. Kiểm thử đồng thời mới đạt trên SQLite; **chưa kết luận đạt trên PostgreSQL** |
+| GD-13 | Giữ trạng thái chờ Chủ quán cho phép cài PostgreSQL | Đã cài PostgreSQL 16 riêng để kiểm thử (12/10/2026); kiểm thử đồng thời đạt (xem mục 8) |
 
 ### Giả định mới phát sinh, chờ Chủ quán xác nhận
 
@@ -148,6 +150,9 @@ Chủ quán trả lời ngày 11/10/2026. Cột "Đã làm" ghi cách hệ thố
 | GD-21 | Mức món tồn tại quầy cho phép cuối khung giờ: 15 ly (tham số) | BRD không nêu giá trị |
 | GD-22 | Cảnh báo đã được người xử lý đóng tay thì không tự mở lại cho cùng đối tượng dù điều kiện còn; cảnh báo "Chênh lệch tiền" chuyển từ Quản lý ca sang Chủ quán khi đã có giải trình | Tránh nhắc lặp cùng một việc đã có kết quả |
 | GD-23 | Báo cáo doanh thu tính theo thời điểm thanh toán; "nhân viên" là người tạo đơn; khung giờ theo giờ gửi pha chế | BRD không nói rõ mốc thời gian và người được ghi doanh thu |
+| GD-28 | Mục tiêu khi gợi ý số người: 70% việc chờ không quá 4 phút trước khi có người làm (tham số) | Chọn qua mô phỏng hàng đợi: khoảng 96% số giờ đạt chuẩn chờ 10 phút, giờ đông khoảng 92%, giờ công chỉ hơn lịch cố định khoảng 8% |
+| GD-29 | Mức tối thiểu người mỗi vị trí áp cho từng giờ quán mở, không cho từng ca; ca cao điểm có thể được gợi ý 0 người ở một vị trí nếu ca chính đã đủ | Bài toán phủ cần nhu cầu theo giờ; áp cho từng ca thì ca chồng giờ bị tính hai lần |
+| GD-30 | Hàng để lâu (nhóm B) giữ mức phục vụ ít nhất 98%; hàng tươi 95% | Phân bổ chỉ tiêu BO-02 cho cả quán: giữ thêm hàng không hỏng gần như không tốn, nên dồn phần thiếu cho phép sang hàng tươi |
 | GD-19 | Mỗi dãy phiếu đã cấp cho ca phải khai báo số cuối đã dùng (0 nếu không dùng) trước khi kết ca | Nếu không, hệ thống không biết phiếu cuối bị bỏ sót (AC-13 chỉ phát hiện được số thiếu nằm giữa) |
 
 ## 7. Dữ liệu đầu vào cho dự báo (logic dự báo chờ Hai giải thích)
@@ -211,7 +216,7 @@ Phạm vi làm: mọi yêu cầu mức Must của BRD; thêm theo yêu cầu c�
 | NFR-11 Tương thích | Chờ Hai thử | Chrome, Edge trên máy tính đã dùng; Android, iPhone và máy in quầy cần thiết bị thật |
 | NFR-12 Bản địa hóa | Đúng | Tiếng Việt, tiền có dấu chấm, giờ UTC+7 |
 | NFR-13 Pháp lý | Đúng phần mã | Thông báo xử lý dữ liệu cá nhân có xác nhận theo phiên bản; **nội dung dự thảo chờ Hai rà soát pháp lý** |
-| NFR-14 Cấu hình | Đúng | Tham số có lịch sử và thời điểm hiệu lực |
+| NFR-14 Cấu hình | Đúng, có điều chỉnh | Tham số nghiệp vụ có lịch sử và thời điểm hiệu lực; tham số mô hình sửa trong file (yêu cầu của Hai 26/10/2026) |
 | NFR-15 Giao diện đáp ứng | Đúng | 24 trang chính ở bề rộng 375 px không có cuộn ngang (trình duyệt, bộ dữ liệu mẫu); máy tính từ 1366 px |
 | NFR-16 Kết nối không ổn định | Đúng phần mã | Báo mất kết nối trong 10 giây; nháp biểu mẫu lưu trên thiết bị kèm mã nghiệp vụ và khôi phục sau tải lại (đã thử trên trình duyệt); thanh toán, phê duyệt, xem xét bị chặn khi mất mạng (đã thử). Diễn tập mất mạng thật ở tuần chạy thử |
 | NFR-17 Thông báo tức thời | Chờ Hai nghiệm thu | Máy chủ gửi được (dịch vụ đẩy nhận mã 201); thử trên điện thoại thật đang tạm hoãn theo yêu cầu của Hai |
@@ -220,3 +225,17 @@ Phạm vi làm: mọi yêu cầu mức Must của BRD; thêm theo yêu cầu c�
 | NFR-23 Tải xử lý của Chủ quán | Đúng | Mọi loại cảnh báo có người xử lý chính, thời hạn, cấp chuyển; mức Thông tin không đẩy; thống kê tuần |
 
 **Kết luận (cập nhật cuối 12/10/2026):** đã làm cả phần dự báo theo khung lý thuyết của Hai (FR-28, FR-29, FR-31 mức Should cũng đã làm vì cùng khung), và bỏ vai trò Quản lý ca theo GD-27. Toàn bộ phạm vi Must đã có trong mã nguồn. Phần còn lại: đánh giá dự báo trên dữ liệu đơn hàng thật hoặc mẫu của Hai; chờ Hai nghiệm thu hoặc thử trên thiết bị thật (NFR-11, NFR-13, NFR-17, in phiếu), và đo khi chạy thử hoặc triển khai (NFR-02, NFR-05, lên lịch NFR-09, NFR-10).
+
+## 10. Bổ sung theo yêu cầu của Hai (26/10/2026)
+
+Hai yêu cầu quản lý kho đầy đủ theo lô (mã lô, ngày nhập, hạn dùng, gợi ý lấy lô nào trước theo FIFO, LIFO, FEFO phù hợp từng loại nguyên liệu), dashboard nhiều loại biểu đồ để đọc nhận định, và giao diện chuyên nghiệp hơn. Các phần này mở rộng yêu cầu đã có, không đổi kết quả đối chiếu ở mục 3 và mục 9.
+
+| Phần | Yêu cầu liên quan | Hiện tại | Kiểm thử, tài liệu |
+|---|---|---|---|
+| Lô hàng | FR-22, FR-24, FR-25, FR-26 | Mỗi dòng phiếu nhập là một lô có mã, hạn sử dụng, số lô nhà sản xuất, đơn giá; nhập, pha chế, hao hụt, kiểm kê đều phân bổ vào lô trong cùng giao dịch với sổ kho. Không nhập được lô đã quá hạn. Tồn cũ được chuyển sang lô bằng migration | `inventory/tests/test_lots.py`; `docs/QUAN_LY_KHO_THEO_LO.md` |
+| Quy tắc lấy lô | Mới | Mặc định FEFO (hàng không có hạn thực chất là FIFO); Chủ quán chọn FIFO hoặc LIFO ở Dữ liệu nền; LIFO bị chặn với hàng có hạn; lô quá hạn luôn xếp cuối | `inventory/tests/test_lots.py`, `masterdata/tests` |
+| Phiếu lấy hàng, trang lô | Mới | `/kho/lay-hang/`, `/kho/lo/`, chi tiết lô từng nguyên liệu; hủy lô, sửa hạn có nhật ký | `docs/QUAN_LY_KHO_THEO_LO.md` mục 6 |
+| Cảnh báo lô quá hạn | FR-51, NFR-23 | Thêm loại cảnh báo Lô quá hạn còn trong kho: giao Pha chế, Quan trọng, hạn cuối ngày, chuyển Chủ quán khi quá hạn, tự đóng khi hủy lô | `reports/tests/test_insights.py` |
+| Giá trị tồn | Mới | Giá thực tế đích danh từng lô; LIFO chỉ là thứ tự lấy hàng, không là cách tính giá (Thông tư 200/2014/TT-BTC) | |
+| Bảng điều khiển, báo cáo | FR-50, FR-53, FR-54, NFR-19 | Thêm lãi gộp ước tính từ nguyên liệu thực trừ kho, so sánh kỳ trước, giờ đông khách, ma trận thực đơn, nhận định tự động; báo cáo kho có biểu đồ ở `/bao-cao/kho/`; mỗi điểm biểu đồ có số khi rê chuột | `reports/tests/test_insights.py`; `docs/CACH_HOAT_DONG.md` mục 14 |
+| Giao diện | NFR-10, NFR-15 | Bố cục bảng quản trị mới (`DESIGN.md`). Đã duyệt mọi trang chính ở 375 px và 1366 px trên dữ liệu mẫu: không cuộn ngang, biểu đồ không chồng chữ | |

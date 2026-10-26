@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Phiếu lấy hàng · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div><h1>Phiếu lấy hàng</h1><p class="page-sub">Khi lấy nguyên liệu ra quầy, lấy đúng lô ghi ở đây. Lô quá hạn để riêng và hủy, không dùng.</p></div>
+  <div class="page-tools"><button class="btn btn-quiet" type="button" onclick="window.print()">In</button></div>
+</header>
+{% if cards %}
+<div class="pick-grid">
+  {% for c in cards %}
+  <article class="pick-card{% if c.expired %} is-danger{% elif c.pick.state == 'sap_het_han' %} is-warn{% endif %}">
+    <header class="pick-head"><h2><a href="{% url 'inventory:lot_detail' c.ingredient.pk %}">{{ c.ingredient.name }}</a></h2><span class="rule" title="{{ c.ingredient.rule_label }}">{{ c.ingredient.rule_short }}</span></header>
+    {% if c.pick %}
+    <p class="pick-label">Lấy lô</p>
+    <p class="pick-code mono">{{ c.pick.code }}</p>
+    <dl class="pick-facts">
+      <div><dt>Hạn</dt><dd>{% if c.pick.expiry_date %}{{ c.pick.expiry_date|date:"d/m/Y" }}<span class="dd-sub{% if c.pick.state == 'sap_het_han' %} text-warn{% endif %}">{% if c.pick.days_left == 0 %}hết hạn hôm nay{% elif c.pick.days_left is not None %}còn {{ c.pick.days_left }} ngày{% endif %}</span>{% elif c.ingredient.shelf_life_days %}Chưa rõ{% else %}Không có hạn{% endif %}</dd></div>
+      <div><dt>Còn</dt><dd>{{ c.pick.remaining|floatformat:"-2g" }} {{ c.ingredient.get_unit_display }}</dd></div>
+      {% if c.pick.supplier_lot %}<div><dt>Số lô NSX</dt><dd>{{ c.pick.supplier_lot }}</dd></div>{% endif %}
+      <div><dt>Nhập</dt><dd>{{ c.pick.received_at|date:"d/m" }}</dd></div>
+    </dl>
+    {% if c.then %}<p class="pick-next">Hết lô này thì lấy <span class="mono">{{ c.then.code }}</span>{% if c.then.expiry_date %} (HSD {{ c.then.expiry_date|date:"d/m" }}){% endif %}</p>{% endif %}
+    {% else %}<p class="pick-none">Không còn lô dùng được.</p>{% endif %}
+    {% for v in c.expired %}
+    <div class="pick-alert"><span><strong>Lô <span class="mono">{{ v.code }}</span> quá hạn</strong> từ {{ v.expiry_date|date:"d/m" }}, còn {{ v.remaining|floatformat:"-2g" }} {{ c.ingredient.get_unit_display }}. Để riêng, không dùng.</span>
+      <form method="post" action="{% url 'inventory:lot_dispose' v.pk %}" data-once data-confirm="Hủy toàn bộ {{ v.remaining|floatformat:'-2g' }} {{ c.ingredient.get_unit_display }} của lô {{ v.code }}?">{% csrf_token %}<input type="hidden" name="operation_key" value="{{ v.op }}"><input type="hidden" name="next" value="{{ request.path }}"><button class="btn btn-danger btn-sm" type="submit">Hủy lô</button></form></div>
+    {% endfor %}
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty"><p><strong>Kho chưa có lô nào.</strong></p><p>Lô được tạo khi lập phiếu nhập.</p></div>
+{% endif %}
+{% endblock %}

@@ -1,6 +1,6 @@
 # LAM Coffee System
 
-Hệ thống vận hành quán LAM Coffee: bán hàng có kiểm soát điều chỉnh đơn, nguyên vật liệu theo định mức, quỹ tiền ca và đối soát, đo tải nhân sự. Bối cảnh sản phẩm ở [PRODUCT.md](PRODUCT.md), chuẩn giao diện ở [DESIGN.md](DESIGN.md), kế hoạch và tiến độ ở [KE_HOACH.md](KE_HOACH.md), đối chiếu với báo cáo yêu cầu và các quyết định chờ Chủ quán ở [docs/DOI_CHIEU_YEU_CAU.md](docs/DOI_CHIEU_YEU_CAU.md).
+Hệ thống vận hành quán LAM Coffee (cách từng chức năng hoạt động: [docs/CACH_HOAT_DONG.md](docs/CACH_HOAT_DONG.md)): bán hàng có kiểm soát điều chỉnh đơn, nguyên vật liệu theo định mức, quỹ tiền ca và đối soát, đo tải nhân sự. Bối cảnh sản phẩm ở [PRODUCT.md](PRODUCT.md), chuẩn giao diện ở [DESIGN.md](DESIGN.md), kế hoạch và tiến độ ở [KE_HOACH.md](KE_HOACH.md), đối chiếu với báo cáo yêu cầu và các quyết định chờ Chủ quán ở [docs/DOI_CHIEU_YEU_CAU.md](docs/DOI_CHIEU_YEU_CAU.md).
 
 ## Chạy trên máy cá nhân
 
@@ -24,7 +24,7 @@ Kiểm tra quá hạn (chuyển cấp duyệt, giao chậm): `.venv\Scripts\pyth
 ```
 config/            cấu hình Django (đọc biến môi trường, xem .env.example)
 apps/core/         nền chung: cửa hàng (mã cửa hàng NFR-18), lớp model nền, trang chủ, PWA, /healthz/, trang quản trị chỉ Chủ quán
-apps/accounts/     tài khoản 5 vai trò, tạm khóa khi sai mật khẩu, ma trận phân quyền Bảng 5.3 (permissions.py)
+apps/accounts/     tài khoản 4 vai trò (đã bỏ Quản lý ca theo GD-27), tạm khóa khi sai mật khẩu, ma trận phân quyền Bảng 5.3 (permissions.py)
 apps/audit/        nhật ký thao tác chỉ thêm mới (model, QuerySet và trigger CSDL chặn sửa xóa)
 apps/staff/        hồ sơ nhân viên, nghỉ việc thì khóa tài khoản; chấm công theo vai trò (timekeeping.py)
 apps/catalog/      bàn, nhóm món, món, kích cỡ và giá, nhóm tùy chọn và tùy chọn
@@ -39,7 +39,7 @@ templates/, static/ giao diện theo DESIGN.md
 
 ## Tài khoản và dữ liệu chạy thử trên máy cá nhân
 
-Trên cơ sở dữ liệu trống, `.venv\Scripts\python.exe manage.py tao_du_lieu_mau` tạo bàn, món, định mức, tồn đầu kỳ và 5 tài khoản `demo_*` (mỗi vai trò một tài khoản). Lệnh cũng tạo một ca mẫu từ 6 giờ đến 24 giờ hôm nay. Đây là dữ liệu mẫu, không phải thực đơn hay giá thật.
+Trên cơ sở dữ liệu trống, `.venv\Scripts\python.exe manage.py tao_du_lieu_mau` tạo bàn, món, định mức, tồn đầu kỳ và 4 tài khoản `demo_*` (mỗi vai trò một tài khoản). Lệnh cũng tạo một ca mẫu từ 6 giờ đến 24 giờ hôm nay. Đây là dữ liệu mẫu, không phải thực đơn hay giá thật.
 
 Cấp duyệt của yêu cầu điều chỉnh được tính đúng mỗi khi đọc, không phụ thuộc ai mở màn hình. Khi triển khai thật, lên lịch `chay_dinh_ky` mỗi phút để nhật ký chuyển cấp ghi đúng thời điểm.
 

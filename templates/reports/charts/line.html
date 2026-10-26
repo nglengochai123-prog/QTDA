@@ -1,0 +1,7 @@
+{% load l10n %}{% if c %}{% include "reports/charts/legend.html" with items=c.legend kind="line" %}<div class="chart-box{% if c.w <= 400 %} chart-box-narrow{% endif %}">{% localize off %}<svg class="chart-svg" viewBox="0 0 {{ c.w }} {{ c.h }}" role="img" aria-label="{{ label }}">
+  {% for t in c.ticks %}<line class="grid{% if forloop.first %} baseline{% endif %}" x1="{{ c.x0 }}" x2="{{ c.x1 }}" y1="{{ t.y }}" y2="{{ t.y }}"/><text class="axis-text" x="{{ c.x0|add:'-8' }}" y="{{ t.y }}" dy="0.32em" text-anchor="end">{{ t.text }}</text>{% endfor %}
+  {% for s in c.series %}{% if s.area %}<path class="area-{{ s.slot }}" d="{{ s.area }}"/>{% endif %}{% endfor %}
+  {% for s in c.series %}<path class="l-{{ s.slot }}" d="{{ s.d }}"/>{% endfor %}
+  {% for s in c.series %}{% if s.end %}<circle class="dot f-{{ s.slot }}" cx="{{ s.end.x }}" cy="{{ s.end.y }}" r="4"/><text class="value-text" x="{{ s.end.x|add:'8' }}" y="{{ s.end.y }}" dy="0.32em">{{ s.end.text }}</text>{% endif %}{% endfor %}
+  {% for h in c.hits %}<g class="hit hit-x" tabindex="0" data-tip="{{ h.tip }}"><rect class="hit-area" x="{{ h.x }}" y="{{ c.top }}" width="{{ h.w }}" height="{{ c.plot_h }}"/><line class="xhair" x1="{{ h.cx }}" x2="{{ h.cx }}" y1="{{ c.top }}" y2="{{ c.base }}"/><title>{{ h.tip }}</title></g>{% if h.show_label %}<text class="axis-text" x="{{ h.cx }}" y="{{ c.label_y }}" text-anchor="middle">{{ h.label }}</text>{% endif %}{% endfor %}
+</svg>{% endlocalize %}</div>{% endif %}

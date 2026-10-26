@@ -1,0 +1,13 @@
+{% load l10n %}{% if c %}<div class="chart-box{% if c.w <= 400 %} chart-box-narrow{% endif %}">{% localize off %}<svg class="chart-svg" viewBox="0 0 {{ c.w }} {{ c.h }}" role="img" aria-label="{{ label }}">
+  {% for t in c.yticks %}<line class="grid" x1="{{ c.x0 }}" x2="{{ c.x1 }}" y1="{{ t.y }}" y2="{{ t.y }}"/><text class="axis-text" x="{{ c.x0|add:'-8' }}" y="{{ t.y }}" dy="0.32em" text-anchor="end">{{ t.text }}</text>{% endfor %}
+  {% for t in c.xticks %}<text class="axis-text" x="{{ t.x }}" y="{{ c.label_y }}" text-anchor="middle">{{ t.text }}</text>{% endfor %}
+  <line class="baseline" x1="{{ c.x0 }}" x2="{{ c.x1 }}" y1="{{ c.base }}" y2="{{ c.base }}"/>
+  {% if c.zero %}<line class="baseline" x1="{{ c.x0 }}" x2="{{ c.x1 }}" y1="{{ c.zero }}" y2="{{ c.zero }}"/>{% endif %}
+  <line class="divider" x1="{{ c.mx }}" x2="{{ c.mx }}" y1="{{ c.y0 }}" y2="{{ c.base }}"/>
+  <line class="divider" x1="{{ c.x0 }}" x2="{{ c.x1 }}" y1="{{ c.my }}" y2="{{ c.my }}"/>
+  <text class="quad-text" x="{{ c.x1|add:'-6' }}" y="{{ c.y0|add:'12' }}" text-anchor="end">{{ c.q.tr }}</text>
+  <text class="quad-text" x="{{ c.x0|add:'6' }}" y="{{ c.y0|add:'12' }}">{{ c.q.tl }}</text>
+  <text class="quad-text" x="{{ c.x1|add:'-6' }}" y="{{ c.base|add:'-8' }}" text-anchor="end">{{ c.q.br }}</text>
+  <text class="quad-text" x="{{ c.x0|add:'6' }}" y="{{ c.base|add:'-8' }}">{{ c.q.bl }}</text>
+  {% for d in c.dots %}<g class="hit" tabindex="0" data-tip="{{ d.tip }}"><circle class="hit-area" cx="{{ d.cx }}" cy="{{ d.cy }}" r="12"/><circle class="dot f-1" cx="{{ d.cx }}" cy="{{ d.cy }}" r="5"/><title>{{ d.tip }}</title></g>{% if d.show %}<text class="value-text" x="{{ d.lx }}" y="{{ d.ly }}" dy="0.32em" text-anchor="{{ d.anchor }}">{{ d.text }}</text>{% endif %}{% endfor %}
+</svg>{% endlocalize %}</div>{% endif %}

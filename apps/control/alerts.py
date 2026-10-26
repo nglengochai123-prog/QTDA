@@ -184,6 +184,24 @@ def _order_needed(now):
                "link": f"/du-bao/ke-hoach-mua/{ing.pk}/", "escalate": False, "kind": Alert.Kind.ORDER_NEEDED}
 
 
+def _lots_expired(now):
+    """Lô đã quá hạn mà vẫn còn hàng trong kho: pha chế để riêng và hủy lô (ghi hao hụt Hết hạn) trong ngày.
+
+    Tự đóng khi lô được hủy hoặc dùng hết. Khóa theo lô nên mỗi lô quá hạn có một cảnh báo riêng."""
+    from apps.inventory.models import StockLot
+
+    today = timezone.localdate(now)
+    for lot in (StockLot.objects.filter(remaining__gt=0, expiry_date__lt=today)
+                .select_related("ingredient").order_by("expiry_date")):
+        unit = lot.ingredient.get_unit_display()
+        yield {"subject": f"lo-qua-han-{lot.pk}", "title": f"Lô {lot.code} ({lot.ingredient.name}) đã quá hạn",
+               "detail": f"Hạn {lot.expiry_date:%d/%m/%Y}, còn {lot.remaining.normalize():f} {unit}. Để riêng, không "
+                         f"dùng pha chế; hủy lô ở Phiếu lấy hàng để sổ kho khớp thực tế.",
+               "assignee": None, "role": BARISTA, "severity": Alert.Severity.IMPORTANT,
+               "due": _end_of_day(today), "link": "/kho/lay-hang/", "escalate": True, "escalate_to": OWNER,
+               "escalate_user": None}
+
+
 COLLECTORS = [
     (Alert.Kind.OUT_OF_STOCK, _out_of_stock),
     (Alert.Kind.BACKUP_PENDING, _backup_pending),
@@ -194,6 +212,7 @@ COLLECTORS = [
     (Alert.Kind.ORDER_NEEDED, _order_needed),
     (Alert.Kind.RECOUNT, _recount),
     (Alert.Kind.LATE_COUNT, _late_count),
+    (Alert.Kind.LOT_EXPIRED, _lots_expired),
 ]
 
 

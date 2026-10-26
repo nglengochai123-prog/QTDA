@@ -12,6 +12,17 @@ from apps.accounts.permissions import Cap, capability_required, user_can
 from . import services
 
 
+def presets(today):
+    """Các kỳ chọn nhanh ở hàng bộ lọc: (nhãn, từ, đến)."""
+    from datetime import timedelta
+
+    first, _ = services.month_bounds(today)
+    prev_last = first - timedelta(days=1)
+    return [("7 ngày", today - timedelta(days=6), today), ("30 ngày", today - timedelta(days=29), today),
+            ("Tháng này", first, today), ("Tháng trước", prev_last.replace(day=1), prev_last),
+            ("90 ngày", today - timedelta(days=89), today)]
+
+
 def _period(request):
     today = timezone.localdate()
     first, _ = services.month_bounds(today)
@@ -66,9 +77,14 @@ def revenue(request):
     dim = request.GET.get("theo", "ngay")
     if dim not in services.DIMENSIONS:
         dim = "ngay"
+    from . import insights
+
     data = services.revenue(start, end, dim)
-    return render(request, "reports/revenue.html", {"start": start, "end": end, "dims": services.DIMENSIONS.items(),
-                                                    **data})
+    kind, chart = insights.dimension_chart(data)
+    return render(request, "reports/revenue.html", {
+        "start": start, "end": end, "dims": services.DIMENSIONS.items(), "presets": presets(timezone.localdate()),
+        "extra": f"theo={dim}", "sales": insights.sales(start, end, wide=True), "dim_kind": kind, "dim_chart": chart,
+        **data})
 
 
 @capability_required(Cap.EXCEPTION_REVIEW)
@@ -84,3 +100,14 @@ def revenue_control(request):
 def materials(request):
     start, end = _period(request)
     return render(request, "reports/materials.html", {"start": start, "end": end, **services.materials(start, end)})
+
+
+@capability_required(Cap.VIEW_DASHBOARD)
+@require_GET
+def inventory(request):
+    from . import inventory as inv
+
+    start, end = _period(request)
+    today = timezone.localdate()
+    return render(request, "reports/inventory.html", {"start": start, "end": end, "presets": presets(today),
+                                                      "show_value": True, **inv.dashboard(start, end, today)})

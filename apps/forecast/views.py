@@ -28,7 +28,7 @@ def overview(request):
     if request.method == "POST":
         rel = services.release(user=request.user)
         record(Action.CREATE, request=request, obj=rel, after={"phien_ban_du_lieu": rel.data_version[:12]})
-        messages.success(request, "Đã phát hành dự báo mới.")
+        messages.success(request, "Đã cập nhật dự báo.")
         return redirect("forecast:overview")
     rel = services.latest_release()
     rows = []
@@ -38,7 +38,47 @@ def overview(request):
                          "tomorrow": s.daily[1] if len(s.daily) > 1 else None,
                          "t3": s.totals.get("3"), "t7": s.totals.get("7")})
     return render(request, "forecast/overview.html", {"rel": rel, "rows": rows,
-                                                      "methods": dict(MethodDecision.Method.choices)})
+                                                      "methods": dict(MethodDecision.Method.choices),
+                                                      **_overview_charts(rel, rows)})
+
+
+def _overview_charts(rel, rows):
+    """Tổng số ly đã bán 3 tuần qua nối với tổng kỳ vọng dự báo 14 ngày tới, và khoảng 7 ngày tới của từng món."""
+    from datetime import date, timedelta
+
+    from apps.reports import charts
+
+    if not rel or not rows:
+        return {}
+    today = timezone.localdate()
+    dates, status, cups, _ = services.history(today, days=21)
+    past = [None if status.get(d) == "dong_cua" else sum(series.get(d, 0) for series in cups.values()) for d in dates]
+    ahead = {}
+    for r in rows:
+        for point in r["s"].daily:
+            d = date.fromisoformat(point["date"])
+            if today <= d < today + timedelta(days=14):
+                ahead[d] = ahead.get(d, 0) + float(point["mean"])
+    future = sorted(ahead)
+    labels = [f"{d:%d/%m}" for d in dates + future]
+    n_past = len(dates)
+    sold = past + [None] * len(future)
+    # Đường dự báo nối từ điểm đã bán cuối cùng để hai đường liền mạch.
+    expected = ([None] * (n_past - 1) + [past[-1]] if past else []) + [ahead[d] for d in future]
+    trend = charts.line(labels, [{"name": "Đã bán", "values": sold, "slot": 1},
+                                 {"name": "Dự báo (kỳ vọng)", "values": expected, "slot": 2}],
+                        value_fmt=lambda v: f"{v:.0f} ly" if v is not None else "–",
+                        tip_labels=[f"{d:%d/%m}" + (" (đã bán)" if k < n_past else " (dự báo)")
+                                    for k, d in enumerate(dates + future)], width=charts.WIDE, height=220) \
+        if any(v is not None for v in sold + expected) else None
+    week = sorted((r for r in rows if r["t7"]), key=lambda r: -r["t7"]["mean"])
+    ranges = charts.ranges([{
+        "label": f"{r['s'].size.item.name} {r['s'].size.name}", "lo": r["t7"]["q10"], "mid": r["t7"]["mean"],
+        "hi": r["t7"]["q90"],
+        "tip": f"{r['s'].size.item.name} {r['s'].size.name}: 7 ngày tới kỳ vọng {r['t7']['mean']:.0f} ly, "
+               f"khoảng 8/10 khả năng từ {r['t7']['q10']} tới {r['t7']['q90']} ly"} for r in week],
+        label_w=150, width=charts.WIDE, unit=" ly")
+    return {"trend_chart": trend, "ranges_chart": ranges}
 
 
 @capability_required(Cap.FORECASTS)

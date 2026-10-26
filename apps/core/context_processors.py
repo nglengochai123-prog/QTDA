@@ -8,10 +8,71 @@ def site(request):
     return {"STORE_NAME": settings.LAM_STORE_NAME, "FORECAST_SIMULATED": settings.LAM_FORECAST_INCLUDE_SIMULATED}
 
 
-# Biểu tượng và nhãn ngắn của từng phân hệ trên thanh biểu tượng bên trái (kiểu ServiceDesk Plus).
+# Biểu tượng, nhãn ngắn trên thanh trên và màu ô biểu tượng (trang chủ) của từng phân hệ.
 GROUP_ICONS = {"Tổng quan": "home", "Bán hàng": "order", "Ca và nhân sự": "shift", "Kho": "stock", "Dự báo": "forecast",
                "Kiểm soát": "control_report", "Báo cáo": "revenue", "Quản trị": "params"}
 GROUP_SHORT = {"Tổng quan": "Trang chủ", "Ca và nhân sự": "Ca, nhân sự"}
+GROUP_TONES = {"Tổng quan": "blue", "Bán hàng": "orange", "Ca và nhân sự": "green", "Kho": "teal", "Dự báo": "indigo",
+               "Kiểm soát": "red", "Báo cáo": "pink", "Quản trị": "gray"}
+
+# Mục không có biểu tượng cùng tên dùng biểu tượng ở đây (templates/partials/icons.html).
+ICONS = {"fc_overview": "forecast", "fc_plans": "po", "fc_prior": "bulb", "fc_season": "sun", "fc_history": "upload",
+         "md_ca": "shift", "md_nhan-vien": "people", "md_mon": "brand", "md_nhom-mon": "tag", "md_tuy-chon": "sliders",
+         "md_ban": "table", "md_nguyen-lieu": "stock", "md_dinh-muc": "beaker", "md_nha-cung-cap": "truck", "md_ly-do": "note"}
+
+# Một dòng mô tả cho thẻ chức năng ở trang chủ: nói chức năng dùng để làm gì, không nói cách tính.
+DESCRIPTIONS = {
+    "home": "Việc chờ xử lý và lối vào mọi chức năng",
+    "dashboard": "Doanh thu, kho và kiểm soát trong một trang",
+    "alerts": "Cảnh báo cần bạn xử lý, kèm thời hạn",
+    "order": "Chọn bàn, thêm món và gửi pha chế",
+    "ready": "Món đã pha xong, chờ mang ra bàn",
+    "open": "Đơn chưa thanh toán; hủy, đổi món, chuyển bàn",
+    "lookup": "Tìm đơn theo mã, bàn hoặc thời gian",
+    "approve": "Duyệt yêu cầu hủy món, đổi món, chuyển bàn",
+    "bar": "Món cần pha theo thứ tự gửi",
+    "cashier": "Thu tiền theo bàn, tiền mặt hoặc chuyển khoản",
+    "backup": "Nhập bù phiếu giấy khi mất kết nối",
+    "shift": "Quỹ đầu ca, thu chi và báo cáo cuối ca",
+    "attendance": "Chấm công vào, ra và sửa chấm công",
+    "status": "Ca đang mở, chênh lệch tiền và báo cáo ca",
+    "schedule": "Lập lịch tuần và xếp người theo đăng ký",
+    "register": "Đăng ký các ca có thể làm tuần sau",
+    "my_schedule": "Các ca đã được xếp cho bạn",
+    "workload": "Số ly theo giờ, thời gian chờ, người có mặt",
+    "stock": "Tồn từng nguyên liệu và còn đủ dùng bao lâu",
+    "lots": "Từng lô hàng, hạn dùng và thứ tự lấy",
+    "pick": "Lô nên lấy ra quầy hôm nay",
+    "receipt": "Ghi hàng nhận từ nhà cung cấp",
+    "count": "Đếm tồn thực tế và ghi chênh lệch",
+    "waste": "Ghi hàng hư, hết hạn, đổ vỡ",
+    "po": "Đơn đặt nhà cung cấp và hàng đang về",
+    "payables": "Công nợ nhà cung cấp và thanh toán",
+    "ledger": "Mọi lần nhập, xuất, điều chỉnh kho",
+    "stock_report": "Giá trị tồn, lịch hết hạn, tuổi hàng",
+    "fc_overview": "Số ly dự kiến bán những ngày tới",
+    "fc_plans": "Nguyên liệu cần mua và ngày đặt chậm nhất",
+    "fc_prior": "Ước tính của Chủ quán cho món mới",
+    "fc_season": "Tăng giảm dự kiến theo mùa, lễ, sự kiện",
+    "fc_history": "Nhập số bán trước khi dùng hệ thống",
+    "exceptions": "Sự việc bất thường cần xem xét",
+    "cases": "Theo dõi khoản thiếu đến khi kết luận",
+    "revenue": "Doanh thu theo ngày, món, giờ, cách trả",
+    "control_report": "Tiền thiếu, đã xác minh và đã thu hồi",
+    "materials": "Nhập, xuất, tồn và hao hụt theo kỳ",
+    "params": "Ngưỡng cảnh báo, thời hạn, giờ mở cửa",
+    "md_ca": "Ca bán hàng đang mở và đã kết",
+    "md_nhan-vien": "Hồ sơ, vai trò và lương giờ",
+    "md_mon": "Thực đơn, kích cỡ và giá bán",
+    "md_nhom-mon": "Nhóm món trên màn tạo đơn",
+    "md_tuy-chon": "Đường, đá và topping",
+    "md_ban": "Danh sách bàn của quán",
+    "md_nguyen-lieu": "Đơn vị, quy cách, hạn dùng, nhà cung cấp",
+    "md_dinh-muc": "Lượng nguyên liệu cho mỗi ly",
+    "md_nha-cung-cap": "Liên hệ và thời gian giao hàng",
+    "md_ly-do": "Lý do dùng khi hủy, đổi món, chuyển bàn",
+    "log": "Ai đã làm gì, lúc nào",
+}
 
 
 def navigation(request):
@@ -21,9 +82,10 @@ def navigation(request):
         return {}
     # Mục đánh dấu desktop chỉ hiện trên máy tính (thanh dưới điện thoại giữ tối đa 4 mục).
     desktop_only = {"bar", "data", "log", "cashier", "status", "exceptions", "cases", "params", "backup", "workload",
-                    "revenue", "control_report", "materials", "dashboard", "lookup", "ledger"} | {
+                    "revenue", "control_report", "materials", "dashboard", "lookup", "ledger", "lots", "pick", "receipt",
+                    "count", "waste", "po", "payables", "stock_report"} | {
         "md_ca", "md_nhan-vien", "md_mon", "md_nhom-mon", "md_tuy-chon", "md_ban", "md_nguyen-lieu", "md_dinh-muc",
-        "md_nha-cung-cap", "md_ly-do", "schedule", "fc_overview", "fc_plans", "fc_ordering", "fc_eval", "fc_prior", "fc_season", "fc_history"}
+        "md_nha-cung-cap", "md_ly-do", "schedule", "fc_overview", "fc_plans", "fc_prior", "fc_season", "fc_history"}
     # Nhóm điều hướng theo nghiệp vụ (DESIGN.md: bố cục quản trị); trên điện thoại chỉ hiện tối đa 5 mục.
     groups = [
         (None, [("home", "Trang chủ", reverse("core:home"), None),
@@ -48,12 +110,18 @@ def navigation(request):
             ("my_schedule", "Lịch của tôi", reverse("schedule:mine"), Cap.SHIFT_REGISTER),
             ("workload", "Tải và thời gian chờ", reverse("staff:workload"), Cap.VIEW_WORKLOAD)]),
         ("Kho", [("stock", "Tồn kho", reverse("inventory:stock"), Cap.STOCK_OPERATIONS),
-                 ("ledger", "Sổ kho", reverse("inventory:ledger"), Cap.VIEW_DASHBOARD)]),
+                 ("lots", "Lô hàng", reverse("inventory:lots"), Cap.STOCK_OPERATIONS),
+                 ("pick", "Phiếu lấy hàng", reverse("inventory:pick_list"), Cap.STOCK_OPERATIONS),
+                 ("receipt", "Phiếu nhập", reverse("inventory:receipt"), Cap.STOCK_OPERATIONS),
+                 ("count", "Kiểm kê", reverse("inventory:count"), Cap.STOCK_OPERATIONS),
+                 ("waste", "Hao hụt", reverse("inventory:waste"), Cap.STOCK_OPERATIONS),
+                 ("po", "Đặt hàng", reverse("inventory:purchase_orders"), Cap.STOCK_CONFIRM_ORDERING),
+                 ("payables", "Phải trả", reverse("inventory:payables"), Cap.STOCK_CONFIRM_ORDERING),
+                 ("ledger", "Sổ kho", reverse("inventory:ledger"), Cap.VIEW_DASHBOARD),
+                 ("stock_report", "Báo cáo kho", reverse("reports:inventory"), Cap.VIEW_DASHBOARD)]),
         ("Dự báo", [
             ("fc_overview", "Dự báo nhu cầu", reverse("forecast:overview"), Cap.FORECASTS),
             ("fc_plans", "Kế hoạch mua", reverse("forecast:plans"), Cap.FORECASTS),
-            ("fc_ordering", "Đề xuất theo món (cũ)", reverse("forecast:ordering"), Cap.FORECASTS),
-            ("fc_eval", "Đánh giá dự báo", reverse("forecast:evaluation"), Cap.FORECASTS),
             ("fc_prior", "Nhận định Chủ quán", reverse("masterdata:list", args=["nhan-dinh"]), Cap.FORECASTS),
             ("fc_season", "Điều chỉnh theo mùa", reverse("masterdata:list", args=["dieu-chinh-mua"]), Cap.FORECASTS),
             ("fc_history", "Lịch sử bán", reverse("forecast:history"), Cap.FORECASTS)]),
@@ -80,7 +148,8 @@ def navigation(request):
     ]
     items = [(key, label, url, cap, group) for group, entries in groups for key, label, url, cap in entries]
     path = request.path
-    nav = [{"key": key, "label": label, "url": url, "active": False, "desktop_only": key in desktop_only, "group": group}
+    nav = [{"key": key, "label": label, "url": url, "active": False, "desktop_only": key in desktop_only, "group": group,
+            "description": DESCRIPTIONS.get(key, ""), "tone": GROUP_TONES[group or "Tổng quan"], "icon": ICONS.get(key, key)}
            for key, label, url, cap, group in items if cap is None or user_can(user, cap)]
     last = object()
     for item in nav:
@@ -101,26 +170,29 @@ def navigation(request):
         matches = [item for item in nav if item["key"] in keys]
     if matches:
         max(matches, key=lambda item: len(item["url"]))["active"] = True
-    # Thanh trên kiểu ServiceDesk Plus: mỗi nhóm nghiệp vụ là một thẻ, các mục của nhóm đang mở nằm ở thanh phụ.
+    # Thanh trên: mỗi nhóm nghiệp vụ là một thẻ; thanh bên trái (điện thoại: thanh phụ) liệt kê các mục của nhóm đang mở.
     nav_groups = []
     for item in nav:
         label = item["group"] or "Tổng quan"
         if not nav_groups or nav_groups[-1]["label"] != label:
             nav_groups.append({"label": label, "url": item["url"], "items": [], "active": False,
-                               "icon": GROUP_ICONS.get(label, "home"), "short": GROUP_SHORT.get(label, label)})
+                               "icon": GROUP_ICONS.get(label, "home"), "short": GROUP_SHORT.get(label, label),
+                               "tone": GROUP_TONES.get(label, "gray")})
         nav_groups[-1]["items"].append(item)
         nav_groups[-1]["active"] = nav_groups[-1]["active"] or item["active"]
     active_group = next((g for g in nav_groups if g["active"]), None)
     can_order = user_can(user, Cap.ORDER_CREATE)
+    can_approve = user_can(user, Cap.ORDER_ADJUST_APPROVE)
     # Bảng điều khiển không nằm ở thanh dưới điện thoại; Trang chủ có lối vào (AC-100: Chủ quán mở trên điện thoại).
     header = {
         "alerts": reverse("control:alerts") if user_can(user, Cap.HANDLE_ALERTS) else "",
-        "approvals": reverse("orders:approvals") if user_can(user, Cap.ORDER_ADJUST_APPROVE) else "",
+        "approvals": reverse("orders:approvals") if can_approve else "",
         "settings": reverse("control:parameters") if user_can(user, Cap.MASTER_DATA) else "",
         "initial": (user.given_name or user.username or "?")[:1].upper(),
     }
-    return {"NAV_ITEMS": nav, "HEADER": header, "NAV_GROUPS": nav_groups, "NAV_ACTIVE_GROUP": active_group, "APPROVALS_COUNT_URL": reverse("orders:approvals_count"),
+    return {"NAV_ITEMS": nav, "HEADER": header, "NAV_GROUPS": nav_groups, "NAV_ACTIVE_GROUP": active_group,
+            "NAV_SIDE_GROUP": active_group or (nav_groups[0] if nav_groups else None), "APPROVALS_COUNT_URL": reverse("orders:approvals_count") if can_approve else "",
             "QUICK_REPORT_COUNT_URL": reverse("inventory:quick_report_count") if user_can(user, Cap.VIEW_WORKLOAD) else "",
             "STOCK_URL": reverse("inventory:stock"),
-            "APPROVALS_URL": reverse("orders:approvals"), "READY_COUNT_URL": reverse("orders:ready_count") if can_order else "",
+            "APPROVALS_URL": reverse("orders:approvals") if can_approve else "", "READY_COUNT_URL": reverse("orders:ready_count") if can_order else "",
             "READY_URL": reverse("orders:ready") if can_order else ""}

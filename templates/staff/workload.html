@@ -2,17 +2,41 @@
 {% load humanize %}
 {% block title %}Tải và thời gian chờ · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><h1>Tải và thời gian chờ theo khung giờ</h1></header>
-<form method="get" class="inline-form"><label for="w-day">Ngày</label><input class="input input-sm" id="w-day" type="date" name="ngay" value="{{ day|date:'Y-m-d' }}"><button class="btn btn-quiet" type="submit">Xem</button></form>
-<details class="help-tip"><summary>Giải thích</summary><p>Tải = số ly × hệ số tải của nhóm món. Thời gian chờ tính từ lúc gửi pha chế đến lúc mang ra. Quá tải khi thời gian chờ trung vị vượt {{ standard }} phút hoặc còn hơn {{ backlog_limit }} ly tồn tại quầy cuối khung.</p></details>
+<header class="page-head">
+  <div><h1>Tải và thời gian chờ</h1><p class="page-sub">{{ day|date:"l, d/m/Y" }}. Tải = số ly × hệ số tải của nhóm món; chờ tính từ lúc gửi pha chế đến lúc mang ra.</p></div>
+  <form method="get" class="page-tools" aria-label="Chọn ngày">
+    <a class="btn btn-quiet btn-sm" href="?ngay={{ prev_day|date:'Y-m-d' }}" aria-label="Ngày trước">‹</a>
+    <input class="input input-sm" id="w-day" type="date" name="ngay" value="{{ day|date:'Y-m-d' }}" aria-label="Ngày">
+    <a class="btn btn-quiet btn-sm" href="?ngay={{ next_day|date:'Y-m-d' }}" aria-label="Ngày sau">›</a>
+    <button class="btn btn-quiet btn-sm" type="submit">Xem</button>
+  </form>
+</header>
 {% if frames %}
-<div class="table-wrap"><table class="data-table">
-  <thead><tr><th scope="col">Khung giờ</th><th scope="col" class="num">Đơn</th><th scope="col" class="num">Ly</th><th scope="col" class="num">Tải</th><th scope="col" class="num">Chờ trung vị</th><th scope="col" class="num">Tồn quầy</th>{% for label in role_headers %}<th scope="col" class="num">{{ label }} có mặt</th>{% endfor %}<th scope="col">Đánh giá</th></tr></thead>
-  <tbody>{% for f in frames %}
-  <tr><th scope="row">{{ f.start|date:"H" }}–{{ f.end|date:"H" }} giờ</th><td class="num">{{ f.orders }}</td><td class="num">{{ f.cups }}</td><td class="num">{{ f.load }}</td>
-    <td class="num">{% if f.median_wait is not None %}{{ f.median_wait }} phút{% else %}–{% endif %}</td><td class="num">{{ f.backlog }}</td>
-    {% for n in f.presence_list %}<td class="num">{{ n }}</td>{% endfor %}
-    <td>{% if f.overloaded %}<span class="flag-low">Quá tải</span>{% else %}Đạt chuẩn{% endif %}</td></tr>
-  {% endfor %}</tbody></table></div>
+{% if overloaded %}<p class="notice notice-warn">Quá tải {{ overloaded|length }} khung: {{ overloaded|join:", " }}. Quá tải khi chờ trung vị vượt {{ standard }} phút hoặc còn hơn {{ backlog_limit }} ly tồn quầy cuối khung.</p>{% endif %}
+<section class="card">
+  <div class="card-head"><div><h2>Số ly theo khung giờ</h2><p class="card-sub">Cột đỏ là khung quá tải. So với số người có mặt bên dưới để xem có cần thêm người không.</p></div></div>
+  <div class="card-body">{% if cups_chart %}{% include "reports/charts/stacked_columns.html" with c=cups_chart label="Số ly theo khung giờ" %}{% else %}<p class="chart-empty">Chưa có ly nào được tính tải.</p>{% endif %}</div>
+</section>
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head"><div><h2>Thời gian chờ trung vị</h2><p class="card-sub">Đường xám là chuẩn {{ standard }} phút.</p></div></div>
+    <div class="card-body">{% if wait_chart %}{% include "reports/charts/line.html" with c=wait_chart label="Thời gian chờ trung vị theo khung giờ" %}{% else %}<p class="chart-empty">Chưa có món mang ra trong ngày.</p>{% endif %}</div>
+  </section>
+  <section class="card">
+    <div class="card-head"><div><h2>Người có mặt theo vai trò</h2><p class="card-sub">Theo chấm công vào ra trong từng khung.</p></div><a class="btn btn-ghost btn-sm" href="{% url 'schedule:board' %}">Lịch làm tuần</a></div>
+    <div class="card-body">{% if staff_chart %}{% include "reports/charts/stacked_columns.html" with c=staff_chart label="Số người có mặt theo vai trò" %}{% else %}<p class="chart-empty">Chưa có chấm công trong các khung này.</p>{% endif %}</div>
+  </section>
+</div>
+<section class="card">
+  <div class="card-head"><h2>Bảng số liệu</h2></div>
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr><th scope="col">Khung giờ</th><th scope="col" class="num">Đơn</th><th scope="col" class="num">Ly</th><th scope="col" class="num">Tải</th><th scope="col" class="num">Chờ trung vị</th><th scope="col" class="num">Tồn quầy</th>{% for label in role_headers %}<th scope="col" class="num">{{ label }} có mặt</th>{% endfor %}<th scope="col">Đánh giá</th></tr></thead>
+    <tbody>{% for f in frames %}
+    <tr><th scope="row">{{ f.start|date:"H" }}–{{ f.end|date:"H" }} giờ</th><td class="num">{{ f.orders }}</td><td class="num">{{ f.cups }}</td><td class="num">{{ f.load }}</td>
+      <td class="num">{% if f.median_wait is not None %}{{ f.median_wait }} phút{% else %}–{% endif %}</td><td class="num">{{ f.backlog }}</td>
+      {% for n in f.presence_list %}<td class="num">{{ n }}</td>{% endfor %}
+      <td>{% if f.overloaded %}<span class="pill pill-danger">Quá tải</span>{% else %}<span class="pill pill-ok">Đạt chuẩn</span>{% endif %}</td></tr>
+    {% endfor %}</tbody></table></div>
+</section>
 {% else %}<div class="empty"><p><strong>Chưa có đơn trong ngày này.</strong></p></div>{% endif %}
 {% endblock %}

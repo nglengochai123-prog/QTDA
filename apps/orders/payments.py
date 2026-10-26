@@ -58,9 +58,13 @@ def _record_payment(user, operation_key, table, method, kind):
     orders = list(open_orders(table).select_for_update())
     if not orders:
         raise ValidationError("Bàn này không còn đơn chờ thanh toán.")
+    shift = Shift.objects.operating()
+    if shift is None:
+        # Tiền thu phải vào quỹ một ca để đối soát (BRU-01, BRU-10); không có ca mở thì không ghi được.
+        raise ValidationError("Chưa có ca đang mở; Chủ quán khai báo ca rồi mới thu tiền.")
     payment = Payment.objects.create(
         store=table.store, table=table, method=method, kind=kind, amount=sum(o.total for o in orders),
-        cashier=user, shift=Shift.objects.current(), operation_key=operation_key)
+        cashier=user, shift=shift, operation_key=operation_key)
     for order in orders:
         order.payment = payment
         order.status = Order.Status.PAID
@@ -88,7 +92,7 @@ def pay_table(user, operation_key, table_id, method, transfer_confirmed=False):
 
 
 def can_pay_received_items(user, req):
-    shift = req.order.shift or Shift.objects.current()
+    shift = req.order.shift or Shift.objects.operating()
     if user.pk == req.requested_by_id:
         return False
     if shift is not None and shift.payment_authorizer_id:

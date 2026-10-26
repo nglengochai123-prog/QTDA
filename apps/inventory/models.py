@@ -45,6 +45,14 @@ class PolicyGroup(models.TextChoices):
     STABLE = "B", "Nhóm B, ổn định: kiểm tra mỗi tuần"
 
 
+class IssueRule(models.TextChoices):
+    """Thứ tự lấy lô khi xuất kho (pha chế, hao hụt, thiếu khi kiểm kê)."""
+
+    FEFO = "fefo", "Hết hạn trước, xuất trước (FEFO)"
+    FIFO = "fifo", "Nhập trước, xuất trước (FIFO)"
+    LIFO = "lifo", "Nhập sau, xuất trước (LIFO)"
+
+
 class Weekday(models.IntegerChoices):
     MON = 0, "Thứ Hai"
     TUE = 1, "Thứ Ba"
@@ -79,6 +87,10 @@ class Ingredient(StoreScopedModel):
         "Ngưỡng thiếu kiểm kê tích lũy tháng", max_digits=12, decimal_places=2, null=True, blank=True,
         help_text="Theo đơn vị tính. Để trống thì dùng 1 quy cách đóng gói (BRU-25).")
     is_active = models.BooleanField("Đang sử dụng", default=True)
+    issue_rule = models.CharField(
+        "Quy tắc xuất lô", max_length=4, choices=IssueRule.choices, blank=True,
+        help_text="Để trống: hệ thống tự chọn, có hạn dùng thì FEFO, không có thì FIFO. "
+                  "LIFO chỉ dùng cho hàng không có hạn dùng.")
     # Chính sách mua (thiết kế mua nguyên liệu mục 7.4). Để trống thì dùng mặc định theo nhóm và tham số chung.
     policy_group = models.CharField(
         "Nhóm chính sách", max_length=1, choices=PolicyGroup.choices, blank=True,
@@ -140,6 +152,27 @@ class Ingredient(StoreScopedModel):
                 raise ValidationError("Tuần thường lệ phải nằm giữa tuần dùng ít và tuần dùng nhiều.")
         if self.review_period_days and self.target_cycle_days and self.target_cycle_days < self.review_period_days:
             raise ValidationError({"target_cycle_days": "T không được nhỏ hơn chu kỳ kiểm tra R."})
+        if self.issue_rule == IssueRule.LIFO and self.shelf_life_days:
+            raise ValidationError({"issue_rule": "Hàng có hạn dùng không xuất theo LIFO: lô cũ sẽ nằm lại tới khi hỏng. "
+                                                 "Để trống hoặc chọn FEFO."})
+
+    @property
+    def rule(self):
+        """Quy tắc đang áp dụng. Tự chọn thì luôn sắp theo FEFO: lô không ghi hạn xếp sau và giữa chúng là nhập trước
+        xuất trước, nên hàng không có hạn dùng thực chất được xuất FIFO."""
+        return self.issue_rule or IssueRule.FEFO
+
+    @property
+    def rule_label(self):
+        if self.issue_rule:
+            return IssueRule(self.issue_rule).label
+        return "Tự động: FEFO (có hạn dùng)" if self.shelf_life_days else "Tự động: FIFO (không có hạn dùng)"
+
+    @property
+    def rule_short(self):
+        if self.issue_rule:
+            return self.issue_rule.upper()
+        return "FEFO" if self.shelf_life_days else "FIFO"
 
 
 class RecipeVersionQuerySet(models.QuerySet):
@@ -533,6 +566,81 @@ class ReceiptLine(models.Model):
     @property
     def value(self):
         return int((self.quantity * self.unit_price).to_integral_value())
+
+
+class StockLot(StoreScopedModel):
+    """Một lô hàng trong kho: mỗi dòng phiếu nhập là một lô, có mã, ngày nhập, hạn dùng và lượng còn lại.
+
+    Lượng còn lại chỉ đổi qua inventory.lots (gọi từ stock.move) và luôn bằng tổng các dòng LotDraw của lô.
+    Tổng còn lại của mọi lô một nguyên liệu bằng tồn vật lý (hoặc 0 khi sổ kho đang âm).
+    """
+
+    class Source(models.TextChoices):
+        RECEIPT = "phieu_nhap", "Phiếu nhập"
+        OPENING = "ton_dau_ky", "Tồn đầu kỳ"
+        COUNT = "kiem_ke", "Dư khi kiểm kê"
+        BEFORE_LOTS = "truoc_lo", "Tồn trước khi theo dõi lô"
+
+    ingredient = models.ForeignKey(Ingredient, verbose_name="Nguyên vật liệu", on_delete=models.PROTECT,
+                                   related_name="lots")
+    code = models.CharField("Mã lô", max_length=24)
+    supplier_lot = models.CharField("Số lô trên bao bì", max_length=40, blank=True)
+    source = models.CharField("Nguồn", max_length=12, choices=Source.choices)
+    receipt_line = models.OneToOneField(ReceiptLine, verbose_name="Dòng phiếu nhập", on_delete=models.PROTECT,
+                                        null=True, blank=True, related_name="lot")
+    supplier = models.ForeignKey(Supplier, verbose_name="Nhà cung cấp", on_delete=models.PROTECT, null=True,
+                                 blank=True, related_name="+")
+    received_at = models.DateTimeField("Ngày nhập")
+    expiry_date = models.DateField("Hạn sử dụng", null=True, blank=True,
+                                   help_text="Ngày cuối còn dùng được. Từ hôm sau là quá hạn.")
+    expiry_estimated = models.BooleanField(
+        "Hạn ước tính", default=False,
+        help_text="Phiếu nhập không ghi hạn nên tính bằng ngày nhập cộng thời hạn sử dụng của nguyên liệu.")
+    quantity = models.DecimalField("Số lượng nhập", max_digits=12, decimal_places=2)
+    remaining = models.DecimalField("Còn lại", max_digits=12, decimal_places=2)
+    unit_cost = models.PositiveBigIntegerField("Đơn giá (đồng theo đơn vị tính)", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Lô hàng"
+        verbose_name_plural = "Lô hàng"
+        ordering = ["ingredient__name", "received_at", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["store", "code"], name="uniq_lot_code_per_store"),
+            models.CheckConstraint(condition=Q(remaining__gte=0) & Q(remaining__lte=models.F("quantity")),
+                                   name="lot_remaining_within_quantity"),
+        ]
+        indexes = [models.Index(fields=["ingredient", "remaining"])]
+
+    def __str__(self):
+        return f"Lô {self.code} · {self.ingredient.name}"
+
+    @property
+    def value(self):
+        return int((self.remaining * (self.unit_cost or 0)).to_integral_value())
+
+
+class LotDraw(models.Model):
+    """Một lần tăng (+) hoặc giảm (−) lượng của một lô, gắn với dòng sổ kho gây ra nó. Chỉ thêm mới."""
+
+    lot = models.ForeignKey(StockLot, verbose_name="Lô", on_delete=models.PROTECT, related_name="draws")
+    movement = models.ForeignKey(StockMovement, verbose_name="Biến động kho", on_delete=models.PROTECT, null=True,
+                                 blank=True, related_name="lot_draws")
+    quantity = models.DecimalField("Số lượng (+ tăng, - giảm)", max_digits=12, decimal_places=2)
+    created_at = models.DateTimeField("Lúc", default=timezone.now)
+    note = models.CharField("Ghi chú", max_length=120, blank=True)
+
+    class Meta:
+        verbose_name = "Xuất nhập theo lô"
+        verbose_name_plural = "Xuất nhập theo lô"
+        ordering = ["-created_at", "-id"]
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            raise ValidationError("Dòng xuất nhập theo lô không sửa được.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("Dòng xuất nhập theo lô không xóa được.")
 
 
 class Payable(StoreScopedModel):

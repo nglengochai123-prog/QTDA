@@ -117,7 +117,7 @@ def confirm_refund(user, operation_key, refund_id, note=""):
         if refund.status == Refund.Status.PAID:
             return {"refund": refund.pk, "shift": refund.shift_id, "applied": False,
                     "message": "Khoản này đã được ghi hoàn trước đó; không ghi thêm."}
-        shift = Shift.objects.current()
+        shift = Shift.objects.operating()
         if shift is None:
             raise ValidationError("Không có ca đang mở; mở ca rồi mới ghi đã hoàn tiền.")
         refund.status, refund.shift = Refund.Status.PAID, shift
@@ -487,7 +487,8 @@ def data_status(shift, now=None):
     if any(backup.unprocessed_numbers(r) for r in shift.backup_ranges.all()):
         issues.append("Còn phiếu dự phòng chưa nhập bù")  # FR-09
     day = timezone.localtime(shift.starts_at).date()
-    last_of_day = not Shift.objects.filter(starts_at__date=shift.starts_at.date(), starts_at__gt=shift.starts_at).exists()
+    # So theo ngày giờ Việt Nam: ca 6 giờ sáng là 23 giờ UTC hôm trước, nên không dùng starts_at.date().
+    last_of_day = not Shift.objects.filter(starts_at__date=day, starts_at__gt=shift.starts_at).exists()
     count = critical_count_status(day, now) if last_of_day else None
     if count and count["late"]:
         issues.append("Thiếu kiểm kê nhóm trọng yếu: " + ", ".join(count["missing"]))  # BRU-07

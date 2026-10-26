@@ -1,0 +1,1 @@
+{% if items|length > 1 %}<ul class="chart-legend">{% for s in items %}<li><span class="key {% if kind == 'line' %}key-line {% endif %}s-{{ s.slot }}" aria-hidden="true"></span>{{ s.name }}</li>{% endfor %}{% if extra %}<li><span class="key key-target" aria-hidden="true"></span>{{ extra }}</li>{% endif %}</ul>{% endif %}

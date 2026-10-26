@@ -1,7 +1,7 @@
 """Bán hàng dự phòng bằng phiếu đánh số và nhập bù (FR-06, BRU-03, NFR-16, AC-12, AC-13).
 
-- Chủ quán hoặc Quản lý ca cấp cho mỗi ca một dãy số phiếu, ghi người nhận.
-- Khi có kết nối, Quản lý ca nhập bù từng phiếu kèm số phiếu, mã nghiệp vụ nếu có, thời điểm bán,
+- Chủ quán cấp cho mỗi ca một dãy số phiếu, ghi người nhận.
+- Khi có kết nối, Chủ quán nhập bù từng phiếu kèm số phiếu, mã nghiệp vụ nếu có, thời điểm bán,
   giờ có mạng lại và phương thức thanh toán thực tế.
   * Có mã nghiệp vụ trùng một đơn đã lưu: liên kết phiếu với đơn đó, chỉ bổ sung phần pha chế,
     phục vụ, thanh toán còn thiếu; không trừ kho lần nữa.
@@ -117,7 +117,7 @@ def enter_slip(user, operation_key, payload):
         if rng is None:
             from apps.shifts.models import Shift
 
-            shift = Shift.objects.current() or Shift.objects.order_by("-starts_at").first()
+            shift = Shift.objects.operating() or Shift.objects.order_by("-starts_at").first()
             if shift is not None:
                 _exception(ExceptionCase.Kind.BACKUP_OUT_OF_RANGE, f"Số phiếu {fmt(number)} không thuộc dãy nào đã cấp",
                            shift=shift, employee=user, detail=f"Nhập bởi {user}")

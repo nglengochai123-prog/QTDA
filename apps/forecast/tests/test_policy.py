@@ -58,7 +58,7 @@ class MilkExampleTests(SimpleTestCase):
         self.assertIsNone(r["binding"])
         self.assertEqual(r["action"], policy.TOP_UP)  # đã có lô về sau ngày rủi ro
         self.assertIn("Cần đặt trong hôm nay 7 hộp", r["reason"])
-        self.assertIn("sau ngày rủi ro", r["reason"])
+        self.assertIn("sau ngày có thể thiếu", r["reason"])
         # Mẫu câu mục 9.1: hết sau khoảng 40% lượng bán của thứ Bảy
         self.assertEqual(r["stockout_part"], 0.39)
         self.assertIn("đủ tới khoảng giữa ngày thứ Bảy 17/10", r["reason"])
@@ -185,3 +185,43 @@ class ScenarioTests(SimpleTestCase):
         r = policy.compute(self.weekday_inputs(THU, 2200.0, moq=5))
         self.assertEqual(r["packs"], 5)
         self.assertEqual(r["delta"], round(5000 - r["q0"], 2))
+
+
+class AgingTests(SimpleTestCase):
+    """EWA (Broekmeulen và van Donselaar 2009): phần tồn sẽ hết hạn trước khi dùng kịp không tính vào vị thế tồn."""
+
+    def test_lots_without_expiry_change_nothing(self):
+        plain = policy.compute(milk_inputs())
+        aged = policy.compute(milk_inputs(on_hand_lots=[(3900.0, date.max)]))
+        self.assertEqual([r["level"] for r in aged["timeline"]], [r["level"] for r in plain["timeline"]])
+        self.assertEqual((aged["ip_s"], aged["ip_S"], aged["outdating_s"]), (plain["ip_s"], plain["ip_S"], 0))
+
+    def test_expiring_lot_is_not_counted(self):
+        # 3000 ml hết hạn ngay tối nay (đã 22 giờ, không còn bán): chỉ 900 ml mới bảo vệ được cửa sổ.
+        r = policy.compute(milk_inputs(on_hand_lots=[(3000.0, THU), (900.0, THU + timedelta(days=6))]))
+        self.assertEqual((r["outdating_s"], r["ip_s"], r["ip_S"]), (3000, 900, 900))
+        self.assertEqual(r["timeline"][0]["expiring"], 3000)
+        self.assertGreater(r["quantity"], policy.compute(milk_inputs())["quantity"])
+
+    def test_fifo_uses_old_lot_first(self):
+        # Lô cũ 1500 ml hết hạn ngày mai, ngày mai dùng 2600 ml: lô cũ dùng hết trước hạn, không bỏ gì.
+        r = policy.compute(milk_inputs(on_hand_lots=[(1500.0, THU + timedelta(days=1)), (2400.0, THU + timedelta(days=6))]))
+        self.assertEqual(r["outdating_S"], 0)
+        self.assertEqual(r["ip_S"], policy.compute(milk_inputs())["ip_S"])
+
+    def test_stock_without_receipt_never_expires(self):
+        # Tồn đầu kỳ không khớp phiếu nhập nào: coi như không hết hạn, không trừ.
+        r = policy.compute(milk_inputs(on_hand_lots=[(900.0, THU + timedelta(days=6))]))
+        self.assertEqual((r["outdating_s"], r["ip_s"]), (0, 3900))
+
+
+class SimulationSmokeTests(SimpleTestCase):
+    def test_closed_loop_runs_and_reports(self):
+        from apps.forecast import simulation as sim
+
+        specs = [s for s in sim.SPECS if s.name in ("Sữa tươi", "Xoài", "Cà phê bột")]
+        r = sim.simulate(sim.Rules(), seed=3, days=45, specs=specs)
+        self.assertEqual(set(r["ingredients"]), {s.name for s in specs})
+        self.assertEqual(r["ingredients"]["Cà phê bột"]["csl"], 98)  # hàng để lâu
+        self.assertEqual(r["ingredients"]["Xoài"]["csl"], 95)
+        self.assertGreaterEqual(r["stockouts_per_month"], 0)

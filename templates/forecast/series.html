@@ -3,37 +3,30 @@
 {% block content %}
 <header class="page-head">
   <h1><a class="back" href="{% url 'forecast:overview' %}" aria-label="Quay lại dự báo"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg></a>{{ s.size.item.name }} {{ s.size.name }}</h1>
-  <span class="chip">{{ method_label }}</span>
 </header>
 <dl class="figure-grid">
-  <div><dt>Phát hành</dt><dd class="dd-text">{{ s.release.issued_at|date:"H:i d/m/Y" }}</dd></div>
-  <div><dt>Phiên bản mô hình</dt><dd class="dd-text">{{ s.release.model_version }}</dd></div>
-  <div><dt>Ngày dữ liệu đã học</dt><dd>{{ s.eligible_days }}</dd></div>
-  <div><dt>Ngày bị loại vì thiếu hàng</dt><dd>{{ s.flagged_days }}</dd></div>
-  <div><dt>Sức nặng nhận định</dt><dd class="dd-text">{% if s.prior_days %}{{ s.prior_days|floatformat:1 }} ngày tương đương{% else %}Chưa có nhận định{% endif %}</dd></div>
+  <div><dt>Cập nhật</dt><dd class="dd-text">{{ s.release.issued_at|date:"H:i d/m/Y" }}</dd></div>
+  <div><dt>Ngày đã bán</dt><dd>{{ s.eligible_days }}</dd></div>
+  <div><dt>Ngày thiếu hàng không tính</dt><dd>{{ s.flagged_days }}</dd></div>
 </dl>
 {% if s.limitations %}<div class="notice notice-warn" role="status"><div><strong>Lưu ý khi dùng dự báo này</strong><ul class="notice-list">{% for l in s.limitations %}<li>{{ l }}</li>{% endfor %}</ul></div></div>{% endif %}
 <section class="panel"><h2>Từng ngày</h2>
   <div class="table-wrap"><table class="data-table">
-    <thead><tr><th scope="col">Ngày</th><th scope="col" class="num">Mô hình: kỳ vọng</th><th scope="col" class="num">Mô hình: khoảng 10%–90%</th>
-      <th scope="col" class="num">Ước tính ban đầu: kỳ vọng</th><th scope="col" class="num">Ước tính ban đầu: khoảng</th></tr></thead>
-    <tbody>{% for d in s.daily %}<tr><th scope="row">{{ d.date }}</th><td class="num">{{ d.mean|floatformat:1 }}</td><td class="num">{{ d.q10 }}–{{ d.q90 }}</td>
-      <td class="num">{% if d.owner %}{{ d.owner.mean|floatformat:1 }}{% else %}–{% endif %}</td><td class="num">{% if d.owner %}{{ d.owner.q10 }}–{{ d.owner.q90 }}{% else %}–{% endif %}</td></tr>{% endfor %}</tbody>
+    <thead><tr><th scope="col">Ngày</th><th scope="col" class="num">Dự kiến (ly)</th><th scope="col" class="num">Thấp – cao</th></tr></thead>
+    <tbody>{% for d in s.daily %}<tr><th scope="row">{{ d.date }}</th><td class="num">{{ d.mean|floatformat:1 }}</td><td class="num">{{ d.q10 }}–{{ d.q90 }}</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
 {% if check %}
-<section class="panel"><h2>Kiểm tra nhận định bằng kịch bản</h2>
-  <p>Theo nhận định đang dùng ({{ check.days }} ngày tương đương{% if check.capped %}, đã bị giới hạn{% endif %}), hệ thống sinh 2.000 tuần bán thử:
-    một ngày thường thường bán <strong>{{ check.weekday.0 }}–{{ check.weekday.1 }} ly</strong>, một ngày cuối tuần <strong>{{ check.weekend.0 }}–{{ check.weekend.1 }} ly</strong>,
+<section class="panel"><h2>Nhận định của Chủ quán cho ra con số này</h2>
+  <p>Một ngày thường thường bán <strong>{{ check.weekday.0 }}–{{ check.weekday.1 }} ly</strong>, một ngày cuối tuần <strong>{{ check.weekend.0 }}–{{ check.weekend.1 }} ly</strong>,
     cả tuần <strong>{{ check.week.0 }}–{{ check.week.2 }} ly</strong> (thường {{ check.week.1 }}); ngày đông nhất trong tuần có thể tới {{ check.peak95 }} ly.</p>
-  <p class="page-note">Nếu các con số này không hợp lý với quán, sửa nhận định ở trang Nhận định Chủ quán trước khi dùng (mục 6.1 khung lý thuyết).</p>
+  <p class="page-note">Nếu các con số này không hợp lý với quán, sửa ở trang <a href="{% url 'masterdata:list' 'nhan-dinh' %}">Nhận định Chủ quán</a>.</p>
 </section>
 {% endif %}
 <section class="panel"><h2>Tổng nhiều ngày</h2>
   <div class="table-wrap"><table class="data-table">
-    <thead><tr><th scope="col">Khoảng thời gian</th><th scope="col" class="num">Kỳ vọng</th><th scope="col" class="num">Trung vị</th><th scope="col" class="num">10%–90%</th></tr></thead>
-    <tbody>{% for k, t in s.totals.items %}<tr><th scope="row">{{ k }} ngày</th><td class="num">{{ t.mean|floatformat:1 }}</td><td class="num">{{ t.q50 }}</td><td class="num">{{ t.q10 }}–{{ t.q90 }}</td></tr>{% endfor %}</tbody>
+    <thead><tr><th scope="col">Khoảng thời gian</th><th scope="col" class="num">Dự kiến (ly)</th><th scope="col" class="num">Thấp – cao</th></tr></thead>
+    <tbody>{% for k, t in s.totals.items %}<tr><th scope="row">{{ k }} ngày tới</th><td class="num">{{ t.mean|floatformat:0 }}</td><td class="num">{{ t.q10 }}–{{ t.q90 }}</td></tr>{% endfor %}</tbody>
   </table></div>
-  <p class="page-note">Tính trên các kịch bản mô phỏng theo cách tính đang áp dụng cho đặt hàng.</p>
 </section>
 {% endblock %}

@@ -129,6 +129,19 @@ class MasterDataTests(TestCase):
         page = self.client.get(self.url("nguyen-lieu", ing.pk))
         self.assertNotContains(page, "Ghi tồn đầu kỳ")
 
+    def test_issue_rule_set_from_ingredient_form(self):
+        ing = Ingredient.objects.create(store=self.d["store"], name="Ly nhựa", unit="cai", pack_size=50, lead_time_days=2)
+        self.assertContains(self.client.get(self.url("nguyen-lieu", ing.pk)), "Quy tắc xuất lô")
+        form = {"name": "Ly nhựa", "unit": "cai", "pack_size": "50", "lead_time_days": "2", "safety_stock": "0",
+                "moq_packs": "1", "exposure_days": "1", "is_active": "on", "issue_rule": "lifo"}
+        r = self.client.post(self.url("nguyen-lieu", ing.pk), {**form, "shelf_life_days": "7"})
+        self.assertContains(r, "Hàng có hạn dùng không xuất theo LIFO")
+        r = self.client.post(self.url("nguyen-lieu", ing.pk), form)
+        self.assertEqual(r.status_code, 302)
+        ing.refresh_from_db()
+        self.assertEqual((ing.issue_rule, ing.rule_short), ("lifo", "LIFO"))
+        self.assertContains(self.client.get(reverse("masterdata:list", args=["nguyen-lieu"])), "LIFO")
+
     def test_audit_log_filters(self):
         r = self.client.get(reverse("masterdata:audit_log"), {"thao_tac": "login"})
         self.assertEqual(r.status_code, 200)

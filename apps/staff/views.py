@@ -21,7 +21,7 @@ from .models import Attendance
 @login_required
 @require_http_methods(["GET", "POST"])
 def attendance(request):
-    """Nhân viên tự chấm công; Quản lý ca và Chủ quán bổ sung giờ ra (Bảng 5.3)."""
+    """Nhân viên tự chấm công; Chủ quán bổ sung giờ ra (Bảng 5.3)."""
     if not (user_can(request.user, Cap.TIMEKEEPING) or user_can(request.user, Cap.TIMEKEEPING_ADJUST)):
         from apps.accounts.permissions import _deny
 
@@ -61,8 +61,34 @@ def workload(request):
         day = date.fromisoformat(request.GET.get("ngay", ""))
     except ValueError:
         day = timezone.localdate()
+    from datetime import timedelta
+
+    from apps.reports import charts
+
     data = day_frames(day)
     for frame in data["frames"]:
         frame["presence_list"] = [frame["presence"].get(r, 0) for r in timekeeping.WORK_ROLES]
-    return render(request, "staff/workload.html", {"day": day, "role_headers": [Role(r).label for r in timekeeping.WORK_ROLES],
-                                                   **data})
+    frames = data["frames"]
+    roles = [Role(r).label for r in timekeeping.WORK_ROLES]
+    labels = [f"{f['start']:%H}h" for f in frames]
+    hours = [f"{f['start']:%H}–{f['end']:%H} giờ" for f in frames]
+    cups_chart = charts.stacked_columns(labels, [
+        {"name": "Khung đạt chuẩn", "values": [0 if f["overloaded"] else f["cups"] for f in frames], "slot": 1},
+        {"name": "Khung quá tải", "values": [f["cups"] if f["overloaded"] else 0 for f in frames], "slot": "critical"}],
+        tips=[f"{h}: {f['cups']} ly, {f['orders']} đơn, tải {f['load']}" + (" · quá tải" if f["overloaded"] else "")
+              for h, f in zip(hours, frames)], width=charts.WIDE, height=210) if frames else None
+    waits = [float(f["median_wait"]) if f["median_wait"] is not None else None for f in frames]
+    wait_chart = charts.line(labels, [
+        {"name": "Chờ trung vị", "values": waits, "slot": 1},
+        {"name": f"Chuẩn {data['standard']} phút", "values": [float(data["standard"])] * len(frames), "slot": "muted",
+         "label_end": False}], tip_labels=hours, value_fmt=lambda v: f"{v:.0f} phút" if v is not None else "–",
+        width=charts.HALF) if any(w is not None for w in waits) else None
+    staff_chart = charts.stacked_columns(labels, [
+        {"name": label, "values": [f["presence_list"][k] for f in frames], "slot": k + 1 if k < 3 else "muted"}
+        for k, label in enumerate(roles)],
+        tips=[f"{h}: " + ", ".join(f"{label} {f['presence_list'][k]}" for k, label in enumerate(roles))
+              for h, f in zip(hours, frames)], width=charts.HALF) if frames else None
+    return render(request, "staff/workload.html", {
+        "day": day, "role_headers": roles, "prev_day": day - timedelta(days=1), "next_day": day + timedelta(days=1),
+        "cups_chart": cups_chart, "wait_chart": wait_chart, "staff_chart": staff_chart,
+        "overloaded": [h for h, f in zip(hours, frames) if f["overloaded"]], **data})

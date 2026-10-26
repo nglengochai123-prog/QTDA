@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Báo cáo kho · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div><h1>Báo cáo kho</h1><p class="page-sub">{{ start|date:"d/m/Y" }} – {{ end|date:"d/m/Y" }}. Tiền tính theo giá nhập; tồn hiện tại tính theo giá từng lô.</p></div>
+  <div class="page-tools"><a class="btn btn-quiet" href="{% url 'reports:materials' %}?tu={{ start|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}">Bảng nhập xuất tồn</a><a class="btn btn-quiet" href="{% url 'inventory:report' %}">Hao hụt và kiểm kê</a></div>
+</header>
+{% include "reports/_period.html" %}
+
+<div class="stats">
+  <div class="stat"><p class="stat-label">Giá trị tồn hiện tại</p><p class="stat-value">{{ stock_value|intcomma }} <small>đ</small></p><p class="stat-note">Theo giá từng lô</p></div>
+  <div class="stat"><p class="stat-label">Nhập trong kỳ</p><p class="stat-value">{{ receipt_value|intcomma }} <small>đ</small></p></div>
+  <div class="stat"><p class="stat-label">Tiêu hao theo món</p><p class="stat-value">{{ consume_value|floatformat:"0g" }} <small>đ</small></p>{% include "reports/charts/sparkline.html" with c=spark %}</div>
+  <div class="stat{% if waste_share and waste_share > 3 %} stat-warn{% endif %}"><p class="stat-label">Hao hụt</p><p class="stat-value">{{ waste_value|floatformat:"0g" }} <small>đ</small></p><p class="stat-note">{% if waste_share is not None %}{{ waste_share|floatformat:1 }}% lượng xuất kho{% else %}Chưa có xuất kho{% endif %}</p></div>
+  <div class="stat"><p class="stat-label">Số ngày tồn kho</p><p class="stat-value">{% if dio %}{{ dio|floatformat:1 }} <small>ngày</small>{% else %}—{% endif %}</p><p class="stat-note">Hàng trong kho đủ dùng bao lâu</p></div>
+</div>
+{% include "reports/parts/notes.html" with notes=notes id="kho" %}
+
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head"><div><h2>Giá trị tồn theo ngày</h2><p class="card-sub">Tồn cuối ngày nhân giá nhập gần nhất.</p></div></div>
+    <div class="card-body">{% if value_chart %}{% include "reports/charts/line.html" with c=value_chart label="Giá trị tồn theo ngày" %}{% else %}<p class="chart-empty">Chưa có dữ liệu trong kỳ.</p>{% endif %}
+      <details class="chart-table"><summary>Bảng số liệu</summary><div class="table-wrap"><table class="data-table compact"><thead><tr><th scope="col">Ngày</th><th scope="col" class="num">Giá trị tồn (đ)</th></tr></thead><tbody>{% for d, v in value_table %}<tr><td>{{ d|date:"d/m/Y" }}</td><td class="num">{{ v|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table></div></details></div>
+  </section>
+  <section class="card">
+    <div class="card-head"><div><h2>Xuất kho theo tuần</h2><p class="card-sub">Tiêu hao theo món và hao hụt, tính bằng tiền.</p></div></div>
+    <div class="card-body">{% if flow_chart %}{% include "reports/charts/stacked_columns.html" with c=flow_chart label="Xuất kho theo tuần" %}{% else %}<p class="chart-empty">Chưa có xuất kho trong kỳ.</p>{% endif %}
+      <details class="chart-table"><summary>Bảng số liệu</summary><div class="table-wrap"><table class="data-table compact"><thead><tr><th scope="col">Tuần từ</th><th scope="col" class="num">Tiêu hao (đ)</th><th scope="col" class="num">Hao hụt (đ)</th></tr></thead><tbody>{% for w, c, x in weeks %}<tr><td>{{ w|date:"d/m" }}</td><td class="num">{{ c|floatformat:"0g" }}</td><td class="num">{{ x|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table></div></details></div>
+  </section>
+</div>
+
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head"><div><h2>Lịch hết hạn</h2><p class="card-sub">Giá trị hàng trong kho theo tuần hết hạn. Cột đầu là hàng đã quá hạn còn nằm trong kho.</p></div><a class="btn btn-ghost btn-sm" href="{% url 'inventory:lots' %}">Xem lô</a></div>
+    <div class="card-body">{% if expiry_chart %}{% include "reports/charts/stacked_columns.html" with c=expiry_chart label="Lịch hết hạn" %}{% else %}<p class="chart-empty">Chưa có lô nào ghi hạn.</p>{% endif %}
+      {% if undated_value %}<p class="note">Ngoài ra {{ undated_value|intcomma }} đ hàng không ghi hạn dùng (bao bì, dụng cụ hoặc lô chưa nhập hạn).</p>{% endif %}
+      {% if at_risk_value %}<p class="note note-warn">Theo tốc độ dùng 4 tuần qua, khoảng {{ at_risk_value|intcomma }} đ sẽ hết hạn trước khi kịp dùng.</p>{% endif %}
+      <details class="chart-table"><summary>Bảng số liệu</summary><div class="table-wrap"><table class="data-table compact"><thead><tr><th scope="col">Tuần</th><th scope="col" class="num">Giá trị (đ)</th></tr></thead><tbody>{% for l, v in expiry_table %}<tr><td>{{ l }}</td><td class="num">{{ v|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table></div></details></div>
+  </section>
+  <section class="card">
+    <div class="card-head"><div><h2>Đủ dùng so với thời gian giao hàng</h2><p class="card-sub">Số ngày tồn hiện có đủ dùng; vạch là số ngày chờ hàng về cộng một ngày. Thanh đỏ: có thể hết trước khi hàng mới về nếu đặt hôm nay.</p></div></div>
+    <div class="card-body">{% if cover_chart %}{% include "reports/charts/hbars.html" with c=cover_chart label="Số ngày đủ dùng" %}<ul class="chart-legend"><li><span class="key f-1-bg"></span>Đủ</li><li><span class="key st-warn"></span>Sát</li><li><span class="key st-critical"></span>Thiếu</li><li><span class="key key-target"></span>Thời gian giao + 1 ngày</li></ul>{% else %}<p class="chart-empty">Chưa có số liệu tiêu hao.</p>{% endif %}</div>
+  </section>
+</div>
+
+<div class="grid-3">
+  <section class="card">
+    <div class="card-head"><h2>Hao hụt theo lý do</h2></div>
+    <div class="card-body">{% if reason_chart %}{% include "reports/charts/share_bar.html" with c=reason_chart label="Hao hụt theo lý do" %}{% else %}<p class="chart-empty">Không có hao hụt trong kỳ.</p>{% endif %}</div>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>Hao hụt nhiều nhất</h2></div>
+    <div class="card-body">{% if waste_chart %}{% include "reports/charts/hbars.html" with c=waste_chart label="Hao hụt theo nguyên liệu" %}{% else %}<p class="chart-empty">Không có hao hụt trong kỳ.</p>{% endif %}</div>
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>Nhập theo nhà cung cấp</h2></div>
+    <div class="card-body">{% if supplier_chart %}{% include "reports/charts/share_bar.html" with c=supplier_chart label="Giá trị nhập theo nhà cung cấp" %}{% else %}<p class="chart-empty">Không có phiếu nhập trong kỳ.</p>{% endif %}</div>
+  </section>
+</div>
+
+<section class="card">
+  <div class="card-head"><div><h2>Tuổi hàng trong kho</h2><p class="card-sub">Giá trị các lô đang còn theo số ngày từ lúc nhập. Hàng nằm lâu là tiền bị giữ lại và dễ hỏng.</p></div></div>
+  <div class="card-body">{% if age_chart %}{% include "reports/charts/columns.html" with c=age_chart label="Tuổi hàng trong kho" %}{% else %}<p class="chart-empty">Kho chưa có lô nào.</p>{% endif %}</div>
+</section>
+{% endblock %}

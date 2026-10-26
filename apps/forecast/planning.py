@@ -28,9 +28,10 @@ from .models import IngredientPlan, OrderSuggestion, PlanRun
 log = logging.getLogger(__name__)
 
 # Đổi khi cách tính thay đổi, để bản tính cũ không được trả lại cho cùng dữ liệu sau khi nâng cấp phần mềm.
-ENGINE_VERSION = "ke-hoach-mua-2"
+ENGINE_VERSION = "ke-hoach-mua-3"
 
-PARAM_KEYS = ("plan_csl_critical_percent", "plan_csl_normal_percent", "plan_group_a_shelf_days", "plan_a_review_days",
+PARAM_KEYS = ("plan_csl_critical_percent", "plan_csl_normal_percent", "plan_csl_long_life_percent",
+              "plan_group_a_shelf_days", "plan_a_review_days",
               "plan_a_target_days", "plan_b_review_days", "plan_b_review_weekday", "plan_horizon_days",
               "plan_switch_gain_percent", "plan_switch_weeks", "plan_bias_limit_percent",
               "plan_blocked_limit_percent", "plan_indirect_share_percent", "plan_reconcile_gap_permille",
@@ -55,14 +56,20 @@ def settings_for(ing):
         T = ing.target_cycle_days or R
     # Tham số chung theo quy ước màn hình tham số: 2 là thứ Hai … 8 là Chủ nhật.
     weekday = ing.review_weekday if ing.review_weekday is not None else (params.get("plan_b_review_weekday") - 2) % 7
-    csl = ing.service_level or params.get("plan_csl_critical_percent" if ing.is_critical else "plan_csl_normal_percent")
+    csl = params.get("plan_csl_critical_percent" if ing.is_critical else "plan_csl_normal_percent")
+    csl_src = "trọng yếu" if ing.is_critical else "mặc định"
+    if group == "B" and params.get("plan_csl_long_life_percent") > csl:
+        # Hàng để lâu: giữ thêm gần như không mất gì vì không hỏng, nên dồn phần thiếu cho phép của BO-02 sang hàng tươi.
+        csl, csl_src = params.get("plan_csl_long_life_percent"), "hàng để lâu (nhóm B)"
+    if ing.service_level:
+        csl, csl_src = ing.service_level, "Chủ quán đặt"
     estimate = None
     if None not in (ing.weekly_low, ing.weekly_typical, ing.weekly_high):
         estimate = (float(ing.weekly_low), float(ing.weekly_typical), float(ing.weekly_high))
     since = timezone.localdate(ing.weekly_estimate_at) if ing.weekly_estimate_at else None
     return {"group": group, "group_source": group_src, "R": int(R), "T": int(max(T, R)), "weekday": int(weekday),
             "anchor": ing.review_anchor, "estimate_since": since,
-            "csl": int(csl), "exposure": int(ing.exposure_days), "moq": int(ing.moq_packs or 1),
+            "csl": int(csl), "csl_source": csl_src, "exposure": int(ing.exposure_days), "moq": int(ing.moq_packs or 1),
             "pack": float(ing.pack_size or 1), "pack_label": ing.pack_label or "gói", "unit": ing.get_unit_display(),
             "shelf": ing.shelf_life_days, "capacity": float(ing.storage_capacity) if ing.storage_capacity else None,
             "manual_ss": float(ing.safety_stock or 0), "estimate": estimate}
@@ -240,6 +247,17 @@ def _lots(ing, today):
     return lots, excluded, pos
 
 
+def on_hand_lots(ing):
+    """Các lô đang còn của nguyên liệu (inventory.lots) để tính phần sẽ hết hạn (EWA): [(lượng, ngày cuối còn dùng)].
+
+    Hạn của lô: hạn ghi trên phiếu nhập; không ghi thì ngày nhập + hạn dùng − 1 (ghi sẵn khi tạo lô). Lô chưa rõ hạn
+    (tồn đầu kỳ, dư kiểm kê) coi như không hết hạn."""
+    from apps.inventory.models import StockLot
+
+    return [(float(lot.remaining), lot.expiry_date or date.max)
+            for lot in StockLot.objects.filter(ingredient=ing, remaining__gt=0).order_by("received_at", "pk")]
+
+
 def committed(ing):
     """C: lượng ước tính của phiếu dự phòng đã ghi nhưng chưa nhập bù vào kho (chờ Chủ quán xác nhận)."""
     from apps.catalog.models import ItemSize
@@ -333,6 +351,7 @@ def evaluate(ing, cfg, fc, today, f0, physical, reserved, c):
     factor = fc.get("factor", 1.0)
     sigma = [s * factor for s in fc.get("sigma", [])]
     quantiles = _quantile_mode(fc, cfg, factor)
+    aging = on_hand_lots(ing)
     inp = policy.Inputs(
         today=today, daily=daily, sigma=sigma, csl=cfg["csl"], available=physical - reserved, physical=physical,
         reserved=reserved, committed=c, lots=lots, excluded=excluded, f0=f0, group=cfg["group"],
@@ -340,7 +359,8 @@ def evaluate(ing, cfg, fc, today, f0, physical, reserved, c):
         pack=cfg["pack"], pack_label=cfg["pack_label"], unit=cfg["unit"], moq=cfg["moq"], shelf_life=cfg["shelf"],
         capacity=cfg["capacity"], manual_ss=cfg["manual_ss"], quantiles=quantiles,
         sigma_label=fc.get("sigma_label", ""), sigma_measured=fc.get("sigma_measured"),
-        review_anchor=cfg["anchor"])
+        review_anchor=cfg["anchor"],
+        on_hand_lots=aging if cfg["shelf"] or any(e != date.max for _, e in aging) else None)
     result = policy.compute(inp)
     result["periods"] = periods(daily, sigma, today, f0, cfg, fc.get("sigma_measured") or [])
     result["settings"] = cfg

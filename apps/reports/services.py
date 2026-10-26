@@ -216,7 +216,7 @@ def materials(start_day, end_day):
 # ---------------- FR-50: bảng điều khiển ----------------
 
 def shift_panel(user):
-    """Phần dành cho Quản lý ca (và Chủ quán): tình hình ca đang mở và việc của mình."""
+    """Phần ca của bảng điều khiển (Chủ quán trực tiếp quản lý ca): tình hình ca đang mở và việc của mình."""
     from apps.control.alerts import visible_to
     from apps.inventory.models import QuickReport
     from apps.orders.adjustments import pending_for
@@ -227,7 +227,7 @@ def shift_panel(user):
     from apps.staff.timekeeping import WORK_ROLES
     from apps.accounts.models import Role
 
-    shift = Shift.objects.current()
+    shift = Shift.objects.operating()
     present = {Role(r).label: 0 for r in WORK_ROLES}
     for att in Attendance.objects.filter(clock_out__isnull=True):
         present[att.get_role_display()] = present.get(att.get_role_display(), 0) + 1
@@ -239,6 +239,22 @@ def shift_panel(user):
         "quick_reports": QuickReport.objects.filter(acknowledged_at__isnull=True).count(),
         "present": present,
     }
+
+
+def _stock_summary(today):
+    """Ô kho trên bảng điều khiển: lô quá hạn, lô sắp hết hạn, hàng dự kiến bỏ, nguyên liệu dưới tồn an toàn."""
+    from apps.inventory import lots
+    from apps.inventory.models import Ingredient
+
+    ingredients = list(Ingredient.objects.filter(is_active=True).select_related("stock"))
+    view = lots.overview(ingredients, today)
+    below = [i for i in ingredients if getattr(i, "stock", None) and i.safety_stock > 0
+             and i.stock.available <= i.safety_stock]  # cùng điều kiện với trang Tồn kho
+    return {"expired_lots": sum(len(d["expired"]) for d in view.values()),
+            "expired_value": sum(d["expired_value"] for d in view.values()),
+            "near_lots": sum(len(d["near"]) for d in view.values()),
+            "at_risk_value": sum(d["at_risk_value"] for d in view.values()),
+            "below": below, "value": sum(d["value"] for d in view.values())}
 
 
 def dashboard(today=None, month=None):
@@ -265,12 +281,13 @@ def dashboard(today=None, month=None):
         r = found.get(f"{d:%d/%m/%Y}", {"revenue": 0, "orders": 0, "cups": 0})
         days.append({"day": d, "revenue": r["revenue"], "orders": r["orders"]})
         d += timedelta(days=1)
-    has_sales = any(x["revenue"] for x in days)
-    revenue_chart = charts.columns([(f"{x['day']:%d}", x["revenue"],
-                                     f"{x['day']:%d/%m}: {x['revenue']:,} đ · {x['orders']} đơn".replace(",", "."))
-                                    for x in days]) if has_sales else None
-    orders_chart = charts.columns([(f"{x['day']:%d}", x["orders"], f"{x['day']:%d/%m}: {x['orders']} đơn")
-                                   for x in days]) if has_sales else None
+    from . import insights
+
+    # So với cùng các ngày của tháng trước (1–26/10 so với 1–26/09), không phải kỳ liền trước cùng độ dài.
+    prev_first = (first - timedelta(days=1)).replace(day=1)
+    prev_end = min(prev_first + (end - first), first - timedelta(days=1))
+    sales = insights.sales(first, end, prev=(prev_first, prev_end), today=today)
+    revenue_chart = sales["trend_chart"]
     critical = []
     for ing in Ingredient.objects.filter(is_critical=True, is_active=True).select_related("stock"):
         stock = getattr(ing, "stock", None)
@@ -282,7 +299,7 @@ def dashboard(today=None, month=None):
                                  "text": f"{c['available']:,.0f} {c['ingredient'].get_unit_display()}".replace(",", "."),
                                  "tip": f"{c['ingredient'].name}: có thể dùng {c['available']:,.0f}, tồn an toàn "
                                         f"{c['ingredient'].safety_stock:,.0f} {c['ingredient'].get_unit_display()}".replace(",", ".")}
-                                for c in critical], "marker")
+                                for c in critical], "marker", label_w=130, width=charts.HALF)
     acc_rows = accumulated_report(month.year, month.month)
     limit = params.get("accumulated_manager_threshold")
     by_manager = {}
@@ -291,7 +308,7 @@ def dashboard(today=None, month=None):
     acc_chart = charts.hbars([{"label": m, "value": v, "marker": limit, "below": v > limit,
                                "text": f"{v:,} đ".replace(",", "."),
                                "tip": f"{m}: thiếu chưa giải thích {v:,} đ, ngưỡng {limit:,} đ".replace(",", ".")}
-                              for m, v in sorted(by_manager.items())], "marker")
+                              for m, v in sorted(by_manager.items())], "marker", label_w=130, width=charts.HALF)
     bo01_chart = charts.stacked([("Tổn thất đã xác minh", control["verified"], 1),
                                  ("Thiếu tiền đang xử lý", control["in_process"], 2)], BO01_MONTHLY_TARGET)
     open_alerts = Alert.objects.filter(status__in=Alert.OPEN)
@@ -305,7 +322,8 @@ def dashboard(today=None, month=None):
         "bo01_target": BO01_MONTHLY_TARGET, "bo01_met": control["control_value"] < BO01_MONTHLY_TARGET,
         "bo01_chart": bo01_chart,
         "shortages": shortages, "bo02_target": BO02_MONTHLY_TARGET, "bo02_met": shortages <= BO02_MONTHLY_TARGET,
-        "by_day": by_day, "days": days, "revenue_chart": revenue_chart, "orders_chart": orders_chart,
+        "by_day": by_day, "days": days, "revenue_chart": revenue_chart, "sales": sales,
+        "stock_summary": _stock_summary(today),
         "accumulated": sum(r["total"] for r in acc_rows), "acc_chart": acc_chart, "acc_limit": limit,
         "critical": critical, "stock_chart": stock_chart,
         "alerts": {"khan": open_alerts.filter(severity="khan").count(),

@@ -20,6 +20,14 @@ class ShiftQuerySet(models.QuerySet):
                 .select_related("approver", "backup_approver", "payment_authorizer")
                 .order_by("-starts_at").first())
 
+    def operating(self, at=None):
+        """Ca đang giữ quỹ lúc `at`: ca trong khung giờ; nếu không có thì ca đã bắt đầu, quá giờ kết thúc dự kiến
+        nhưng chưa kết (khách trả tiền muộn sau 22 giờ vẫn vào quỹ ca đó, BRU-01, BRU-06)."""
+        at = at or timezone.now()
+        return self.current(at) or (self.filter(status=Shift.Status.OPEN, starts_at__lte=at)
+                                    .select_related("approver", "backup_approver", "payment_authorizer")
+                                    .order_by("-starts_at").first())
+
 
 class Shift(StoreScopedModel):
     class Status(models.TextChoices):

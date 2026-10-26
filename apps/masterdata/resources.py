@@ -192,14 +192,15 @@ def _opening(request, ingredient, data):
 register(Resource(
     key="nguyen-lieu", title="Nguyên vật liệu", singular="Nguyên vật liệu", model=Ingredient, cap=Cap.MASTER_INVENTORY,
     fields=["name", "unit", "pack_size", "pack_label", "main_supplier", "lead_time_days", "order_cycle_days",
-            "shelf_life_days", "storage_capacity", "safety_stock", "safety_stock_is_provisional", "is_critical",
-            "count_accumulated_threshold", "is_active",
-            # Chính sách mua (thiết kế mua nguyên liệu mục 7.4)
-            "policy_group", "service_level", "review_period_days", "target_cycle_days", "review_weekday",
-            "review_anchor", "moq_packs",
-            "exposure_days", "weekly_low", "weekly_typical", "weekly_high"],
+            "shelf_life_days", "issue_rule", "storage_capacity", "safety_stock", "safety_stock_is_provisional",
+            "is_critical", "count_accumulated_threshold", "is_active",
+            # Mua hàng. Tham số chính sách của mô hình (nhóm, mức phục vụ, chu kỳ kiểm tra) không hiện ở đây: dùng
+            # mặc định trong apps/core/params.py.
+            "moq_packs", "weekly_low", "weekly_typical", "weekly_high"],
     columns=[("Tên", "name"), ("Đơn vị", "unit"), ("Nhà cung cấp", "main_supplier"),
-             ("Tồn an toàn", "safety_stock"), ("Trọng yếu", "is_critical"), ("Đang dùng", "is_active")],
+             ("Hạn dùng", lambda i: f"{i.shelf_life_days} ngày" if i.shelf_life_days else "Không có"),
+             ("Quy tắc xuất lô", lambda i: i.rule_short), ("Tồn an toàn", "safety_stock"),
+             ("Trọng yếu", "is_critical"), ("Đang dùng", "is_active")],
     search=("name",), filters=[("trong-yeu", "Trọng yếu", "is_critical", YES_NO),
                                ("dang-dung", "Đang dùng", "is_active", YES_NO)],
     queryset=lambda: Ingredient.objects.select_related("main_supplier").order_by("name"),

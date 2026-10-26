@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Lô hàng · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div><h1>Lô hàng</h1><p class="page-sub">Mỗi dòng phiếu nhập là một lô có mã, ngày nhập và hạn sử dụng. Thứ tự lấy theo quy tắc xuất của từng nguyên liệu.</p></div>
+  <div class="page-tools"><a class="btn btn-quiet" href="{% url 'inventory:pick_list' %}">Phiếu lấy hàng</a><a class="btn btn-primary" href="{% url 'inventory:receipt' %}">Lập phiếu nhập</a></div>
+</header>
+
+<div class="stats">
+  <div class="stat"><p class="stat-label">Lô đang còn hàng</p><p class="stat-value">{{ totals.lots }}</p></div>
+  {% if show_value %}<div class="stat"><p class="stat-label">Giá trị tồn theo lô</p><p class="stat-value">{{ totals.value|intcomma }} đ</p></div>
+  <div class="stat{% if totals.expired_value %} stat-danger{% endif %}"><p class="stat-label">Giá trị lô quá hạn</p><p class="stat-value">{{ totals.expired_value|intcomma }} đ</p></div>
+  <div class="stat"><p class="stat-label">Dự kiến bỏ vì không dùng kịp</p><p class="stat-value">{{ totals.at_risk_value|intcomma }} đ</p><p class="stat-note">Nếu tốc độ dùng giữ như 4 tuần qua</p></div>{% endif %}
+</div>
+
+<section class="card">
+  <div class="card-head">
+    <nav class="seg" aria-label="Lọc theo hạn dùng">{% for key, label, n in filters %}<a href="?trang-thai={{ key }}{% if ing %}&nvl={{ ing }}{% endif %}"{% if key == state %} aria-current="true"{% endif %}>{{ label }} <span class="seg-count">{{ n }}</span></a>{% endfor %}</nav>
+    <form class="card-tools" method="get"><input type="hidden" name="trang-thai" value="{{ state }}">
+      <select class="input input-sm" name="nvl" aria-label="Nguyên liệu" onchange="this.form.submit()"><option value="">Mọi nguyên liệu</option>{% for i in ingredients %}<option value="{{ i.pk }}"{% if ing == i.pk|stringformat:'s' %} selected{% endif %}>{{ i.name }}</option>{% endfor %}</select>
+      <noscript><button class="btn btn-quiet" type="submit">Lọc</button></noscript></form>
+  </div>
+  {% if rows %}
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th scope="col">Mã lô</th><th scope="col">Nguyên vật liệu</th><th scope="col">Nhập</th><th scope="col">Hạn sử dụng</th>
+      <th scope="col" class="num">Còn lại</th>{% if show_value %}<th scope="col" class="num">Giá trị</th>{% endif %}
+      <th scope="col">Dự kiến</th><th scope="col">Trạng thái</th><th scope="col"><span class="visually-hidden">Thao tác</span></th></tr></thead>
+    <tbody>
+    {% for v in rows %}
+    <tr>
+      <th scope="row"><span class="mono">{{ v.code }}</span>{% if v.supplier_lot %}<div class="cell-sub">Số lô NSX {{ v.supplier_lot }}</div>{% endif %}</th>
+      <td><a href="{% url 'inventory:lot_detail' v.ingredient_id %}">{{ v.ingredient_obj.name }}</a><div class="cell-sub">Thứ tự lấy {{ v.rank }} · {{ v.ingredient_obj.rule_short }}</div></td>
+      <td>{{ v.received_at|date:"d/m/Y" }}<div class="cell-sub">{% if v.supplier %}{{ v.supplier }}{% else %}{{ v.get_source_display }}{% endif %}</div></td>
+      <td>{% if v.expiry_date %}{{ v.expiry_date|date:"d/m/Y" }}{% if v.expiry_estimated %} <span class="muted" title="Ước tính theo ngày nhập và thời hạn sử dụng">(ước tính)</span>{% endif %}
+        <div class="cell-sub">{% if v.overdue %}quá hạn {{ v.overdue }} ngày{% elif v.days_left == 0 %}hết hạn hôm nay{% else %}còn {{ v.days_left }} ngày{% endif %}</div>{% else %}<span class="muted">Chưa rõ</span>{% endif %}</td>
+      <td class="num">{{ v.remaining|floatformat:"-2g" }} <span class="unit">{{ v.ingredient_obj.get_unit_display }}</span>
+        <div class="meter" title="Còn {{ v.remaining|floatformat:'-2g' }} trên {{ v.quantity|floatformat:'-2g' }}"><span style="width:{% widthratio v.remaining v.quantity 100 %}%"></span></div></td>
+      {% if show_value %}<td class="num">{{ v.value|intcomma }}</td>{% endif %}
+      <td>{% if v.state == 'qua_han' %}<span class="muted">—</span>{% elif v.used_up %}Dùng hết {{ v.used_up|date:"d/m" }}{% elif v.start %}Đang dùng{% else %}<span class="muted">Chưa tới lượt</span>{% endif %}
+        {% if v.waste > 0 and v.state != 'qua_han' %}<div class="cell-sub text-danger">Có thể bỏ {{ v.waste|floatformat:"0" }} {{ v.ingredient_obj.get_unit_display }}</div>{% endif %}</td>
+      <td><span class="pill pill-{% if v.state == 'qua_han' %}danger{% elif v.state == 'sap_het_han' %}warn{% elif v.state == 'chua_ro_han' %}neutral{% else %}ok{% endif %}">{{ v.state_label }}</span></td>
+      <td class="actions">{% if v.state == 'qua_han' %}<form method="post" action="{% url 'inventory:lot_dispose' v.pk %}" data-once data-confirm="Hủy toàn bộ {{ v.remaining|floatformat:'-2g' }} {{ v.ingredient_obj.get_unit_display }} của lô {{ v.code }}?">{% csrf_token %}<input type="hidden" name="operation_key" value="{{ v.op }}"><input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn btn-danger btn-sm" type="submit">Hủy lô</button></form>{% else %}<a class="btn btn-ghost btn-sm" href="{% url 'inventory:lot_detail' v.ingredient_id %}">Xem</a>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty-cell">Không có lô nào khớp bộ lọc.</div>
+  {% endif %}
+</section>
+{% endblock %}

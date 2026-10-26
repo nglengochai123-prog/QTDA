@@ -1,0 +1,4 @@
+{% load l10n %}{% if c %}{% localize off %}<svg class="chart-svg share" viewBox="0 0 {{ c.w }} {{ c.h }}" role="img" aria-label="{{ label }}" preserveAspectRatio="none">
+  {% for s in c.segs %}<g class="hit" tabindex="0" data-tip="{{ s.tip }}"><rect class="f-{{ s.slot }}" x="{{ s.x }}" y="0" width="{{ s.w }}" height="{{ c.h }}" rx="{% if forloop.first or forloop.last %}4{% else %}0{% endif %}"/><title>{{ s.tip }}</title></g>{% endfor %}
+</svg>{% endlocalize %}
+<ul class="share-legend">{% for s in c.segs %}<li><span class="key s-{{ s.slot }}" aria-hidden="true"></span><span class="share-name">{{ s.label }}</span><span class="share-val">{{ s.value }}</span><span class="share-pct">{{ s.pct|floatformat:0 }}%</span></li>{% endfor %}</ul>{% endif %}

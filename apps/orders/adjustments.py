@@ -16,6 +16,7 @@ from apps.catalog.models import Table
 from apps.core import params
 from apps.core.idempotency import run_once
 from apps.inventory import stock
+from apps.inventory.models import StockMovement
 from apps.control.models import ExceptionCase
 from apps.shifts.models import Shift
 
@@ -89,7 +90,7 @@ SKIP_BACKUP_REASON = "Chuyển thẳng Chủ quán (ngoại lệ GD-08): ca chư
 
 
 def _shift_for(order):
-    return order.shift or Shift.objects.current()
+    return order.shift or Shift.objects.operating()
 
 
 def _owners():
@@ -182,7 +183,7 @@ def create_request(user, operation_key, payload):
             level=_initial_level(user, order, kind), level_since=timezone.now(),
             level_minutes=params.get("approval_level_minutes"),
             requested_by=user, operation_key=operation_key, after_prep=after_prep,
-            shift=order.shift or Shift.objects.current(), **fields)
+            shift=order.shift or Shift.objects.operating(), **fields)
         if after_prep:
             _check_adjust_count(req)
         record(Action.CREATE, actor=user, obj=req, object_type="orders.AdjustmentRequest",
@@ -257,7 +258,8 @@ def _add_line(order, spec, actor, delivered=False):
     new = built[0]
     totals = {int(k): Decimal(v) * new["quantity"] for k, v in new["usage"].items()}
     position = (order.lines.aggregate(m=Max("position"))["m"] or 0) + 1
-    stock.reserve(totals)
+    if not delivered:
+        stock.reserve(totals)
     line = OrderLine.objects.create(
         order=order, position=position, item=new["item"], size=new["size"], item_name=new["item"].name,
         size_name=new["size"].name, unit_price=new["unit_price"], quantity=new["quantity"], note=new["note"],
@@ -265,9 +267,11 @@ def _add_line(order, spec, actor, delivered=False):
     OrderLineOption.objects.bulk_create([OrderLineOption(line=line, option=o, name=o.name, extra_price=o.extra_price)
                                          for o in new["options"]])
     if delivered:
-        # Món khách đã thực nhận (AC-10): đã pha nên trừ tồn vật lý ngay.
-        stock.consume(totals, actor=actor, store=order.store, source_type="dong_mon", source_id=line.pk,
-                      note=f"Đơn {order.code}: món thực nhận")
+        # Món khách đã thực nhận (AC-10): đã pha nên trừ tồn vật lý ngay, không qua giữ chỗ. Không chặn khi
+        # tồn sổ sách không đủ vì món đã thực sự pha; lệch sẽ lộ ra ở lần kiểm kê sau.
+        for ingredient_id, used in totals.items():
+            stock.move(ingredient_id, -used, kind=StockMovement.Kind.CONSUME, actor=actor, store=order.store,
+                       source_type="dong_mon", source_id=line.pk, note=f"Đơn {order.code}: món thực nhận")
         line.done_quantity = line.quantity
         line.status = OrderLine.Status.SERVED
         line.done_at = line.served_at = timezone.now()
@@ -323,7 +327,13 @@ def decide(user, operation_key, request_id, approve, note=""):
             raise ValidationError("Bạn không có quyền xử lý yêu cầu này ở cấp hiện tại.")
         before = after = None
         if payload["approve"]:
-            before, after = apply_effects(req, user)
+            try:
+                before, after = apply_effects(req, user)
+            except stock.InsufficientStock as error:
+                # Đổi món mà món mới không đủ nguyên liệu: không duyệt được, yêu cầu vẫn chờ (AC-04).
+                raise ValidationError("Không đủ nguyên liệu cho món thay thế: " + "; ".join(
+                    f"{s['ingredient']} cần {s['needed']} {s['unit']}, còn {s['available']}" for s in error.shortages)
+                    + ". Từ chối yêu cầu hoặc nhập thêm hàng rồi duyệt lại.")
             req.status = Status.APPROVED
         else:
             req.status = Status.REJECTED

@@ -268,7 +268,7 @@ class AdjustmentRequest(StoreScopedModel):
             return []
         now = now or timezone.now()
         step = self.deadline()
-        shift = self.shift or self.order.shift or Shift.objects.current()
+        shift = self.shift or self.order.shift or Shift.objects.operating()
         has_backup = bool(shift and shift.backup_approver_id)
         level, since, steps = self.level, self.level_since, []
         while level < self.Level.EXHAUSTED and now - since >= step:

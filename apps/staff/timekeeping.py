@@ -1,7 +1,7 @@
 """Chấm công vào ca, ra ca theo vai trò (FR-35, BRU-31, AC-76 đến AC-78).
 
 Chưa có lịch ca trên hệ thống (lập lịch FR-39 thuộc Giai đoạn 2), nên giờ công tính theo giờ vào và ra.
-Lượt thiếu giờ ra không được tính giờ cho đến khi Quản lý ca bổ sung kèm lý do.
+Lượt thiếu giờ ra không được tính giờ cho đến khi Chủ quán bổ sung kèm lý do.
 Một người được tính có mặt trong khung giờ một tiếng khi làm ít nhất nửa khung đó (giả định GD-20).
 """
 
@@ -61,7 +61,7 @@ def clock_out(user, operation_key):
 
 @transaction.atomic
 def supplement_clock_out(manager, attendance_id, when, reason):
-    """Quản lý ca bổ sung giờ ra bị thiếu kèm lý do (AC-78)."""
+    """Chủ quán bổ sung giờ ra bị thiếu kèm lý do (AC-78)."""
     from apps.accounts.permissions import Cap, user_can
 
     if not user_can(manager, Cap.TIMEKEEPING_ADJUST):
@@ -108,7 +108,7 @@ def presence(start, end):
 
 
 def remind_missing(now=None):
-    """Tác vụ định kỳ: ghi nhắc Quản lý ca một lần cho mỗi lượt thiếu giờ ra."""
+    """Tác vụ định kỳ: ghi nhắc Chủ quán một lần cho mỗi lượt thiếu giờ ra."""
     from apps.audit.models import AuditLog
 
     reminded = []

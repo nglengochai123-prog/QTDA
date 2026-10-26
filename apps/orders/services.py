@@ -109,6 +109,8 @@ def _totals(lines):
 
 
 def _next_code(store):
+    # Khóa dòng cửa hàng để hai đơn gửi cùng lúc (kể cả đơn không dùng nguyên liệu) không nhận cùng một mã.
+    type(store).objects.select_for_update().filter(pk=store.pk).first()
     today = timezone.localdate()
     count = Order.objects.filter(store=store, created_at__date=today).count()
     while True:
@@ -142,7 +144,7 @@ def submit_order(user, operation_key, payload):
 
         order = Order.objects.create(
             store=table.store, code=_next_code(table.store), table=table, note=clean_payload["note"],
-            created_by=user, operation_key=operation_key, shift=Shift.objects.current(),
+            created_by=user, operation_key=operation_key, shift=Shift.objects.operating(),
             total=sum(l["unit_price"] * l["quantity"] for l in lines))
         for position, line in enumerate(lines, start=1):
             order_line = OrderLine.objects.create(

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#252e35">
+  <meta name="theme-color" content="#ffffff">
   <title>{% block title %}{{ STORE_NAME }}{% endblock %}</title>
   <link rel="manifest" href="{% url 'core:manifest' %}">
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
@@ -13,20 +13,17 @@
   {% include "partials/icons.html" %}
   {% block shell %}
   <div class="shell">
-  <nav class="rail" aria-label="Phân hệ">
-    <a class="rail-brand" href="{% url 'core:home' %}" aria-label="{{ STORE_NAME }}, trang chủ"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></a>
-    {% for g in NAV_GROUPS %}<a class="rail-item" href="{{ g.url }}"{% if g.active %} aria-current="true"{% endif %}>
-      <svg class="icon" aria-hidden="true"><use href="#i-{{ g.icon }}"/></svg><span>{{ g.short }}</span></a>{% endfor %}
-  </nav>
-  <div class="shell-main">
   <header class="app-header">
-    <a class="store" href="{% url 'core:home' %}"><span class="store-mark" aria-hidden="true"><svg class="icon"><use href="#i-bar"/></svg></span>{{ STORE_NAME }}</a>
+    <a class="brand" href="{% url 'core:home' %}"><svg class="icon brand-icon" aria-hidden="true"><use href="#i-brand"/></svg><span class="brand-name">{{ STORE_NAME }}</span></a>
+    <nav class="top-tabs" aria-label="Phân hệ">
+      {% for g in NAV_GROUPS %}<a href="{{ g.url }}"{% if g.active %} aria-current="true"{% endif %}>{{ g.short }}</a>{% endfor %}
+    </nav>
     <div class="header-tools">
       {% if HEADER.alerts %}<a class="tool" href="{{ HEADER.alerts }}" title="Cảnh báo" aria-label="Cảnh báo"><svg class="icon" aria-hidden="true"><use href="#i-alerts"/></svg></a>{% endif %}
       {% if HEADER.approvals %}<a class="tool" href="{{ HEADER.approvals }}" title="Duyệt điều chỉnh" aria-label="Duyệt điều chỉnh"><svg class="icon" aria-hidden="true"><use href="#i-approve"/></svg><span class="tool-badge" data-approvals-badge hidden></span></a>{% endif %}
       {% if HEADER.settings %}<a class="tool" href="{{ HEADER.settings }}" title="Tham số" aria-label="Tham số"><svg class="icon" aria-hidden="true"><use href="#i-gear"/></svg></a>{% endif %}
       <details class="account">
-        <summary aria-label="Tài khoản của tôi"><span class="avatar" aria-hidden="true">{{ HEADER.initial }}</span><span class="account-name">{{ user.given_name }}</span></summary>
+        <summary aria-label="Tài khoản của tôi"><span class="account-btn"><span class="account-name">{{ user.given_name|default:user.username }}</span><svg class="icon account-caret" aria-hidden="true"><use href="#i-chevron"/></svg></span><span class="avatar" aria-hidden="true">{{ HEADER.initial }}</span></summary>
         <div class="account-menu">
           <p class="account-who"><strong>{{ user }}</strong><span>{{ user.get_role_display }}</span></p>
           <a href="{% url 'core:data_notice' %}">Thông báo xử lý dữ liệu</a>
@@ -35,6 +32,16 @@
       </details>
     </div>
   </header>
+  <div class="shell-body{% if not NAV_SIDE_GROUP %} no-side{% endif %}">
+  {% if NAV_SIDE_GROUP %}
+  <aside class="sidebar" aria-label="{{ NAV_SIDE_GROUP.label }}">
+    <p class="side-title">{{ NAV_SIDE_GROUP.label }}</p>
+    <nav class="side-nav">
+      {% for item in NAV_SIDE_GROUP.items %}<a class="side-item" href="{{ item.url }}"{% if item.active %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}
+    </nav>
+  </aside>
+  {% endif %}
+  <div class="shell-main">
   {% if NAV_ACTIVE_GROUP and NAV_ACTIVE_GROUP.items|length > 1 %}
   <nav class="sub-tabs" aria-label="{{ NAV_ACTIVE_GROUP.label }}">
     {% for item in NAV_ACTIVE_GROUP.items %}<a href="{{ item.url }}"{% if item.active %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}
@@ -64,9 +71,8 @@
     <nav class="app-nav" aria-label="Điều hướng chính">
       <ul>
         {% for item in NAV_ITEMS %}
-        {% if item.group_start %}<li class="nav-group" aria-hidden="true">{{ item.group_start }}</li>{% endif %}
         <li{% if item.desktop_only %} class="nav-desktop-only"{% endif %}><a href="{{ item.url }}"{% if item.active %} aria-current="page"{% endif %}>
-          <svg class="icon" aria-hidden="true"><use href="#i-{{ item.key }}"/></svg>{{ item.label }}</a></li>
+          <svg class="icon" aria-hidden="true"><use href="#i-{{ item.icon }}"/></svg>{{ item.label }}</a></li>
         {% endfor %}
         <li class="nav-more-item"><details class="nav-more"><summary><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg>Tất cả</summary>
           <div class="nav-more-panel">{% for g in NAV_GROUPS %}<p class="nav-more-group">{{ g.label }}</p>{% for item in g.items %}<a href="{{ item.url }}"{% if item.active %} aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}{% endfor %}</div>
@@ -82,8 +88,11 @@
   </div>
   </div>
   </div>
+  </div>
+  <div class="chart-tip" role="status" hidden></div>
   {% endblock %}
   <script src="{% static 'js/app.js' %}" defer></script>
+  <script src="{% static 'js/charts.js' %}" defer></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

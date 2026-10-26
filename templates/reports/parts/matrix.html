@@ -1,0 +1,6 @@
+{% load humanize %}{% if s.matrix_chart %}{% include "reports/charts/scatter.html" with c=s.matrix_chart label="Ma trận thực đơn: số ly và lãi gộp mỗi ly" %}
+<details class="chart-table"><summary>Bảng số liệu và gợi ý</summary><div class="table-wrap"><table class="data-table compact">
+  <thead><tr><th scope="col">Món</th><th scope="col" class="num">Số ly</th><th scope="col" class="num">Giá vốn/ly</th><th scope="col" class="num">Lãi gộp/ly</th><th scope="col">Nhóm</th><th scope="col">Gợi ý</th></tr></thead>
+  <tbody>{% for r in s.matrix_rows %}<tr><th scope="row">{{ r.name }}</th><td class="num">{{ r.cups }}</td><td class="num">{{ r.cost_per_cup|intcomma }}</td><td class="num">{{ r.margin_per_cup|intcomma }}</td><td><span class="pill pill-{% if r.quad == 'tr' %}ok{% elif r.quad == 'bl' %}danger{% elif r.quad == 'br' %}warn{% else %}info{% endif %}">{{ r.quad_label }}</span></td><td class="cell-wrap">{{ r.advice }}</td></tr>{% endfor %}</tbody>
+</table></div></details>
+{% elif s.has_sales %}<p class="chart-empty">Chưa có giá nhập nguyên liệu để tính giá vốn từng món.</p>{% else %}<p class="chart-empty">Chưa có đơn trong kỳ.</p>{% endif %}

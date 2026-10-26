@@ -1,4 +1,4 @@
-"""Màn hình phiếu dự phòng và nhập bù (FR-06). Quản lý ca dùng trên máy tính khi có kết nối lại."""
+"""Màn hình phiếu dự phòng và nhập bù (FR-06). Chủ quán dùng trên máy tính khi có kết nối lại."""
 
 import uuid
 

@@ -1,0 +1,4 @@
+<form class="filter-row" method="get" aria-label="Chọn kỳ">
+  <nav class="seg" aria-label="Kỳ chọn nhanh">{% for label, a, b in presets %}<a href="?tu={{ a|date:'Y-m-d' }}&amp;den={{ b|date:'Y-m-d' }}{% if extra %}&amp;{{ extra }}{% endif %}"{% if a == start and b == end %} aria-current="true"{% endif %}>{{ label }}</a>{% endfor %}</nav>
+  <div class="range"><input class="input input-sm" type="date" name="tu" value="{{ start|date:'Y-m-d' }}" aria-label="Từ ngày"><span aria-hidden="true">–</span><input class="input input-sm" type="date" name="den" value="{{ end|date:'Y-m-d' }}" aria-label="Đến ngày">{% if dim %}<input type="hidden" name="theo" value="{{ dim }}">{% endif %}<button class="btn btn-quiet btn-sm" type="submit">Xem</button></div>
+</form>

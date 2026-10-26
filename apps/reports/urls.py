@@ -9,4 +9,5 @@ urlpatterns = [
     path("bao-cao/doanh-thu/", views.revenue, name="revenue"),
     path("bao-cao/kiem-soat/", views.revenue_control, name="revenue_control"),
     path("bao-cao/nguyen-lieu/", views.materials, name="materials"),
+    path("bao-cao/kho/", views.inventory, name="inventory"),
 ]

@@ -1,23 +1,30 @@
 {% extends "base.html" %}
+{% load humanize %}
 {% block title %}Tồn kho · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><h1>Tồn kho</h1></header>
-<nav class="action-row" aria-label="Thao tác kho">
-  <a class="btn btn-primary" href="{% url 'inventory:quick_report' %}">Báo nhanh sắp hết</a>
-  <a class="btn btn-quiet" href="{% url 'inventory:count' %}">Kiểm kê{% if pending_counts %} · {{ pending_counts }} chờ xác nhận{% endif %}</a>
-  <a class="btn btn-quiet" href="{% url 'inventory:waste' %}">Hao hụt</a>
-  <a class="btn btn-quiet" href="{% url 'inventory:receipt' %}">Phiếu nhập</a>
-  {% if can_confirm %}<a class="btn btn-quiet" href="{% url 'inventory:purchase_orders' %}">Đặt hàng</a>
-  <a class="btn btn-quiet" href="{% url 'inventory:payables' %}">Khoản phải trả</a>
-  <a class="btn btn-quiet" href="{% url 'inventory:report' %}">Báo cáo</a>{% endif %}
-</nav>
+<header class="page-head">
+  <div><h1>Tồn kho</h1><p class="page-sub">Tồn theo nguyên liệu, lô nên lấy trước và tình trạng hạn dùng.</p></div>
+  <div class="page-tools">
+    <a class="btn btn-quiet" href="{% url 'inventory:pick_list' %}">Phiếu lấy hàng</a>
+    <a class="btn btn-quiet" href="{% url 'inventory:quick_report' %}">Báo nhanh sắp hết</a>
+    <a class="btn btn-primary" href="{% url 'inventory:receipt' %}">Lập phiếu nhập</a>
+  </div>
+</header>
+
+<div class="stats">
+  {% if can_confirm %}<div class="stat"><p class="stat-label">Giá trị tồn kho</p><p class="stat-value">{{ totals.value|intcomma }} đ</p><p class="stat-note">Theo giá nhập của từng lô</p></div>{% endif %}
+  <a class="stat{% if totals.expired %} stat-danger{% endif %}" href="?loc=expired"><p class="stat-label">Lô quá hạn còn trong kho</p><p class="stat-value">{{ totals.expired }}</p><p class="stat-note">{% if totals.expired %}Để riêng và hủy{% if can_confirm %}, {{ totals.expired_value|intcomma }} đ{% endif %}{% else %}Không có{% endif %}</p></a>
+  <a class="stat{% if totals.near %} stat-warn{% endif %}" href="?loc=near"><p class="stat-label">Lô sắp hết hạn</p><p class="stat-value">{{ totals.near }}</p><p class="stat-note">Ưu tiên dùng trước</p></a>
+  <a class="stat" href="?loc=risk"><p class="stat-label">Dự kiến bỏ vì không dùng kịp</p><p class="stat-value">{% if can_confirm %}{{ totals.at_risk_value|intcomma }} đ{% else %}{{ totals.at_risk_value|yesno:"Có,Không" }}{% endif %}</p><p class="stat-note">Hàng sẽ hết hạn trước khi dùng hết</p></a>
+  <a class="stat{% if totals.low %} stat-warn{% endif %}" href="?loc=low"><p class="stat-label">Dưới mức tồn an toàn</p><p class="stat-value">{{ totals.low }}</p><p class="stat-note">Nguyên liệu</p></a>
+</div>
 
 {% if quick_reports %}
-<section class="panel panel-warn" aria-labelledby="qr-title">
-  <h2 id="qr-title">Báo nhanh chưa xử lý</h2>
-  <ul class="ruled-list compact">
+<section class="card card-warn" aria-labelledby="qr-title">
+  <div class="card-head"><h2 id="qr-title">Báo nhanh chưa xử lý</h2></div>
+  <ul class="list">
     {% for r in quick_reports %}
-    <li class="row-between"><span><strong>{{ r.ingredient.name }}: {{ r.get_level_display }}</strong>{% if r.estimated_left is not None %} · còn khoảng {{ r.estimated_left|floatformat:"-2g" }} {{ r.ingredient.get_unit_display }}{% endif %} · {{ r.reporter }} · {{ r.created_at|date:"H:i" }}</span>
+    <li class="list-row"><span><strong>{{ r.ingredient.name }}: {{ r.get_level_display }}</strong>{% if r.estimated_left is not None %} · còn khoảng {{ r.estimated_left|floatformat:"-2g" }} {{ r.ingredient.get_unit_display }}{% endif %} <span class="muted">· {{ r.reporter }} · {{ r.created_at|date:"H:i" }}</span></span>
       {% if can_ack %}<form method="post" action="{% url 'inventory:acknowledge' r.pk %}" class="inline-form" data-once>{% csrf_token %}
         <input type="hidden" name="next" value="{{ request.path }}">
         <input class="input input-sm" name="note" placeholder="Đã xử lý thế nào">
@@ -27,26 +34,52 @@
 </section>
 {% endif %}
 
-<details class="help-tip"><summary>Giải thích</summary><p>Tồn có thể dùng là tồn vật lý trừ phần đang giữ cho món đã gửi pha chế nhưng chưa pha xong.</p></details>
-{% if ingredients %}
-<div class="table-wrap">
-<table class="data-table">
-  <thead><tr><th scope="col">Nguyên vật liệu</th><th scope="col" class="num">Tồn vật lý</th>
-    <th scope="col" class="num">Đang giữ</th><th scope="col" class="num">Có thể dùng</th></tr></thead>
-  <tbody>
-  {% for i in ingredients %}
-  <tr{% if i.stock.available <= i.safety_stock %} class="is-low"{% endif %}>
-    <th scope="row">{{ i.name }}{% if i.is_critical %} <span class="chip">Trọng yếu</span>{% endif %}</th>
-    <td class="num">{{ i.stock.physical|floatformat:"-2g" }} {{ i.get_unit_display }}</td>
-    <td class="num">{{ i.stock.reserved|floatformat:"-2g" }} {{ i.get_unit_display }}</td>
-    <td class="num"><strong>{{ i.stock.available|floatformat:"-2g" }} {{ i.get_unit_display }}</strong>
-      {% if i.stock.available <= i.safety_stock %}<span class="flag-low">Dưới mức an toàn</span>{% endif %}</td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
+{% if has_items %}
+<section class="card">
+  <div class="card-head">
+    <nav class="seg" aria-label="Lọc theo tình trạng">
+      <a href="?"{% if not loc %} aria-current="true"{% endif %}>Tất cả</a>
+      <a href="?loc=expired"{% if loc == 'expired' %} aria-current="true"{% endif %}>Có lô quá hạn</a>
+      <a href="?loc=near"{% if loc == 'near' %} aria-current="true"{% endif %}>Sắp hết hạn</a>
+      <a href="?loc=risk"{% if loc == 'risk' %} aria-current="true"{% endif %}>Dự kiến bỏ</a>
+      <a href="?loc=low"{% if loc == 'low' %} aria-current="true"{% endif %}>Dưới mức an toàn</a>
+    </nav>
+    <div class="card-tools">
+      <a class="btn btn-ghost" href="{% url 'inventory:count' %}">Kiểm kê{% if pending_counts %} <span class="count-badge">{{ pending_counts }}</span>{% endif %}</a>
+      <a class="btn btn-ghost" href="{% url 'inventory:waste' %}">Ghi hao hụt</a>
+      <a class="btn btn-ghost" href="{% url 'inventory:lots' %}">Tất cả lô</a>
+    </div>
+  </div>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th scope="col">Nguyên vật liệu</th><th scope="col">Quy tắc xuất</th><th scope="col" class="num">Có thể dùng</th>
+      <th scope="col" class="num">Đủ dùng</th><th scope="col">Lấy trước</th><th scope="col" class="num">Số lô</th>
+      {% if can_confirm %}<th scope="col" class="num">Giá trị</th>{% endif %}<th scope="col">Tình trạng</th></tr></thead>
+    <tbody>
+    {% for r in rows %}{% with i=r.i d=r.d %}
+    <tr>
+      <th scope="row"><a href="{% url 'inventory:lot_detail' i.pk %}">{{ i.name }}</a>{% if i.is_critical %} <span class="tag">Trọng yếu</span>{% endif %}</th>
+      <td><span class="rule" title="{{ i.rule_label }}">{{ i.rule_short }}</span></td>
+      <td class="num">{{ i.stock.available|floatformat:"-2g" }} <span class="unit">{{ i.get_unit_display }}</span>{% if i.stock.reserved %}<div class="cell-sub">đang giữ {{ i.stock.reserved|floatformat:"-2g" }}</div>{% endif %}</td>
+      <td class="num">{% if d.cover_days is not None %}{{ d.cover_days|floatformat:"0" }} ngày{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td>{% if d.pick %}<span class="mono">{{ d.pick.code }}</span><div class="cell-sub">{% if d.pick.expiry_date %}HSD {{ d.pick.expiry_date|date:"d/m" }}{% if d.pick.days_left is not None %} · còn {{ d.pick.days_left }} ngày{% endif %}{% else %}Chưa rõ hạn{% endif %}</div>{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="num">{{ d.lots|length }}</td>
+      {% if can_confirm %}<td class="num">{{ d.value|intcomma }}</td>{% endif %}
+      <td>{% if r.state == 'expired' %}<span class="pill pill-danger">{{ d.expired|length }} lô quá hạn</span>
+        {% elif r.state == 'low' %}<span class="pill pill-warn">Dưới mức an toàn</span>
+        {% elif r.state == 'near' %}<span class="pill pill-warn">Sắp hết hạn</span>
+        {% elif r.state == 'risk' %}<span class="pill pill-info">Dự kiến bỏ {{ d.at_risk|floatformat:"0" }} {{ i.get_unit_display }}</span>
+        {% else %}<span class="pill pill-ok">Ổn</span>{% endif %}</td>
+    </tr>
+    {% endwith %}{% empty %}
+    <tr><td colspan="8" class="empty-cell">Không có nguyên liệu nào khớp bộ lọc.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+<details class="help-tip"><summary>Cách đọc bảng</summary><p>Có thể dùng là tồn trong kho trừ phần đang giữ cho món đã gửi pha chế. Đủ dùng là số ngày tồn hiện có còn dùng được. Quy tắc xuất: FEFO lấy lô hết hạn sớm nhất trước, dùng cho hàng có hạn dùng; FIFO lấy lô nhập trước, dùng cho hàng không có hạn (ly, ống hút); LIFO chỉ cho hàng không có hạn mà lô mới nằm trên, dễ lấy. Bấm tên nguyên liệu để xem từng lô.</p></details>
 {% else %}
-<div class="empty"><p><strong>Chưa có nguyên vật liệu.</strong></p><p>Chủ quán khai báo nguyên vật liệu và tồn đầu kỳ ở Dữ liệu nền.</p></div>
+<div class="empty"><p><strong>Chưa có nguyên vật liệu.</strong></p><p>Chủ quán khai báo nguyên vật liệu và tồn đầu kỳ ở Quản trị.</p></div>
 {% endif %}
 {% endblock %}

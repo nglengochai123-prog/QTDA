@@ -2,7 +2,7 @@
 {% block title %}Lịch sử bán · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <header class="page-head"><h1>Lịch sử bán</h1></header>
-<details class="help-tip"><summary>Giải thích</summary><p>Nhập số bán trước khi dùng hệ thống từ tệp CSV để mô hình học và đánh giá. Dòng tiêu đề cần có cột ngày và cột món; nên có cột kích cỡ và số ly (thiếu số ly thì mỗi dòng tính 1 ly, hợp với tệp xuất từng dòng hóa đơn). Có thể thêm cột trạng thái với giá trị "đóng cửa" hoặc "thiếu hàng" để đánh dấu cả ngày. Tên món và kích cỡ phải trùng thực đơn; món không khớp được liệt kê và không được nhập. Ngày đã có ca trên hệ thống luôn dùng số của hệ thống. Lịch sử thật và dữ liệu mô phỏng lưu riêng; dữ liệu mô phỏng không bao giờ dùng cho dự báo thật.</p></details>
+<details class="help-tip"><summary>Giải thích</summary><p>Nhập số bán trước khi dùng hệ thống từ tệp CSV để dự báo sát hơn ngay từ đầu. Dòng tiêu đề cần có cột ngày và cột món; nên có cột kích cỡ và số ly (thiếu số ly thì mỗi dòng tính 1 ly, hợp với tệp xuất từng dòng hóa đơn). Có thể thêm cột trạng thái với giá trị "đóng cửa" hoặc "thiếu hàng" để đánh dấu cả ngày. Tên món và kích cỡ phải trùng thực đơn; món không khớp được liệt kê và không được nhập. Ngày đã có ca trên hệ thống luôn dùng số của hệ thống. Lịch sử thật và dữ liệu mô phỏng lưu riêng; dữ liệu mô phỏng không bao giờ dùng cho dự báo thật.</p></details>
 <section class="panel"><h2>Nhập tệp</h2>
   <form method="post" enctype="multipart/form-data" class="inline-action" data-once>{% csrf_token %}
     <div class="field"><label for="f-file">Tệp CSV</label><input class="input" id="f-file" type="file" name="file" accept=".csv,text/csv" required></div>

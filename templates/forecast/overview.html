@@ -4,27 +4,35 @@
 <header class="page-head">
   <h1>Dự báo nhu cầu</h1>
   <div class="page-tools">
-    {% if rel %}<span class="muted">Phát hành {{ rel.issued_at|date:"H:i d/m/Y" }} · {{ rel.horizon_days }} ngày · {{ rel.model_version }}</span>{% endif %}
-    <form method="post" data-once>{% csrf_token %}<button class="btn btn-primary" type="submit">Phát hành lại</button></form>
+    {% if rel %}<span class="muted">Cập nhật {{ rel.issued_at|date:"H:i d/m/Y" }} · {{ rel.horizon_days }} ngày tới</span>{% endif %}
+    <form method="post" data-once>{% csrf_token %}<button class="btn btn-primary" type="submit">Cập nhật dự báo</button></form>
   </div>
 </header>
-<details class="help-tip"><summary>Giải thích</summary><p>Số ly của từng món và kích cỡ theo ngày. "Ước tính ban đầu" là nhận định của Chủ quán; "Mô hình Bayes động" bắt đầu từ nhận định đó rồi cập nhật bằng các ngày bán đủ điều kiện (ngày đã kết ca và có báo cáo; ngày đóng cửa, chưa chốt hoặc thiếu nguyên liệu không tính là ngày bán 0 ly). Khoảng là phân vị 10% và 90%: khoảng 8 trong 10 ngày số bán nằm trong đó. Tổng 3 và 7 ngày tính trên từng kịch bản mô phỏng, không cộng các khoảng từng ngày. Cách tính dùng cho đặt hàng do Chủ quán chọn ở trang Đánh giá.</p></details>
+<details class="help-tip"><summary>Giải thích</summary><p>Số ly dự kiến bán của từng món và kích cỡ. Số trong ngoặc là mức thấp và cao: khoảng 8 trong 10 ngày số bán nằm trong đó. Khi chưa có nhiều ngày bán, dự báo dựa vào nhận định của Chủ quán.</p></details>
 {% if rows %}
+{% if trend_chart %}<section class="card">
+  <div class="card-head"><div><h2>Tổng số ly: đã bán và dự báo</h2><p class="card-sub">Ba tuần qua và 14 ngày tới. Ngày đóng cửa để trống.</p></div></div>
+  <div class="card-body">{% include "reports/charts/line.html" with c=trend_chart label="Tổng số ly đã bán và dự báo" %}</div>
+</section>{% endif %}
+{% if ranges_chart %}<section class="card">
+  <div class="card-head"><div><h2>Nhu cầu 7 ngày tới theo món</h2><p class="card-sub">Chấm là số dự kiến, dải là mức thấp đến cao.</p></div></div>
+  <div class="card-body">{% include "reports/charts/ranges.html" with c=ranges_chart label="Nhu cầu 7 ngày tới theo món, dự kiến và mức thấp đến cao" %}</div>
+</section>{% endif %}
+<section class="card"><div class="card-head"><h2>Chi tiết theo món</h2></div>
 <div class="table-wrap"><table class="data-table">
-  <thead><tr><th scope="col">Món</th><th scope="col">Cách tính cho đặt hàng</th><th scope="col" class="num">Ngày đã học</th>
+  <thead><tr><th scope="col">Món</th><th scope="col" class="num">Ngày đã bán</th>
     <th scope="col" class="num">Ngày mai</th><th scope="col" class="num">3 ngày tới</th><th scope="col" class="num">7 ngày tới</th><th scope="col">Hạn chế</th></tr></thead>
   <tbody>{% for r in rows %}<tr>
     <th scope="row"><a href="{% url 'forecast:series' r.s.pk %}">{{ r.s.size.item.name }} {{ r.s.size.name }}</a></th>
-    <td>{{ r.method_label }}</td>
     <td class="num">{{ r.s.eligible_days }}</td>
     <td class="num">{% if r.tomorrow %}{{ r.tomorrow.mean|floatformat:1 }} <span class="muted">({{ r.tomorrow.q10 }}–{{ r.tomorrow.q90 }})</span>{% endif %}</td>
     <td class="num">{% if r.t3 %}{{ r.t3.mean|floatformat:0 }} <span class="muted">({{ r.t3.q10 }}–{{ r.t3.q90 }})</span>{% endif %}</td>
     <td class="num">{% if r.t7 %}{{ r.t7.mean|floatformat:0 }} <span class="muted">({{ r.t7.q10 }}–{{ r.t7.q90 }})</span>{% endif %}</td>
     <td>{% if r.s.limitations %}<span class="text-warn">{{ r.s.limitations|length }} lưu ý</span>{% else %}–{% endif %}</td>
   </tr>{% endfor %}</tbody>
-</table></div>
-<p class="page-note">"3 ngày tới" và "7 ngày tới" tính từ hôm nay theo cách tính đang áp dụng cho đặt hàng.</p>
+</table></div></section>
+<p class="page-note">"3 ngày tới" và "7 ngày tới" tính từ hôm nay.</p>
 {% else %}
-<div class="empty"><p><strong>Chưa có dự báo.</strong></p><p>Nhập <a href="{% url 'masterdata:list' 'nhan-dinh' %}">nhận định của Chủ quán</a> cho các món đang bán rồi bấm Phát hành lại.</p></div>
+<div class="empty"><p><strong>Chưa có dự báo.</strong></p><p>Nhập <a href="{% url 'masterdata:list' 'nhan-dinh' %}">nhận định của Chủ quán</a> cho các món đang bán rồi bấm Cập nhật dự báo.</p></div>
 {% endif %}
 {% endblock %}

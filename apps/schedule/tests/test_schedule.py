@@ -116,19 +116,28 @@ class ScheduleTests(TestCase):
         self.client.login(username=self.b1.username, password=PASSWORD)
         self.assertContains(self.client.get(reverse("schedule:mine")), "Ca tối")
 
-    def test_need_suggestion_uses_forecast_load_and_productivity(self):
-        profile = ({True: {17: 0.2, 18: 0.3, 19: 0.1}, False: {}}, 1.0)
-        prod = {Role.PHA_CHE: {"value": 10.0, "source": "Chủ quán đặt"}, Role.PHUC_VU: {"value": 20.0, "source": "x"},
-                Role.THU_NGAN: None}
+    def test_need_suggestion_queue_model_and_cover(self):
+        inputs = {"today": timezone.localdate(), "scv": 1.0,
+                  "profile": ({True: {17: 0.2, 18: 0.3, 19: 0.1}, False: {}}, 1.0),
+                  "rates": {Role.PHA_CHE: {"value": 40.0, "source": "Chủ quán đặt", "kind": "owner"},
+                            Role.PHUC_VU: {"value": 40.0, "source": "Chủ quán đặt", "kind": "owner"},
+                            Role.THU_NGAN: None}}
         with mock.patch("apps.schedule.services._daily_cups", return_value=(100.0, "Dự báo")):
-            out = sv.suggest_needs(self.evening, profile=profile, prod=prod)
-        self.assertEqual(out[Role.PHA_CHE][0], 3)  # giờ cao nhất 100 × 0,3 = 30 tải ÷ 10
-        self.assertEqual(out[Role.PHUC_VU][0], 2)
-        self.assertIsNone(out[Role.THU_NGAN][0])  # thiếu năng suất: Chủ quán nhập tay
-        RoleNeed.objects.create(shift=self.evening, role=Role.PHA_CHE, needed=3, suggested=3)
+            out = sv.suggest_day(self.saturday, [self.afternoon, self.evening], inputs)
+            single = sv.suggest_needs(self.evening, inputs=inputs)
+        # Giờ 18: tải 30 với sức làm 40 cần 2 người để 70% ly chờ không quá 4 phút; hai ca chồng giờ 17–21 chia nhau
+        # nên mỗi ca 1 người, không phải 2 + 2 như lấy giờ cao nhất của từng ca.
+        self.assertEqual(out[self.afternoon.pk][Role.PHA_CHE][0], 1)
+        self.assertEqual(out[self.evening.pk][Role.PHA_CHE][0], 1)
+        self.assertEqual(single[Role.PHA_CHE], out[self.evening.pk][Role.PHA_CHE])
+        basis = out[self.evening.pk][Role.PHA_CHE][1]
+        self.assertIn([18, 30.0, 2], basis["hours"])
+        self.assertEqual(basis["uncovered"], list(range(6, 16)))  # quán mở 6 giờ nhưng chưa có ca sáng
+        self.assertIsNone(out[self.evening.pk][Role.THU_NGAN][0])  # thiếu sức làm: Chủ quán nhập tay
+        RoleNeed.objects.create(shift=self.evening, role=Role.PHA_CHE, needed=1, suggested=1)
         with self.assertRaises(ValidationError):
-            sv.set_need(self.owner, self.evening, Role.PHA_CHE, 4)  # khác gợi ý phải có lý do
-        sv.set_need(self.owner, self.evening, Role.PHA_CHE, 4, "Có sự kiện")
+            sv.set_need(self.owner, self.evening, Role.PHA_CHE, 2)  # khác gợi ý phải có lý do
+        sv.set_need(self.owner, self.evening, Role.PHA_CHE, 2, "Có sự kiện")
 
     def test_screens_and_permissions(self):
         self.client.login(username=self.owner.username, password=PASSWORD)

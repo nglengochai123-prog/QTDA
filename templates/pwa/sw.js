@@ -1,8 +1,9 @@
 {% load static %}// Service worker tối thiểu: cài lên màn hình chính và hiện trang mất kết nối có đủ giao diện.
 // Nhận thông báo đẩy (NFR-17): hiện thông báo kể cả khi ứng dụng đóng, chạm vào mở đúng màn hình.
-const CACHE = "lam-shell-v2";
+const CACHE = "lam-shell-v5";
 const OFFLINE_URL = "{% url 'core:offline' %}";
-const SHELL = [OFFLINE_URL, "{% static 'css/app.css' %}", "{% static 'js/app.js' %}"];
+// Giao diện dùng chữ hệ thống của máy nên không cần lưu tệp phông.
+const SHELL = [OFFLINE_URL, "{% static 'css/app.css' %}", "{% static 'js/app.js' %}", "{% static 'js/charts.js' %}"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));

@@ -38,10 +38,33 @@ def _ingredients():
 
 @capability_required(Cap.STOCK_OPERATIONS)
 def stock_list(request):
+    from . import lots
+
+    items = list(_ingredients())
+    view = lots.overview(items)
+    rows, totals = [], {"value": 0, "expired": 0, "expired_value": 0, "near": 0, "low": 0, "at_risk_value": 0}
+    for i in items:
+        d = view[i.pk]
+        low = i.stock.available <= i.safety_stock and i.safety_stock > 0
+        state = ("expired" if d["expired"] else "low" if low else "near" if d["near"] else
+                 "risk" if d["at_risk"] > 0 else "ok")
+        rows.append({"i": i, "d": d, "low": low, "state": state})
+        totals["value"] += d["value"]
+        totals["expired"] += len(d["expired"])
+        totals["expired_value"] += d["expired_value"]
+        totals["near"] += len(d["near"])
+        totals["low"] += int(low)
+        totals["at_risk_value"] += d["at_risk_value"]
+    q = request.GET.get("loc", "")
+    # Lọc theo từng điều kiện (một nguyên liệu vừa có lô quá hạn vừa dưới tồn an toàn hiện ở cả hai bộ lọc).
+    tests = {"expired": lambda r: r["d"]["expired"], "low": lambda r: r["low"], "near": lambda r: r["d"]["near"],
+             "risk": lambda r: r["d"]["at_risk"] > 0}
+    if q in tests:
+        rows = [r for r in rows if tests[q](r)]
     return render(request, "inventory/stock.html", {
-        "ingredients": _ingredients(), "quick_reports": ops.open_quick_reports(),
+        "rows": rows, "totals": totals, "loc": q, "quick_reports": ops.open_quick_reports(),
         "can_confirm": user_can(request.user, Cap.STOCK_CONFIRM_ORDERING),
-        "can_ack": user_can(request.user, Cap.VIEW_WORKLOAD),
+        "can_ack": user_can(request.user, Cap.VIEW_WORKLOAD), "has_items": bool(items),
         "pending_counts": StockCount.objects.filter(status=StockCount.Status.PENDING).count(),
     })
 
@@ -111,14 +134,22 @@ def count(request):
 def waste(request):
     if request.method == "POST":
         p = request.POST
-        _run(request, lambda: ops.record_waste(request.user, p.get("operation_key", ""), p.get("ingredient"),
-                                               p.get("quantity", ""), p.get("reason", ""), p.get("note", ""),
-                                               is_one_off=bool(p.get("one_off"))),
-             "Đã ghi hao hụt; tồn vật lý đã giảm.")
+        result = _run(request, lambda: ops.record_waste(
+            request.user, p.get("operation_key", ""), p.get("ingredient"), p.get("quantity", ""), p.get("reason", ""),
+            p.get("note", ""), is_one_off=bool(p.get("one_off")), lot_id=p.get("lot") or None), "")
+        if result:
+            data, _ = result
+            messages.success(request, "Đã ghi hao hụt; tồn vật lý đã giảm"
+                             + (f" (trừ lô {', '.join(data['lots'])})." if data.get("lots") else "."))
         return redirect("inventory:waste")
+    from .models import StockLot
+
+    open_lots = (StockLot.objects.filter(remaining__gt=0, ingredient__is_active=True).select_related("ingredient")
+                 .order_by("ingredient__name", "expiry_date", "received_at"))
     return render(request, "inventory/waste.html", {"is_owner": request.user.is_owner,
         "ingredients": _ingredients(), "reasons": Waste.Reason.choices, "operation_key": uuid.uuid4().hex,
-        "recent": Waste.objects.select_related("ingredient", "actor")[:10],
+        "recent": Waste.objects.select_related("ingredient", "actor")[:10], "open_lots": open_lots,
+        "today": timezone.localdate(),
     })
 
 
@@ -134,6 +165,8 @@ def receipt(request):
                         "unit_price": p.get(f"price_{i}") or 0, "purchase_order": p.get(f"po_{i}") or None}
                 if p.get(f"expiry_{i}"):
                     line["expiry_date"] = p.get(f"expiry_{i}")
+                if p.get(f"lot_{i}"):
+                    line["supplier_lot"] = p.get(f"lot_{i}")
                 lines.append(line)
         result = _run(request, lambda: ops.create_receipt(
             request.user, p.get("operation_key", ""), p.get("supplier"), lines, p.get("payment_type", ""),
@@ -141,8 +174,8 @@ def receipt(request):
             paid_source=p.get("source") or SupplierPayment.Source.TRANSFER), "")
         if result:
             data, _ = result
-            messages.success(request, f"Đã lưu phiếu nhập {data['code']}, giá trị {data['total']:,} đ; tồn vật lý đã tăng."
-                             .replace(",", "."))
+            messages.success(request, f"Đã lưu phiếu nhập {data['code']}, giá trị {data['total']:,} đ; tồn vật lý đã tăng. "
+                             .replace(",", ".") + f"Mã lô: {', '.join(data.get('lots') or [])}.")
             for warning in data.get("warnings") or []:
                 messages.warning(request, warning)
         return redirect("inventory:receipt")

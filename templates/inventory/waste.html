@@ -8,6 +8,9 @@
   <input type="hidden" name="operation_key" value="{{ operation_key }}">
   <div class="field"><label for="w-ing">Nguyên vật liệu</label><select class="input" id="w-ing" name="ingredient" required>
     <option value="">Chọn nguyên liệu</option>{% for i in ingredients %}<option value="{{ i.pk }}">{{ i.name }} ({{ i.get_unit_display }})</option>{% endfor %}</select></div>
+  <div class="field"><label for="w-lot">Lô</label><select class="input" id="w-lot" name="lot" data-lots-for="w-ing">
+    <option value="">Tự chọn theo quy tắc xuất (hết hạn thì lấy lô quá hạn trước)</option>{% for l in open_lots %}<option value="{{ l.pk }}" data-ingredient="{{ l.ingredient_id }}">{{ l.code }} · còn {{ l.remaining|floatformat:"-2g" }} {{ l.ingredient.get_unit_display }}{% if l.expiry_date %} · HSD {{ l.expiry_date|date:"d/m" }}{% if l.expiry_date < today %} (quá hạn){% endif %}{% endif %}</option>{% endfor %}</select>
+    <span class="hint">Chọn lô nếu biết hàng hỏng thuộc lô nào.</span></div>
   <div class="field"><label for="w-qty">Số lượng</label><input class="input" id="w-qty" name="quantity" inputmode="decimal" required></div>
   <fieldset class="option-group"><legend>Lý do</legend><div class="choice-row">
     {% for v, l in reasons %}<label class="pick"><input type="radio" name="reason" value="{{ v }}" required><span>{{ l }}</span></label>{% endfor %}</div></fieldset>

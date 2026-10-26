@@ -90,6 +90,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.accounts.permissions.DeniedAccessLogMiddleware",
+    "apps.core.middleware.FormErrorMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"

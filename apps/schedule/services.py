@@ -6,27 +6,28 @@ Quy tắc:
 - Không xếp một người vào hai ca trùng giờ (AC-87).
 - Thiếu, dư tính riêng từng vị trí của mỗi ca (AC-86): đủ tổng người vẫn có thể thiếu một vị trí.
 - Gợi ý số người cần (BRU-28): tải dự kiến từng giờ = số ly dự báo của ngày × tỷ lệ bán theo giờ trong lịch sử ×
-  hệ số tải bình quân mỗi ly; số người = làm tròn lên (tải ÷ năng suất), không thấp hơn mức tối thiểu; nhu cầu
-  của ca là giờ cao nhất trong ca. Năng suất do Chủ quán đặt, để 0 thì lấy trung vị tải mỗi người của các giờ không
-  bị đánh dấu quá tải trong 8 tuần gần nhất. Đây là gợi ý; Chủ quán sửa số áp dụng, khác gợi ý thì ghi lý do.
+  hệ số tải bình quân mỗi ly. Số người từng giờ theo mô hình hàng đợi Erlang C thay cho làm tròn lên tải ÷ năng suất,
+  vì người làm tới 100% công suất thì hàng chờ dài không giới hạn (xem staffing.py và docs/KET_QUA_MO_PHONG.md);
+  không thấp hơn mức tối thiểu khi quán mở. Số người từng giờ được chia vào các ca của ngày bằng bài toán phủ, nên ca
+  chồng giờ không bị tính hai lần. Sức làm do Chủ quán đặt; để 0 thì pha chế được đo lúc mọi người đều bận, vị trí
+  khác lấy ước lượng thận trọng. Đây là gợi ý (BRU-37); Chủ quán sửa số áp dụng, khác gợi ý thì ghi lý do.
 - Gợi ý xếp lịch: ô khan hiếm (ít người đăng ký so với nhu cầu) được xếp trước; trong ô, ưu tiên người có ít giờ
   đã xếp trong tuần, rồi người đăng ký sớm. Ô Chủ quán đã xếp tay được giữ nguyên.
 """
 
-import math
 from collections import defaultdict
 from datetime import datetime, time, timedelta
-from statistics import median
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from apps.accounts.models import Role, User
+from apps.accounts.models import Role
 from apps.audit.models import Action
 from apps.audit.services import record
 from apps.core import params
 
+from . import staffing
 from .models import Assignment, Registration, RoleNeed, WeekPublish, WorkShift
 
 ROLES = [Role.PHA_CHE, Role.PHUC_VU, Role.THU_NGAN]
@@ -100,6 +101,11 @@ def register(user, choices, now=None):
 
 # ---------------- gợi ý số người cần (BRU-28) ----------------
 
+SERVICE_SCV = 0.25  # c²s của thời gian pha mỗi ly: giả định lệch quanh trung bình khoảng ±50% (Gamma k = 4)
+MIN_BUSY_HOURS = 3  # số giờ-người bận tối thiểu để tin sức làm đo được
+FORGOTTEN_MINUTES = 60  # dòng món từ gửi tới pha xong lâu hơn mức này coi như quên bấm "Xong", không dùng để đo
+
+
 def _hourly_profile(today, window=56):
     """Tỷ lệ số ly theo giờ trong ngày cho ngày thường và cuối tuần, và hệ số tải bình quân mỗi ly."""
     from apps.orders.models import OrderLine
@@ -125,30 +131,114 @@ def _hourly_profile(today, window=56):
     return profile, (load / cups_total if cups_total else 1.0)
 
 
-def productivity(today, window=56):
-    """Năng suất mỗi vị trí (tải mỗi người mỗi giờ): tham số của Chủ quán, hoặc trung vị của các giờ không quá tải."""
+def _window(today, window):
+    tz = timezone.get_current_timezone()
+    return (timezone.make_aware(datetime.combine(today - timedelta(days=window), time.min), tz),
+            timezone.make_aware(datetime.combine(today, time.min), tz))
+
+
+def _bar_events(today, window=56):
+    """Sự kiện quầy pha chế cho staffing.saturated_rate: gửi pha chế và pha xong từng dòng món, kèm số pha chế có mặt.
+
+    Bỏ đơn nhập bù (không có giờ gửi thật), dòng chưa pha xong, dòng pha xong trước khi gửi (dữ liệu lỗi) và dòng quá
+    FORGOTTEN_MINUTES phút (quên bấm), vì một dòng treo làm cả quầy trông như đang bận."""
+    from apps.orders.models import OrderLine
+    from apps.staff.models import Attendance
+
+    lo, hi = _window(today, window)
+    shifts = [(a.clock_in, a.clock_out) for a in Attendance.objects.filter(
+        role=Role.PHA_CHE, clock_in__lt=hi, clock_out__gt=lo)]
+
+    def present(moment):
+        return sum(1 for a, b in shifts if a <= moment < b)
+
+    raw = []
+    for line in (OrderLine.objects.filter(order__created_at__gte=lo, order__created_at__lt=hi, done_at__isnull=False,
+                                          order__backup_slip__isnull=True).select_related("order", "item__group")):
+        n = line.quantity - line.cancelled_quantity
+        took = (line.done_at - line.order.created_at).total_seconds() / 60
+        if n <= 0 or not 0 <= took <= FORGOTTEN_MINUTES:
+            continue
+        load = n * float(line.item.group.load_factor)
+        raw.append((line.order.created_at, 1, "gui", load, n))
+        raw.append((line.done_at, 0, "xong", load, n))
+    raw.sort(key=lambda e: (e[0], e[1]))
+    events = []
+    for moment, _order, kind, load, n in raw:
+        events.append(((moment - lo).total_seconds() / 3600, kind, load, present(moment), n))
+    return events
+
+
+def _calm_hour_quantile(today, roles, window=56, q=0.98):
+    """Phân vị q của tải mỗi người trong các giờ không quá tải (BRU-28: không học từ giờ quá tải)."""
     from apps.orders.workload import day_frames
 
-    out, samples = {}, defaultdict(list)
-    need_auto = [r for r in ROLES if not params.get(f"schedule_productivity_{r}")]
-    if need_auto:
-        for k in range(1, window + 1):
-            for f in day_frames(today - timedelta(days=k))["frames"]:
-                if f["overloaded"]:
-                    continue  # BRU-28: không học năng suất từ giờ quá tải
-                for r in need_auto:
-                    present = f["presence"].get(r, 0)
-                    if present:
-                        samples[r].append(float(f["load"]) / present)
-    for r in ROLES:
-        set_value = params.get(f"schedule_productivity_{r}")
-        if set_value:
-            out[r] = {"value": float(set_value), "source": "Chủ quán đặt"}
-        elif len(samples[r]) >= 5:
-            out[r] = {"value": round(median(samples[r]), 1), "source": f"Trung vị {len(samples[r])} giờ không quá tải"}
-        else:
-            out[r] = None
+    samples = defaultdict(list)
+    for k in range(1, window + 1):
+        for f in day_frames(today - timedelta(days=k))["frames"]:
+            if f["overloaded"]:
+                continue
+            for r in roles:
+                present = f["presence"].get(r, 0)
+                if present:
+                    samples[r].append(float(f["load"]) / present)
+    out = {}
+    for r in roles:
+        v = sorted(samples[r])
+        out[r] = (v[min(int(q * len(v)), len(v) - 1)], len(v)) if len(v) >= 5 else (None, len(v))
     return out
+
+
+def rates(today, window=56):
+    """Sức làm mỗi người mỗi giờ khi bận liên tục, theo vị trí, cùng đơn vị với tải.
+
+    Thứ tự: số đặt trong file tham số (apps/core/params.py); với pha chế, đo thông lượng lúc mọi pha chế đều bận (cần ít nhất 3 giờ-người bận);
+    còn lại lấy giờ đông nhất mà vị trí đó vẫn làm kịp: phân vị 98 của tải mỗi người ở giờ không quá tải (bỏ 2% cao
+    nhất phòng chấm công sai). Người chưa từng phải làm hết sức thì số này thấp hơn sức làm thật, nên gợi ý dư người
+    (an toàn) cho tới khi đo được và đặt số trong file."""
+    out, auto = {}, []
+    for r in ROLES:
+        value = params.get(f"schedule_productivity_{r}")
+        if value:
+            out[r] = {"value": float(value), "source": "Đặt trong file tham số", "kind": "owner"}
+        else:
+            auto.append(r)
+    if Role.PHA_CHE in auto:
+        rate, busy = staffing.saturated_rate(_bar_events(today, window))
+        if rate and busy >= MIN_BUSY_HOURS:
+            out[Role.PHA_CHE] = {"value": round(rate, 1), "kind": "measured",
+                                 "source": f"Đo lúc mọi pha chế đều bận ({busy:.0f} giờ-người trong {window // 7} tuần)"}
+            auto.remove(Role.PHA_CHE)
+    if auto:
+        for r, (value, n) in _calm_hour_quantile(today, auto, window).items():
+            out[r] = ({"value": round(value, 1), "kind": "conservative",
+                       "source": f"Giờ đông nhất đã làm kịp trong {n} giờ không quá tải; thường thấp hơn sức làm "
+                                 "thật nên gợi ý dư người"}
+                      if value else None)
+    return out
+
+
+def arrival_scv(today, window=56):
+    """Độ biến động của dòng ly theo Allen–Cunneen: (c²a + c²s) / 2, với c²a = E[B²]/E[B] của số ly mỗi đơn."""
+    from django.db.models import F, Sum
+
+    from apps.orders.models import OrderLine
+
+    lo, hi = _window(today, window)
+    sizes = defaultdict(int)
+    for row in (OrderLine.objects.filter(order__created_at__gte=lo, order__created_at__lt=hi)
+                .values("order_id").annotate(n=Sum(F("quantity") - F("cancelled_quantity")))):
+        if row["n"] > 0:
+            sizes[row["n"]] += 1
+    ca2 = staffing.batch_scv(sizes) if sizes else 1.0
+    return round((ca2 + SERVICE_SCV) / 2, 3)
+
+
+def staffing_inputs(today=None, window=56):
+    """Những gì gợi ý số người cần đọc từ dữ liệu, tính một lần cho cả tuần."""
+    today = today or timezone.localdate()
+    return {"today": today, "profile": _hourly_profile(today, window), "rates": rates(today, window),
+            "scv": arrival_scv(today, window)}
 
 
 def _daily_cups(day, today):
@@ -175,48 +265,107 @@ def _daily_cups(day, today):
     return sum(totals) / len(totals), "Bình quân 4 ngày cùng thứ gần nhất"
 
 
-def suggest_needs(shift, today=None, profile=None, prod=None):
-    """{role: (số người gợi ý, căn cứ)} cho một ca."""
-    today = today or timezone.localdate()
-    if profile is None:
-        profile = _hourly_profile(today)
-    if prod is None:
-        prod = productivity(today)
-    shares, load_per_cup = profile
-    cups, source = _daily_cups(shift.date, today)
+def _span(shift):
+    """(giờ bắt đầu, giờ kết thúc) dạng số thập phân; ca kết thúc lúc 0 giờ tính là 24."""
+    a = shift.start.hour + shift.start.minute / 60
+    b = shift.end.hour + shift.end.minute / 60
+    return a, (b if b > a else 24.0)
+
+
+def suggest_day(day, shifts, inputs=None):
+    """{ca.pk: {vị trí: (số người gợi ý, căn cứ)}} cho các ca của một ngày.
+
+    1. Tải từng giờ mở cửa = số ly dự kiến của ngày × tỷ lệ bán theo giờ × hệ số tải bình quân mỗi ly.
+    2. Số người từng giờ theo Erlang C (staffing.hourly_needs): nhỏ nhất để ít nhất `schedule_service_percent`% việc
+       chờ không quá `schedule_wait_target_minutes` phút; không dưới mức tối thiểu khi quán mở.
+    3. Chia vào các ca của ngày bằng bài toán phủ (staffing.cover_shifts): đủ người mọi giờ, ít giờ công nhất."""
+    inputs = inputs or staffing_inputs()
+    (shares, load_per_cup), rate_by, scv = inputs["profile"], inputs["rates"], inputs["scv"]
+    cups, source = _daily_cups(day, inputs["today"])
+    share = shares.get(day.weekday() >= 5, {})
     minimum = params.get("schedule_min_per_role")
-    out = {}
-    hours = list(range(shift.start.hour, shift.end.hour + (1 if shift.end.minute else 0)))
-    share = shares.get(shift.date.weekday() >= 5, {})
-    peak_load = max((cups or 0) * share.get(h, 0) * load_per_cup for h in hours) if hours and cups else 0
+    wait_min = params.get("schedule_wait_target_minutes")
+    target = params.get("schedule_service_percent") / 100
+    hours = list(range(params.get("open_hour"), params.get("close_hour")))
+    spans = [_span(s) for s in shifts]
+    out = {s.pk: {} for s in shifts}
+    loads = {h: (cups or 0) * share.get(h, 0) * load_per_cup for h in hours}
     for r in ROLES:
-        p = prod.get(r)
-        if cups is None or not share or p is None:
-            out[r] = (None, {"missing": "Chưa đủ dữ liệu bán theo giờ hoặc năng suất; nhập số người cần."})
+        rate = rate_by.get(r)
+        if cups is None or not share or rate is None or rate["value"] <= 0:
+            for s in shifts:
+                out[s.pk][r] = (None, {"missing": "Chưa đủ dữ liệu bán theo giờ hoặc sức làm; nhập số người cần."})
             continue
-        n = max(minimum, math.ceil(peak_load / p["value"])) if p["value"] > 0 else minimum
-        out[r] = (n, {"cups": round(cups, 1), "cups_source": source, "peak_load": round(peak_load, 1),
-                      "productivity": p["value"], "productivity_source": p["source"], "minimum": minimum})
+        x, need, uncovered = staffing.staff_shifts(loads, rate["value"], wait_min, target, scv, minimum, hours, spans)
+        for s, span, n in zip(shifts, spans, x):
+            mine = [h for h in hours if staffing.covers(span, h)]
+            out[s.pk][r] = (n, {
+                "cups": round(cups, 1), "cups_source": source, "rate": rate["value"], "rate_source": rate["source"],
+                "rate_kind": rate["kind"], "wait_minutes": wait_min, "service_percent": round(target * 100),
+                "scv": scv, "minimum": minimum,
+                "hours": [[h, round(loads[h], 1), need[h]] for h in mine],
+                "peak_load": round(max((loads[h] for h in mine), default=0), 1),
+                "uncovered": uncovered})
     return out
+
+
+def suggest_needs(shift, today=None, inputs=None):
+    """{vị trí: (số người gợi ý, căn cứ)} cho một ca; tính cùng các ca khác của ngày vì ca chồng giờ chia nhau tải."""
+    inputs = inputs or staffing_inputs(today)
+    shifts = list(WorkShift.objects.filter(date=shift.date).order_by("start", "name"))
+    return suggest_day(shift.date, shifts, inputs)[shift.pk]
 
 
 @transaction.atomic
 def apply_suggested_needs(week, user):
     """Ghi số gợi ý cho mọi ô của tuần; ô Chủ quán đã đặt khác gợi ý (có lý do) giữ số của Chủ quán."""
-    today = timezone.localdate()
-    profile, prod = _hourly_profile(today), productivity(today)
-    changed = 0
+    inputs = staffing_inputs()
+    by_day = defaultdict(list)
     for shift in week_shifts(week):
-        for role, (n, basis) in suggest_needs(shift, today, profile, prod).items():
-            need, _ = RoleNeed.objects.get_or_create(shift=shift, role=role, defaults={"needed": n or 0})
-            need.suggested, need.basis = n, basis
-            if n is not None and not need.reason:
-                need.needed = n
-            need.save()
-            changed += 1
+        by_day[shift.date].append(shift)
+    changed = 0
+    for day, shifts in by_day.items():
+        for shift_id, per_role in suggest_day(day, shifts, inputs).items():
+            for role, (n, basis) in per_role.items():
+                need, _ = RoleNeed.objects.get_or_create(shift_id=shift_id, role=role, defaults={"needed": n or 0})
+                need.suggested, need.basis = n, basis
+                if n is not None and not need.reason:
+                    need.needed = n
+                need.save()
+                changed += 1
     record(Action.UPDATE, actor=user, object_type="schedule.RoleNeed", after={"tuan": str(week), "so_o": changed},
            reason="Áp dụng gợi ý số người cần")
     return changed
+
+
+def basis_by_day(rows):
+    """Căn cứ gợi ý gom theo ngày cho màn lịch tuần: số ly, sức làm từng vị trí, số người cần từng giờ, giờ không có ca."""
+    days = {}
+    for row in rows:
+        s = row["shift"]
+        for cell in row["cells"]:
+            b = cell["need"].basis if cell["need"] else {}
+            if not b or "hours" not in b:
+                continue
+            day = days.setdefault(s.date, {"date": s.date, "cups": b["cups"], "cups_source": b["cups_source"],
+                                           "uncovered": b["uncovered"], "roles": {}})
+            role = day["roles"].setdefault(cell["role"], {"label": cell["label"], "rate": b["rate"],
+                                                          "rate_source": b["rate_source"], "rate_kind": b["rate_kind"],
+                                                          "need": {}})
+            for h, _load, n in b["hours"]:
+                role["need"][h] = n
+    out = []
+    for day in sorted(days.values(), key=lambda d: d["date"]):
+        hours = sorted({h for r in day["roles"].values() for h in r["need"]})
+        roles = []
+        for code in ROLES:
+            r = day["roles"].get(code)
+            if r:
+                r["cells"] = [r["need"].get(h) for h in hours]
+                r["peak"] = max(r["need"].values(), default=0)
+                roles.append(r)
+        out.append({**day, "hours": hours, "roles": roles})
+    return out
 
 
 def set_need(user, shift, role, needed, reason=""):

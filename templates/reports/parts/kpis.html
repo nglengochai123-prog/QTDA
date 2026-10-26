@@ -1,0 +1,7 @@
+{% load humanize %}<div class="stats">{% for k in kpis %}
+  <div class="stat"><p class="stat-label">{{ k.label }}</p>
+    <p class="stat-value">{{ k.value|intcomma }}{% if k.unit %} <small>{{ k.unit }}</small>{% endif %}</p>
+    <p class="stat-note">{% if k.delta is not None %}<span class="stat-delta {% if k.delta >= 0 %}up{% else %}down{% endif %}" title="Kỳ trước {{ k.prev|intcomma }}{% if k.unit %} {{ k.unit }}{% endif %}"><span aria-hidden="true">{% if k.delta >= 0 %}▲{% else %}▼{% endif %}</span> {% if k.delta >= 0 %}tăng{% else %}giảm{% endif %} {{ k.delta_abs|floatformat:0 }}%</span>{% else %}Kỳ trước chưa có số liệu{% endif %}</p>
+    {% if k.note %}<p class="stat-note">{{ k.note }}</p>{% endif %}
+    {% include "reports/charts/sparkline.html" with c=k.spark %}</div>{% endfor %}
+</div>

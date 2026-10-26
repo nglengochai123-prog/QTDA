@@ -174,7 +174,8 @@ def parameters(request):
         return redirect("control:parameters")
     now = timezone.now()
     rows = []
-    for k, d in params.DEFAULTS.items():
+    for k in params.business_keys():
+        d = params.DEFAULTS[k]
         log = list(params.history(k)[:6])
         rows.append({"key": k, "value": params.get(k), "default": d[0], "unit": d[1], "label": d[2], "source": d[3],
                      "basis": params.BASIS[k][0], "basis_note": params.BASIS[k][1],

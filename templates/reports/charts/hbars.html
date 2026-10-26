@@ -1,0 +1,9 @@
+{% load l10n %}{% if c %}<div class="chart-box{% if c.w <= 400 %} chart-box-narrow{% endif %}">{% localize off %}<svg class="chart-svg" viewBox="0 0 {{ c.w }} {{ c.h }}" role="img" aria-label="{{ label|default:'Biểu đồ thanh ngang' }}">
+  <line class="baseline" x1="{{ c.x0 }}" x2="{{ c.x0 }}" y1="2" y2="{{ c.h|add:'-4' }}"/>
+  {% for r in c.rows %}<g class="hit" tabindex="0" data-tip="{{ r.tip }}">
+  <text class="axis-text label-text" x="{{ c.label_x }}" y="{{ r.ty }}" dy="0.32em" text-anchor="end">{{ r.label|truncatechars:24 }}</text>
+  <path class="{% if r.status %}st-{{ r.status }}{% elif r.muted %}f-muted{% else %}f-1{% endif %}" d="{{ r.d }}"/>
+  {% if r.mx %}<line class="marker" x1="{{ r.mx }}" x2="{{ r.mx }}" y1="{{ r.y|add:'-3' }}" y2="{{ r.y|add:'19' }}"/>{% endif %}
+  <text class="value-text" x="{{ r.vx }}" y="{{ r.ty }}" dy="0.32em">{{ r.text }}</text><title>{{ r.tip }}</title></g>
+  {% endfor %}
+</svg>{% endlocalize %}</div>{% if warn_label %}<ul class="plain-list chart-flags">{% for r in c.rows %}{% if r.below %}<li><span class="pill pill-warn">{{ warn_label }}: {{ r.label }}</span></li>{% endif %}{% endfor %}</ul>{% endif %}{% endif %}

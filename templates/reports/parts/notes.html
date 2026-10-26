@@ -1,0 +1,4 @@
+{% if notes %}<section class="card insight-card" aria-labelledby="notes-{{ id|default:'x' }}">
+  <div class="card-head"><div><h2 id="notes-{{ id|default:'x' }}">Nhận định</h2><p class="card-sub">Rút ra tự động từ số liệu kỳ này, để đọc nhanh trước khi xem biểu đồ.</p></div></div>
+  <ul class="insights">{% for n in notes %}<li>{{ n }}</li>{% endfor %}</ul>
+</section>{% endif %}

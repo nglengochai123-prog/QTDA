@@ -5,21 +5,22 @@
 <style>
   /* Trang dữ liệu nền dùng chung bảng màu quản trị (xem DESIGN.md). */
   :root, html[data-theme="light"] {
-    --primary: #0f172a; --secondary: #1e293b; --accent: #cbd5e1;
-    --primary-fg: #fff; --header-color: #cbd5e1; --header-branding-color: #fff;
-    --breadcrumbs-bg: #1e293b; --breadcrumbs-link-fg: #fff;
-    --link-fg: #0369a1; --link-hover-color: #075985; --link-selected-fg: #1e293b;
-    --button-bg: #0f172a; --button-hover-bg: #1e293b;
-    --default-button-bg: #1e293b; --default-button-hover-bg: #020617;
-    --selected-bg: #e0f2fe; --selected-row: #f1f5f9;
-    --error-fg: #b91c1c; --message-error-bg: #fef2f2; --message-success-bg: #ecfdf3; --message-warning-bg: #fffbeb;
-    --font-family-primary: "Segoe UI", system-ui, -apple-system, Roboto, "Noto Sans", Arial, sans-serif;
+    --primary: #201a14; --secondary: #3a3128; --accent: #d9cfbf;
+    --primary-fg: #fffcf6; --header-color: #d9cfbf; --header-branding-color: #fffcf6;
+    --breadcrumbs-bg: #3a3128; --breadcrumbs-link-fg: #fffcf6;
+    --link-fg: #1e5a6e; --link-hover-color: #143f4e; --link-selected-fg: #201a14;
+    --button-bg: #201a14; --button-hover-bg: #3a3128;
+    --default-button-bg: #3a3128; --default-button-hover-bg: #201a14;
+    --selected-bg: #e2ecee; --selected-row: #f6f1e7;
+    --error-fg: #b3261e; --message-error-bg: #f8e7e3; --message-success-bg: #e7efe3; --message-warning-bg: #f7ebd5;
+    --font-family-primary: "Be Vietnam Pro", "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+    --body-bg: #fffcf6; --darkened-bg: #f6f1e7; --hairline-color: #e4ddcf; --border-color: #d2c8b6;
   }
-  #header { border-bottom: 1px solid #334155; }
+  #header { border-bottom: 1px solid #3a3128; }
   .theme-toggle { display: none; }
-  input[type=checkbox], input[type=radio] { accent-color: #0f172a; }
-  input:focus, select:focus, textarea:focus, :focus-visible { outline: 3px solid #0f172a; outline-offset: 2px; }
-  #toggle-nav-sidebar { font-size: 0; color: #0f172a; }
+  input[type=checkbox], input[type=radio] { accent-color: #201a14; }
+  input:focus, select:focus, textarea:focus, :focus-visible { outline: 3px solid #1e5a6e; outline-offset: 2px; }
+  #toggle-nav-sidebar { font-size: 0; color: #201a14; }
   #toggle-nav-sidebar::before {
     content: ""; display: block; width: 18px; height: 18px; margin: auto; background: currentColor;
     -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 6l-6 6 6 6'/%3E%3C/svg%3E") center / contain no-repeat;

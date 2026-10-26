@@ -1,0 +1,6 @@
+{% load l10n %}{% if c %}<div class="chart-box{% if c.w <= 400 %} chart-box-narrow{% endif %}">{% localize off %}<svg class="chart-svg" viewBox="0 0 {{ c.w }} {{ c.h }}" role="img" aria-label="{{ label }}">
+  {% for col in c.cols %}<text class="axis-text" x="{{ col.x }}" y="12" text-anchor="middle">{{ col.text }}</text>{% endfor %}
+  {% for r in c.rows %}<text class="axis-text" x="{{ c.label_x }}" y="{{ r.y }}" dy="0.32em" text-anchor="end">{{ r.text }}</text>{% endfor %}
+  {% for cell in c.cells %}<rect class="cell{% if not cell.fill %} cell-empty{% endif %}" x="{{ cell.x }}" y="{{ cell.y }}" width="{{ cell.w }}" height="{{ cell.h }}" rx="2"{% if cell.fill %} fill="{{ cell.fill }}"{% endif %} tabindex="0" data-tip="{{ cell.tip }}"><title>{{ cell.tip }}</title></rect>{% endfor %}
+</svg>{% endlocalize %}</div>
+<div class="heat-legend" aria-hidden="true"><span>Ít</span>{% for l in c.legend %}<i style="background:{{ l.fill }}"></i>{% endfor %}<span>Nhiều (đỉnh {{ c.peak }})</span></div>{% endif %}

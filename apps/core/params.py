@@ -3,6 +3,9 @@
 Mỗi tham số có giá trị mặc định ở đây; Chủ quán đặt giá trị mới ở Kiểm soát › Tham số.
 Mỗi giá trị là một dòng ParameterValue có "hiệu lực từ"; đọc tham số luôn đọc theo một thời điểm.
 
+Tham số của mô hình (dự báo, kế hoạch mua, gợi ý số người: MODEL_KEYS) không hiện trên giao diện và không đặt được
+trên ứng dụng. Muốn đổi thì sửa giá trị mặc định ngay trong file này rồi khởi động lại ứng dụng.
+
 Quy ước áp dụng cho nghiệp vụ đang dở (giả định GD-10, chờ Chủ quán xác nhận):
 - Yêu cầu điều chỉnh giữ thời hạn mỗi cấp tại lúc tạo yêu cầu.
 - Đối soát ca dùng ngưỡng có hiệu lực lúc kết ca và lưu ngưỡng đã dùng vào khoản chênh lệch.
@@ -51,7 +54,8 @@ DEFAULTS = {
     "forecast_paths": (1000, "đường", "Số đường mô phỏng khi tính tổng nhu cầu nhiều ngày", "Khung dự báo 4.2"),
     # Kế hoạch mua nguyên liệu (docs/THIET_KE_MUA_NGUYEN_LIEU.md)
     "plan_csl_critical_percent": (95, "%", "Mức phục vụ chu kỳ mặc định của nguyên liệu trọng yếu", "Thiết kế mua 6.4"),
-    "plan_csl_normal_percent": (90, "%", "Mức phục vụ chu kỳ mặc định của nguyên liệu khác", "Thiết kế mua 6.4"),
+    "plan_csl_normal_percent": (95, "%", "Mức phục vụ chu kỳ mặc định của nguyên liệu khác", "Thiết kế mua 6.4"),
+    "plan_csl_long_life_percent": (98, "%", "Mức phục vụ chu kỳ tối thiểu của hàng để lâu (nhóm B)", "BO-02"),
     "plan_group_a_shelf_days": (14, "ngày", "Hạn dùng từ mức này trở xuống thì mặc định là nhóm A (dễ hỏng)", "Thiết kế mua 7.2"),
     "plan_a_review_days": (1, "ngày", "Nhóm A: chu kỳ kiểm tra R", "Thiết kế mua 7.2"),
     "plan_a_target_days": (2, "ngày", "Nhóm A: khoảng cách mua mong muốn T", "Thiết kế mua 7.2"),
@@ -68,11 +72,31 @@ DEFAULTS = {
     # Đăng ký ca và lập lịch (FR-38, FR-39)
     "schedule_deadline_weekday": (5, "thứ", "Hạn đăng ký ca tuần sau: thứ trong tuần (2 là thứ Hai … 8 là Chủ nhật)", "BRU-29"),
     "schedule_deadline_hour": (12, "giờ", "Hạn đăng ký ca tuần sau: giờ trong ngày", "BRU-29"),
-    "schedule_min_per_role": (1, "người", "Số người tối thiểu mỗi vị trí trong một ca", "BRU-28"),
-    "schedule_productivity_pha_che": (0, "tải/người/giờ", "Năng suất pha chế (0: tự tính từ các giờ không quá tải)", "BRU-28"),
-    "schedule_productivity_phuc_vu": (0, "tải/người/giờ", "Năng suất phục vụ (0: tự tính từ các giờ không quá tải)", "BRU-28"),
-    "schedule_productivity_thu_ngan": (0, "tải/người/giờ", "Năng suất thu ngân (0: tự tính từ các giờ không quá tải)", "BRU-28"),
+    "schedule_min_per_role": (1, "người", "Số người tối thiểu mỗi vị trí trong mỗi giờ quán mở", "BRU-28"),
+    "schedule_productivity_pha_che": (0, "tải/người/giờ", "Sức làm của một pha chế khi bận liên tục (0: tự đo từ giờ gửi và "
+                                                          "giờ pha xong)", "BRU-28"),
+    "schedule_productivity_phuc_vu": (0, "tải/người/giờ", "Sức làm của một phục vụ khi bận liên tục (0: ước lượng thận trọng từ "
+                                                          "các giờ không quá tải)", "BRU-28"),
+    "schedule_productivity_thu_ngan": (0, "tải/người/giờ", "Sức làm của một thu ngân khi bận liên tục (0: ước lượng thận trọng "
+                                                           "từ các giờ không quá tải)", "BRU-28"),
+    "schedule_wait_target_minutes": (4, "phút", "Gợi ý số người: việc phải chờ trong hàng không quá số phút này trước khi có "
+                                                "người làm", "BRU-27, BRU-28"),
+    "schedule_service_percent": (70, "%", "Gợi ý số người: tỷ lệ việc mỗi giờ được bắt đầu trong số phút trên", "BRU-27, BRU-28"),
+    # Kho theo lô (inventory/lots.py)
+    "lot_near_expiry_days": (2, "ngày", "Báo lô Sắp hết hạn khi còn từ số ngày này trở xuống", "Kho theo lô"),
+    "lot_near_expiry_percent": (20, "% hạn dùng", "Hoặc khi thời gian còn lại dưới phần này của thời hạn sử dụng "
+                                                 "(lấy mức báo sớm hơn)", "Kho theo lô"),
 }
+
+# Tham số của mô hình: chỉ sửa trong file này (người dùng chỉ thấy kết quả, không thấy cách tính).
+MODEL_KEYS = frozenset(k for k in DEFAULTS if k.startswith(("forecast_", "plan_"))) | {
+    "schedule_productivity_pha_che", "schedule_productivity_phuc_vu", "schedule_productivity_thu_ngan",
+    "schedule_wait_target_minutes", "schedule_service_percent"}
+
+
+def business_keys():
+    """Các tham số nghiệp vụ Chủ quán đặt trên ứng dụng, theo thứ tự khai báo."""
+    return [k for k in DEFAULTS if k not in MODEL_KEYS]
 
 
 # Căn cứ của giá trị mặc định: BRD nêu rõ, lấy từ ví dụ trong tiêu chí nghiệm thu, hay dự án tự đặt.
@@ -111,7 +135,12 @@ BASIS = {
     "forecast_min_history_days": (FRAMEWORK, "Mục 5.3: 8 đến 12 tuần dữ liệu ngày làm mốc khởi đầu đánh giá thử"),
     "forecast_paths": (ASSUMPTION, "Số đường mô phỏng đủ ổn định phân vị; chỉ ảnh hưởng độ mượt, không đổi phương pháp"),
     "plan_csl_critical_percent": (ASSUMPTION, "GD3: 95% cho nguyên liệu trọng yếu, k = 1,645"),
-    "plan_csl_normal_percent": (ASSUMPTION, "GD3: 90% cho nguyên liệu khác, k = 1,282"),
+    "plan_csl_normal_percent": (ASSUMPTION, "GD3 đặt 90%; mô phỏng một năm cho thấy 90% để khoảng 1,2 lần thiếu mỗi tháng trên 18 "
+                                            "nguyên liệu, vượt BO-02 khi đủ 60 nguyên liệu; 95% (k = 1,645) cùng hàng để lâu 98% "
+                                            "đạt (docs/KET_QUA_MO_PHONG.md)"),
+    "plan_csl_long_life_percent": (ASSUMPTION, "Chọn qua mô phỏng: hàng để lâu giữ thêm gần như không hỏng, nên dồn phần thiếu cho "
+                                               "phép của BO-02 sang hàng tươi (cách phân bổ tổng số lần thiếu của Silver, Pyke "
+                                               "và Thomas)"),
     "plan_group_a_shelf_days": (ASSUMPTION, "Mục 7.2: hạn dùng từ 14 ngày trở xuống là nhóm A"),
     "plan_a_review_days": (ASSUMPTION, "GD2: nhóm A kiểm tra mỗi tối lúc chốt ngày"),
     "plan_a_target_days": (ASSUMPTION, "GD2: nhóm A mua cách nhau khoảng 2 ngày"),
@@ -128,9 +157,19 @@ BASIS = {
     "schedule_deadline_weekday": (AC_EXAMPLE, "AC-85: hạn là 12 giờ trưa thứ Năm"),
     "schedule_deadline_hour": (AC_EXAMPLE, "AC-85: hạn là 12 giờ trưa thứ Năm"),
     "schedule_min_per_role": (ASSUMPTION, "BRU-28 có mức tối thiểu mỗi vai trò nhưng chưa nêu số; tạm 1 người"),
-    "schedule_productivity_pha_che": (BRD, "BRU-28: năng suất ban đầu do Chủ quán đặt; để 0 thì hệ thống tính từ các giờ không quá tải"),
-    "schedule_productivity_phuc_vu": (BRD, "BRU-28: như trên"),
-    "schedule_productivity_thu_ngan": (BRD, "BRU-28: như trên"),
+    "schedule_productivity_pha_che": (BRD, "BRU-28: năng suất ban đầu do Chủ quán đặt. Để 0 thì hệ thống đo sức làm lúc mọi pha "
+                                           "chế đều bận, không lấy trung vị cả giờ rảnh (xem docs/KET_QUA_MO_PHONG.md)"),
+    "schedule_productivity_phuc_vu": (BRD, "BRU-28: năng suất do Chủ quán đặt; để 0 thì lấy giờ đông nhất đã làm kịp (phân vị 98 tải "
+                                           "mỗi người ở giờ không quá tải), thường thấp hơn sức làm thật nên gợi ý dư người"),
+    "schedule_productivity_thu_ngan": (BRD, "BRU-28: như phục vụ"),
+    "schedule_wait_target_minutes": (ASSUMPTION, "Chọn qua mô phỏng hàng đợi: chờ trong hàng 4 phút cộng thời gian pha và mang ra "
+                                                 "vẫn dưới chuẩn 10 phút của AC-79"),
+    "schedule_service_percent": (ASSUMPTION, "Chọn qua mô phỏng: 70% cho khoảng 96% số giờ đạt chuẩn chờ (BO-03 đòi 90%), giờ "
+                                             "công chỉ hơn lịch cũ khoảng 5% khi đã đặt sức làm; 80% thêm khoảng 7% giờ công"),
+    "lot_near_expiry_days": (ASSUMPTION, "Sữa tươi hạn 7 ngày: báo trước 2 ngày đủ để đẩy món dùng sữa hoặc chuyển sang làm "
+                                         "đồ uống khác"),
+    "lot_near_expiry_percent": (ASSUMPTION, "Hàng hạn dài (siro 1 năm) cần báo sớm hơn 2 ngày: 20% hạn dùng là khoảng 2 tháng, "
+                                            "đủ một vòng mua hàng nhóm B để giảm đặt thêm"),
 }
 
 
@@ -141,8 +180,10 @@ def _rows(key):
 
 
 def get(key, at=None):
-    """Giá trị đang áp dụng tại thời điểm `at` (mặc định: bây giờ)."""
+    """Giá trị đang áp dụng tại thời điểm `at` (mặc định: bây giờ). Tham số mô hình luôn lấy giá trị trong file."""
     default = DEFAULTS[key][0]
+    if key in MODEL_KEYS:
+        return default
     value = (_rows(key).filter(effective_from__lte=at or timezone.now())
              .order_by("-effective_from", "-id").values_list("value", flat=True).first())
     return default if value is None else type(default)(value)
@@ -162,6 +203,8 @@ def set_value(key, value, actor, effective_from=None, reason=""):
 
     if key not in DEFAULTS:
         raise ValidationError("Tham số không tồn tại.")
+    if key in MODEL_KEYS:
+        raise ValidationError("Tham số của mô hình chỉ sửa trong file apps/core/params.py.")
     if not actor.is_owner:
         raise ValidationError("Chỉ Chủ quán thay đổi tham số.")
     try:

@@ -3,7 +3,7 @@
 {% block content %}
 <p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
 <h1>Lập phiếu nhập</h1>
-<details class="help-tip"><summary>Giải thích</summary><p>Nhập số lượng thực nhận theo đơn vị tính và đơn giá trên mỗi đơn vị tính. Chọn lần đặt nếu hàng giao theo lần đặt.</p></details>
+<details class="help-tip"><summary>Giải thích</summary><p>Nhập số lượng thực nhận theo đơn vị tính và đơn giá trên mỗi đơn vị tính. Chọn lần đặt nếu hàng giao theo lần đặt. Mỗi dòng thành một lô có mã riêng (mã phiếu / số dòng). Không ghi hạn thì hệ thống tính bằng ngày nhập cộng thời hạn sử dụng khai ở nguyên liệu và đánh dấu là ước tính.</p></details>
 <form data-draft="phieu-nhap" method="post" enctype="multipart/form-data" class="mini-form narrow" data-once>{% csrf_token %}
   <input type="hidden" name="operation_key" value="{{ operation_key }}"><input type="hidden" name="rows" value="{{ rows|length }}">
   <div class="field"><label for="r-sup">Nhà cung cấp</label><select class="input" id="r-sup" name="supplier" required>
@@ -13,7 +13,8 @@
     <select class="input" name="ingredient_{{ n }}" aria-label="Nguyên liệu dòng {{ forloop.counter }}"><option value="">Nguyên liệu</option>{% for i in ingredients %}<option value="{{ i.pk }}">{{ i.name }} ({{ i.get_unit_display }})</option>{% endfor %}</select>
     <input class="input" name="quantity_{{ n }}" inputmode="decimal" placeholder="Số lượng thực nhận" aria-label="Số lượng dòng {{ forloop.counter }}">
     <input class="input" name="price_{{ n }}" inputmode="numeric" placeholder="Đơn giá (đ / đơn vị tính)" aria-label="Đơn giá dòng {{ forloop.counter }}">
-    <input class="input" type="date" name="expiry_{{ n }}" aria-label="Hạn sử dụng của lô dòng {{ forloop.counter }} (không bắt buộc)" title="Hạn sử dụng của lô (không bắt buộc)">
+    <div class="field-pair"><label class="field"><span>Hạn sử dụng in trên bao bì</span><input class="input" type="date" name="expiry_{{ n }}"></label>
+      <label class="field"><span>Số lô của nhà sản xuất</span><input class="input" name="lot_{{ n }}" maxlength="40" placeholder="Không bắt buộc"></label></div>
     <select class="input" name="po_{{ n }}" aria-label="Lần đặt dòng {{ forloop.counter }}"><option value="">Không theo lần đặt</option>{% for po in open_pos %}<option value="{{ po.pk }}">{{ po }} · còn {{ po.remaining|floatformat:"-2g" }} · {{ po.get_status_display }}</option>{% endfor %}</select>
   </fieldset>
   {% endfor %}
