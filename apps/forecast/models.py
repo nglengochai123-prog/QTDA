@@ -282,7 +282,7 @@ class IngredientPlan(TimeStampedModel):
         BUY = "mua", "Mua"
         TOP_UP = "mua_bo_sung", "Mua bổ sung"
         EXPEDITE = "thuc_giao", "Thúc giao"
-        NONE = "khong_can", "Không cần mua"
+        NONE = "khong_can", "Chưa cần mua"
         NO_DATA = "thieu_du_lieu", "Chưa đủ dữ liệu"
 
     ingredient = models.ForeignKey("inventory.Ingredient", on_delete=models.PROTECT, related_name="plans")

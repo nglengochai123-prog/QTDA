@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load loi_thuong %}
 {% block title %}{% if obj %}{{ obj }}{% else %}Thêm {{ r.singular|lower }}{% endif %} · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <header class="page-head">
@@ -16,7 +17,7 @@
         <label for="{{ field.id_for_label }}">{% if field.field.required %}<span class="req" aria-hidden="true">*</span>{% endif %}{{ field.label }}</label>
         <div class="field-control">
           {{ field }}
-          {% if field.help_text %}<p class="hint">{{ field.help_text }}</p>{% endif %}
+          {% if field.help_text %}<p class="hint">{{ field.help_text|loi_thuong }}</p>{% endif %}
           {% for e in field.errors %}<p class="error">{{ e }}</p>{% endfor %}
         </div>
       </div>
@@ -29,12 +30,12 @@
     <h2>{{ item.inline.label }}</h2>
     {{ fs.management_form }}
     {% if fs.non_form_errors %}<div class="notice notice-error">{{ fs.non_form_errors|join:" " }}</div>{% endif %}
-    <div class="table-wrap"><table class="data-table inline-table">
+    <div class="table-wrap"><table class="data-table inline-table table-stack">
       <thead><tr>{% for f in fs.empty_form.visible_fields %}{% if f.name != "DELETE" %}<th scope="col">{{ f.label }}</th>{% endif %}{% endfor %}{% if item.inline.can_delete and item.editable %}<th scope="col">Xóa</th>{% endif %}</tr></thead>
       <tbody>{% for sub in fs.forms %}{% if item.editable or sub.instance.pk %}
         <tr>{% for hidden in sub.hidden_fields %}{{ hidden }}{% endfor %}
-          {% for f in sub.visible_fields %}{% if f.name != "DELETE" %}<td>{{ f }}{% for e in f.errors %}<p class="error">{{ e }}</p>{% endfor %}</td>{% endif %}{% endfor %}
-          {% if item.inline.can_delete and item.editable %}<td>{% if sub.instance.pk %}{{ sub.DELETE }}{% endif %}</td>{% endif %}
+          {% for f in sub.visible_fields %}{% if f.name != "DELETE" %}<td data-label="{{ f.label }}">{{ f|nhan:f.label }}{% for e in f.errors %}<p class="error">{{ e }}</p>{% endfor %}</td>{% endif %}{% endfor %}
+          {% if item.inline.can_delete and item.editable %}<td data-label="Xóa">{% if sub.instance.pk %}{{ sub.DELETE|nhan:"Xóa dòng này" }}{% endif %}</td>{% endif %}
         </tr>
         {% if sub.non_field_errors %}<tr><td colspan="9"><p class="error">{{ sub.non_field_errors|join:" " }}</p></td></tr>{% endif %}
       {% endif %}{% empty %}<tr><td colspan="9" class="muted">Chưa có dòng nào.</td></tr>{% endfor %}</tbody>

@@ -23,7 +23,7 @@
         <label class="pick"><input type="radio" name="table" value="{{ table.id }}" data-code="{{ table.code }}">
           <span>{{ table.code }}</span></label>
         {% empty %}
-        <p class="empty-inline">Chưa có bàn nào. Chủ quán khai báo bàn ở Dữ liệu nền.</p>
+        <p class="empty-inline">Chưa có bàn nào. Chủ quán khai báo bàn ở Quản trị, mục Bàn.</p>
         {% endfor %}
       </div>
     </fieldset>
@@ -51,7 +51,7 @@
     {% empty %}
     <div class="empty">
       <p><strong>Chưa có món nào đang bán.</strong></p>
-      <p>Món chỉ hiện ở đây khi đã có kích cỡ, giá và đủ định mức. Chủ quán mở bán ở Dữ liệu nền.</p>
+      <p>Món chỉ hiện ở đây khi đã có kích cỡ, giá và đủ định mức. Chủ quán mở bán ở Quản trị, mục Món và giá.</p>
     </div>
     {% endfor %}
   </section>

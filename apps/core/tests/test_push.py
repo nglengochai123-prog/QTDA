@@ -64,7 +64,7 @@ class AlertPageTests(TestCase):
         User.objects.create_user("qlca", password="matkhau-thu-123", role=Role.CHU_QUAN)
         self.client.login(username="qlca", password="matkhau-thu-123")
         page = self.client.get(reverse("control:alerts"))
-        self.assertContains(page, "Thông báo đẩy trên điện thoại")
+        self.assertContains(page, "Thông báo trên điện thoại")
         self.assertContains(page, "js/push.js")
 
 

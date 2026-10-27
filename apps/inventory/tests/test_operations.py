@@ -32,7 +32,7 @@ class OperationTests(TestCase):
         self.supplier = Supplier.objects.create(store=self.d["store"], name="NCC X")
 
     def photo(self):
-        return SimpleUploadedFile("hd.jpg", b"jpeg", content_type="image/jpeg")
+        return SimpleUploadedFile("hd.jpg", b"\xff\xd8\xffjpeg", content_type="image/jpeg")
 
     def test_quick_report_out_records_one_shortage_per_day(self):
         # AC-51, AC-61
@@ -43,6 +43,13 @@ class OperationTests(TestCase):
         self.assertFalse(r2["shortage_recorded"])
         self.assertEqual(ShortageCase.objects.count(), 1)
         self.assertEqual(ops.open_quick_reports().count(), 2)
+
+    def test_out_report_reaches_owner_phone(self):
+        with mock.patch("apps.core.push.notify_later") as notify:
+            ops.quick_report(self.d["barista"], key(), self.d["milk"].pk, "sap_het")
+            self.assertFalse(notify.called)  # sắp hết thì xem ở trang Kho là đủ
+            ops.quick_report(self.d["barista"], key(), self.d["milk"].pk, "da_het")
+        self.assertEqual(notify.call_args.args[:2], ([self.d["owner"].pk], "Đã hết Sữa đặc"))
 
     def test_out_after_closing_no_shortage(self):
         # AC-62
@@ -130,6 +137,23 @@ class OperationTests(TestCase):
             ops.confirm_count(self.d["barista"], result["count"])
         ops.confirm_count(self.d["owner"], result["count"])
         self.assertEqual(levels(self.d["milk"])[0], D(3600))
+
+    def test_older_pending_count_cannot_be_applied_after_recount(self):
+        # Đếm 3.600 (chờ xác nhận), đếm lại 3.500 (chờ xác nhận): xác nhận cả hai sẽ trừ 900 thay vì 500.
+        first, _ = ops.submit_count(self.d["barista"], key(), self.d["milk"].pk, 3600, reason="Đổ một hộp")
+        StockCount.objects.filter(pk=first["count"]).update(created_at=timezone.now() - timedelta(minutes=5))
+        second, _ = ops.submit_count(self.d["barista"], key(), self.d["milk"].pk, 3500, reason="Đếm lại")
+        self.client.force_login(self.d["owner"])
+        page = self.client.get("/kho/kiem-ke/")
+        self.assertContains(page, "lần này đã cũ, chọn Không xác nhận")
+        self.assertContains(page, 'value="confirm"', count=1)  # chỉ lần đếm mới có nút Xác nhận
+        with self.assertRaisesMessage(ValidationError, "lần đếm này đã cũ"):
+            ops.confirm_count(self.d["owner"], first["count"])
+        ops.confirm_count(self.d["owner"], second["count"])
+        self.assertEqual(levels(self.d["milk"])[0], D(3500))
+        ops.confirm_count(self.d["owner"], first["count"], approve=False)
+        self.assertEqual(StockCount.objects.get(pk=first["count"]).status, StockCount.Status.REJECTED)
+        self.assertNotContains(self.client.get("/kho/kiem-ke/"), "đã cũ")
 
     def test_count_within_threshold_applies_and_keeps_reservations(self):
         # AC-57: chênh 2,5% điều chỉnh ngay; phần đang giữ cho món chờ pha giữ nguyên.

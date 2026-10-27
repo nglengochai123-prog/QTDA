@@ -25,6 +25,7 @@ DESCRIPTIONS = {
     "home": "Việc chờ xử lý và lối vào mọi chức năng",
     "dashboard": "Doanh thu, kho và kiểm soát trong một trang",
     "alerts": "Cảnh báo cần bạn xử lý, kèm thời hạn",
+    "overview": "Bàn có khách, món đang pha, chờ duyệt, chờ thu tiền",
     "order": "Chọn bàn, thêm món và gửi pha chế",
     "ready": "Món đã pha xong, chờ mang ra bàn",
     "open": "Đơn chưa thanh toán; hủy, đổi món, chuyển bàn",
@@ -92,6 +93,7 @@ def navigation(request):
                 ("dashboard", "Bảng điều khiển", reverse("reports:dashboard"), Cap.VIEW_DASHBOARD),
                 ("alerts", "Cảnh báo", reverse("control:alerts"), Cap.HANDLE_ALERTS)]),
         ("Bán hàng", [
+            ("overview", "Tổng quan ca", reverse("orders:overview"), Cap.ORDER_CREATE),
             ("order", "Tạo đơn", reverse("orders:create"), Cap.ORDER_CREATE),
             ("ready", "Món sẵn sàng", reverse("orders:ready"), Cap.ORDER_CREATE),
             ("open", "Đơn đang mở", reverse("orders:open_orders"), Cap.ORDER_CREATE),
@@ -188,7 +190,7 @@ def navigation(request):
         "alerts": reverse("control:alerts") if user_can(user, Cap.HANDLE_ALERTS) else "",
         "approvals": reverse("orders:approvals") if can_approve else "",
         "settings": reverse("control:parameters") if user_can(user, Cap.MASTER_DATA) else "",
-        "initial": (user.given_name or user.username or "?")[:1].upper(),
+        "initial": user.initial,
     }
     return {"NAV_ITEMS": nav, "HEADER": header, "NAV_GROUPS": nav_groups, "NAV_ACTIVE_GROUP": active_group,
             "NAV_SIDE_GROUP": active_group or (nav_groups[0] if nav_groups else None), "APPROVALS_COUNT_URL": reverse("orders:approvals_count") if can_approve else "",

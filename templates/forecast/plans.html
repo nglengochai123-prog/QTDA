@@ -2,28 +2,27 @@
 {% block title %}Kế hoạch mua · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <header class="page-head">
-  <h1>Kế hoạch mua nguyên liệu</h1>
-  {% if last_run %}<span class="muted">Tính toàn bộ lúc {{ last_run.started_at|date:"H:i d/m/Y" }}</span>{% endif %}
-  <form method="post" data-once>{% csrf_token %}<input type="hidden" name="action" value="tinh_lai"><button class="btn btn-quiet" type="submit">Tính lại toàn bộ</button></form>
+  <div><h1>Kế hoạch mua nguyên liệu</h1><p class="page-sub">Hệ thống xem tồn, đơn đang về và lượng dự kiến dùng của từng nguyên liệu để báo việc cần làm và ngày phải đặt chậm nhất. Hệ thống không tự đặt hàng và không liên hệ nhà cung cấp: đơn Nháp chỉ được tạo khi Chủ quán bấm Chấp nhận.</p></div>
+  <div class="page-tools">{% if last_run %}<span class="muted">Tính lúc {{ last_run.started_at|date:"H:i d/m" }}</span>{% endif %}
+    <form method="post" data-once>{% csrf_token %}<input type="hidden" name="action" value="tinh_lai"><button class="btn btn-quiet" type="submit">Tính lại toàn bộ</button></form></div>
 </header>
-<details class="help-tip"><summary>Giải thích</summary><p>Hệ thống xem tồn, đơn đang về và lượng dự kiến dùng của từng nguyên liệu để báo việc cần làm và ngày phải đặt chậm nhất. Hệ thống không tự đặt hàng và không liên hệ nhà cung cấp: đơn Nháp chỉ được tạo khi Chủ quán bấm Chấp nhận.</p></details>
 {% if not groups %}<div class="empty"><p><strong>Chưa có kế hoạch mua.</strong></p><p>Bấm Tính lại toàn bộ, hoặc chờ lần tính sau giờ đóng cửa.</p></div>{% endif %}
 {% for label, items in groups.items %}
 <section class="panel">
   <h2>{{ label }} <span class="muted">({{ items|length }})</span></h2>
-  <div class="table-wrap"><table class="data-table">
+  <div class="table-wrap"><table class="data-table table-stack">
     <thead><tr><th scope="col">Nguyên liệu</th><th scope="col">Việc cần làm</th><th scope="col">Đặt chậm nhất</th>
       <th scope="col" class="num">Đề xuất</th><th scope="col" class="num">Tồn có thể dùng</th>
       <th scope="col">Có thể thiếu từ</th><th scope="col">Ghi chú</th></tr></thead>
     <tbody>{% for v in items %}{% with p=v.plan r=v.r cfg=v.cfg %}
     <tr>
       <th scope="row"><a href="{% url 'forecast:plan' p.ingredient_id %}">{{ p.ingredient.name }}</a>{% if v.fc.provisional %} <span class="chip">Tạm thời</span>{% endif %}</th>
-      <td>{% if r.infeasible %}<span class="badge badge-danger">{{ v.action_label }}: không khả thi</span>{% elif p.action == "mua" or p.action == "mua_bo_sung" %}<span class="badge badge-danger">{{ v.action_label }}{% if r.urgent %} gấp{% endif %}</span>{% elif p.action == "thuc_giao" %}<span class="badge badge-warn">{{ v.action_label }}</span>{% elif p.action == "thieu_du_lieu" %}<span class="badge badge-warn">{{ v.action_label }}</span>{% else %}<span class="badge badge-ok">{{ v.action_label }}</span>{% endif %}</td>
-      <td>{% if p.order_now and p.action != "khong_can" %}<strong class="text-danger">Đặt ngay</strong>{% elif p.order_by %}{{ p.order_by|date:"D d/m" }}{% else %}–{% endif %}</td>
-      <td class="num">{% if p.packs %}<strong>{{ p.packs }} {{ cfg.pack_label }}</strong><br><span class="muted">{{ p.suggested_quantity|floatformat:"-2g" }} {{ cfg.unit }}</span>{% else %}–{% endif %}</td>
-      <td class="num">{% if r.available is not None %}{{ r.available|floatformat:"-1g" }} {{ cfg.unit }}{% endif %}</td>
-      <td>{{ r.risk_date|date:"D d/m"|default:"–" }}</td>
-      <td class="muted">{{ r.reason }}</td>
+      <td data-label="Việc cần làm">{% if r.infeasible %}<span class="badge badge-danger">{{ v.action_label }}: không khả thi</span>{% elif p.action == "mua" or p.action == "mua_bo_sung" %}<span class="badge badge-danger">{{ v.action_label }}{% if r.urgent %} gấp{% endif %}</span>{% elif p.action == "thuc_giao" %}<span class="badge badge-warn">{{ v.action_label }}</span>{% elif p.action == "thieu_du_lieu" %}<span class="badge badge-warn">{{ v.action_label }}</span>{% else %}<span class="badge badge-ok">{{ v.action_label }}</span>{% endif %}</td>
+      <td data-label="Đặt chậm nhất">{% if p.order_now and p.action != "khong_can" %}<strong class="text-danger">Đặt ngay</strong>{% elif p.order_by %}{{ p.order_by|date:"D d/m" }}{% else %}–{% endif %}</td>
+      <td class="num" data-label="Đề xuất">{% if p.packs %}<strong>{{ p.packs }} {{ cfg.pack_label }}</strong><br><span class="muted">{{ p.suggested_quantity|floatformat:"-2g" }} {{ cfg.unit }}</span>{% else %}–{% endif %}</td>
+      <td class="num" data-label="Tồn có thể dùng">{% if r.available is not None %}{{ r.available|floatformat:"-1g" }} {{ cfg.unit }}{% endif %}</td>
+      <td data-label="Có thể thiếu từ">{{ r.risk_date|date:"D d/m"|default:"–" }}</td>
+      <td class="muted stack-note" data-label="Ghi chú">{{ r.reason }}</td>
     </tr>{% endwith %}{% endfor %}</tbody>
   </table></div>
 </section>

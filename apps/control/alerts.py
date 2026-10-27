@@ -36,12 +36,10 @@ def _end_of_day(day):
 def _out_of_stock(now):
     from apps.inventory.models import QuickReport
     from apps.inventory.operations import in_opening_hours
-    from apps.shifts.models import Shift
 
     for r in QuickReport.objects.filter(level=QuickReport.Level.OUT, acknowledged_at__isnull=True).select_related("ingredient"):
         if not in_opening_hours(r.created_at):
             continue
-        shift = Shift.objects.current(at=r.created_at)
         yield {"subject": f"bao-het-{r.pk}", "title": f"{r.ingredient.name} đã hết",
                "detail": f"Báo bởi {r.reporter} lúc {timezone.localtime(r.created_at):%H:%M}. Báo nhân viên ngừng nhận "
                          f"món bị ảnh hưởng hoặc mua bổ sung, ghi kết quả.",
@@ -102,21 +100,28 @@ def _discrepancy(now):
 
 
 def _exceptions(now):
-    for exc in ExceptionCase.objects.filter(status=ExceptionCase.Status.OPEN):
+    for exc in ExceptionCase.objects.filter(status=ExceptionCase.Status.OPEN).select_related("order", "ingredient"):
         if exc.kind == ExceptionCase.Kind.CONSUMPTION_OVER:
             yield {"subject": f"nl-{exc.pk}", "title": f"Kiểm tra chênh lệch tiêu hao: {exc.ingredient}",
                    "detail": exc.detail, "assignee": None, "role": OWNER, "severity": Alert.Severity.IMPORTANT,
                    "due": exc.created_at + timedelta(hours=params.get("consumption_check_hours")),
                    "link": f"/kiem-soat/ngoai-le/{exc.pk}/", "escalate": True}
         else:
+            # Ghi rõ đơn và nội dung (ví dụ "Đơn 2710-001 · Hủy hóa đơn đã thanh toán 50.000 đ · duyệt bởi Lâm");
+            # quy tắc chỉ ghi thêm khi khác tên loại đã có ở tiêu đề.
+            parts = [exc.rule if exc.rule != exc.get_kind_display() else "",
+                     f"Đơn {exc.order.code}" if exc.order_id else "",
+                     (exc.detail.strip().splitlines() or [""])[-1]]  # ngoại lệ gộp nhiều lần: lấy lần mới nhất
             yield {"subject": f"nl-{exc.pk}", "title": f"Ngoại lệ chờ xem xét: {exc.get_kind_display()}",
-                   "detail": exc.rule, "assignee": None, "role": OWNER, "severity": Alert.Severity.IMPORTANT,
+                   "detail": " · ".join(p for p in parts if p) or exc.rule, "assignee": None, "role": OWNER,
+                   "severity": Alert.Severity.IMPORTANT,
                    "due": exc.created_at + timedelta(days=params.get("review_reminder_days")),
                    "link": f"/kiem-soat/ngoai-le/{exc.pk}/", "escalate": False}
 
 
 def _inventory_owner(now):
     from apps.inventory.models import Payable, PurchaseOrder, StockCount
+    from apps.inventory.stock import fmt_vn
 
     for po in PurchaseOrder.objects.exclude(status=PurchaseOrder.Status.DELIVERED).select_related("ingredient", "supplier"):
         if po.current_status == PurchaseOrder.Status.LATE:
@@ -126,7 +131,7 @@ def _inventory_owner(now):
                    "due": _end_of_day(po.expected_date) + timedelta(days=params.get("purchase_late_days")),
                    "link": "/kho/dat-hang/", "escalate": False, "kind": Alert.Kind.PURCHASE_LATE}
     for c in StockCount.objects.filter(status=StockCount.Status.PENDING).select_related("ingredient"):
-        yield {"subject": f"kiem-ke-{c.pk}", "title": f"Chênh lệch kiểm kê chờ xác nhận: {c.ingredient.name} {c.percent}%",
+        yield {"subject": f"kiem-ke-{c.pk}", "title": f"Chênh lệch kiểm kê chờ xác nhận: {c.ingredient.name} lệch {fmt_vn(c.percent, 1)}%",
                "detail": c.reason, "assignee": None, "role": OWNER, "severity": Alert.Severity.IMPORTANT,
                "due": c.created_at + timedelta(days=params.get("count_confirm_days")), "link": "/kho/kiem-ke/",
                "escalate": False, "kind": Alert.Kind.COUNT_PENDING}
@@ -253,6 +258,9 @@ def sync(now=None):
             alert.assignee, alert.assignee_role, alert.due_at = item["assignee"], item["role"], item["due"]
             alert.title, alert.detail = item["title"][:200], item["detail"][:1000]
             alert.save(update_fields=["assignee", "assignee_role", "due_at", "title", "detail", "updated_at"])
+        elif alert.detail != item["detail"][:1000]:  # nội dung đổi (thêm mã đơn, số liệu mới) thì cập nhật cho đúng
+            alert.detail = item["detail"][:1000]
+            alert.save(update_fields=["detail", "updated_at"])
     for alert in Alert.objects.select_for_update().filter(status__in=Alert.OPEN, due_at__lt=now):
         _escalate(alert, now, *escalation.get((alert.kind, alert.subject), (None, None)))
         escalated.append(alert.pk)

@@ -2,7 +2,7 @@
 đặt hàng (FR-23 đến FR-27, FR-30, BRU-19, BRU-23, BRU-25, BRU-26, BRU-33)."""
 
 from datetime import date, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from apps.audit.models import Action
 from apps.audit.services import record
-from apps.core import params
+from apps.core import numbers, params, uploads
 from apps.core.idempotency import run_once
 
 from . import consumption, stock
@@ -18,14 +18,9 @@ from .models import (Ingredient, Payable, PurchaseOrder, QuickReport, Receipt, R
                      StockCount, StockLot, StockMovement, Supplier, SupplierPayment, Waste)
 
 
-def _dec(value, label, allow_zero=False):
-    try:
-        number = Decimal(str(value).replace(",", ".").strip())
-    except (InvalidOperation, TypeError):
-        raise ValidationError(f"{label} không hợp lệ.")
-    if number < 0 or (number == 0 and not allow_zero):
-        raise ValidationError(f"{label} phải lớn hơn 0.")
-    return number
+MAX_NUMBER = numbers.MAX_NUMBER
+_vnd = numbers.vnd
+_dec = numbers.qty
 
 
 def _plan_changed(ingredient_id):
@@ -70,8 +65,15 @@ def quick_report(user, operation_key, ingredient_id, level, estimated_left=None)
         record(Action.CREATE, actor=user, obj=report, object_type="inventory.QuickReport",
                after={"nguyen_lieu": ingredient.name, "muc": report.get_level_display(), "con_lai": str(left or "")})
         shortage = None
-        if level == QuickReport.Level.OUT and in_opening_hours():
-            shortage = record_shortage(ingredient, ShortageCase.Source.REPORTED_OUT, f"Báo nhanh #{report.pk}")
+        if level == QuickReport.Level.OUT:
+            from apps.accounts.models import User
+            from apps.core.push import notify_later
+
+            # Hết hàng giữa giờ bán thì Chủ quán cần biết ngay để mua thêm hoặc báo ngừng món.
+            notify_later([u.pk for u in User.objects.filter(is_active=True) if u.is_owner and u.pk != user.pk],
+                         f"Đã hết {ingredient.name}", f"{user} báo lúc {timezone.localtime():%H:%M}.", "/kho/")
+            if in_opening_hours():
+                shortage = record_shortage(ingredient, ShortageCase.Source.REPORTED_OUT, f"Báo nhanh #{report.pk}")
         return {"report": report.pk, "shortage_recorded": shortage is not None}
 
     return run_once(operation_key, "quick_report", payload, action, actor=user)
@@ -120,6 +122,20 @@ def create_purchase_order(user, supplier_id, ingredient_id, quantity, expected_d
     return PurchaseOrder.objects.get(pk=result["po"])
 
 
+def delivery_date(raw):
+    """Ngày giao dự kiến gõ ở màn Đặt hàng: không trước hôm nay, không quá một năm (thường là gõ nhầm năm)."""
+    try:
+        day = date.fromisoformat(str(raw or ""))
+    except ValueError:
+        raise ValidationError("Chọn ngày giao dự kiến.")
+    today = timezone.localdate()
+    if day < today:
+        raise ValidationError("Ngày giao không được trước hôm nay.")
+    if day > today + timedelta(days=365):
+        raise ValidationError(f"Ngày giao {day:%d/%m/%Y} cách hôm nay hơn một năm; kiểm tra lại năm.")
+    return day
+
+
 def refresh_late(today=None):
     """Ghi trạng thái Giao chậm và nhật ký cho lần đặt quá ngày giao (AC-68). Chỉ tác vụ định kỳ gọi."""
     today = today or timezone.localdate()
@@ -137,6 +153,10 @@ def refresh_late(today=None):
 @transaction.atomic
 def reschedule(user, po_id, new_date):
     po = PurchaseOrder.objects.select_for_update().get(pk=po_id)
+    if po.status in (PurchaseOrder.Status.DELIVERED, PurchaseOrder.Status.CANCELLED):
+        raise ValidationError(f"Lần đặt này {po.get_status_display().lower()}; không đổi ngày giao.")
+    if new_date < timezone.localdate():
+        raise ValidationError("Ngày giao mới không được trước hôm nay.")
     before = po.expected_date
     po.expected_date = new_date
     po.settle_status()
@@ -205,7 +225,15 @@ def _next_receipt_code():
 def create_receipt(user, operation_key, supplier_id, lines, payment_type, *, invoice_photo=None, due_days=7,
                    paid_source=SupplierPayment.Source.TRANSFER):
     """lines: [{"ingredient": id, "quantity": x, "unit_price": đồng, "purchase_order": id|None}]"""
-    payload = {"supplier": int(supplier_id), "lines": lines, "payment": payment_type, "due": int(due_days or 0),
+    due = 0
+    if payment_type == Receipt.PaymentType.LATER:
+        try:
+            due = numbers.whole(due_days or 0)
+        except ValidationError:
+            due = -1
+        if not 0 <= due <= 365:
+            raise ValidationError("Hạn trả sau là số ngày, từ 0 tới 365.")
+    payload = {"supplier": int(supplier_id), "lines": lines, "payment": payment_type, "due": due,
                "source": paid_source, "photo": getattr(invoice_photo, "name", "")}
 
     def action():
@@ -220,7 +248,7 @@ def create_receipt(user, operation_key, supplier_id, lines, payment_type, *, inv
         for raw in lines:
             ingredient = Ingredient.objects.get(pk=raw["ingredient"])
             qty = _dec(raw.get("quantity"), f"Số lượng {ingredient.name}")
-            price = int(_dec(raw.get("unit_price"), f"Đơn giá {ingredient.name}", allow_zero=True))
+            price = _vnd(raw.get("unit_price") or 0, f"Đơn giá {ingredient.name}", allow_zero=True)
             po = None
             if raw.get("purchase_order"):
                 po = PurchaseOrder.objects.select_for_update().get(pk=raw["purchase_order"], ingredient=ingredient)
@@ -234,17 +262,24 @@ def create_receipt(user, operation_key, supplier_id, lines, payment_type, *, inv
                     raise ValidationError(f"Hạn sử dụng của {ingredient.name} không hợp lệ.")
             if expiry and expiry < timezone.localdate():
                 raise ValidationError(f"Lô {ingredient.name} đã quá hạn ({expiry:%d/%m/%Y}); không nhập hàng quá hạn.")
+            stock.check_expiry(expiry, ingredient.name)
             parsed.append((ingredient, qty, price, po, expiry, str(raw.get("supplier_lot") or "").strip()))
         total = sum(int((q * p).to_integral_value()) for _, q, p, _, _, _ in parsed)
         if not invoice_photo:
             # FR-24 và AC-55: phiếu nhập phải có ảnh hóa đơn khi lưu, không phụ thuộc giá trị.
             raise ValidationError("Chụp ảnh hóa đơn hoặc phiếu giao hàng trước khi lưu phiếu nhập.")
+        uploads.check_photo(invoice_photo, "Ảnh hóa đơn")
         receipt = Receipt.objects.create(store=supplier.store, code=_next_receipt_code(), supplier=supplier,
                                          payment_type=payment_type, total=total, invoice_photo=invoice_photo or "",
                                          created_by=user, operation_key=operation_key)
         warnings = []
         lot_codes = []
         for n, (ingredient, qty, price, po, expiry, supplier_lot) in enumerate(parsed, start=1):
+            last = (ReceiptLine.objects.filter(ingredient=ingredient).order_by("-id")
+                    .values_list("unit_price", flat=True).first())
+            if last and price and (price > last * 3 or price * 3 < last):  # thường là gõ giá theo kg hay hộp
+                warnings.append(f"{ingredient.name}: đơn giá {numbers.fmt(price, 0)} đ/{ingredient.get_unit_display()} "
+                                f"khác nhiều so với lần nhập trước ({numbers.fmt(last, 0)} đ); kiểm tra lại.")
             line = ReceiptLine.objects.create(receipt=receipt, ingredient=ingredient, quantity=qty, unit_price=price,
                                               purchase_order=po, expiry_date=expiry)
             movement = stock.move(ingredient.pk, qty, kind=StockMovement.Kind.RECEIPT, actor=user, store=supplier.store,
@@ -260,7 +295,7 @@ def create_receipt(user, operation_key, supplier_id, lines, payment_type, *, inv
                 po.settle_status()
                 po.save(update_fields=["received_quantity", "status", "ordered_at", "updated_at"])  # AC-52, AC-69
                 if po.over_received > 0:  # vẫn ghi nhận, nhưng báo để Chủ quán biết (mục 8.1)
-                    warnings.append(f"{ingredient.name}: nhận vượt số đặt {stock.fmt_qty(po.over_received)} "
+                    warnings.append(f"{ingredient.name}: nhận vượt số đặt {stock.fmt_vn(po.over_received)} "
                                     f"{ingredient.get_unit_display()}.")
         today = timezone.localdate()
         payable = Payable.objects.create(store=supplier.store, receipt=receipt, supplier=supplier, amount=total,
@@ -271,6 +306,9 @@ def create_receipt(user, operation_key, supplier_id, lines, payment_type, *, inv
                 shift = Shift.objects.operating()
                 if shift is None:
                     raise ValidationError("Không có ca đang mở để chi tiền mặt quỹ ca.")
+                from apps.shifts.services import check_cash_on_hand
+
+                check_cash_on_hand(shift, total, "trả phiếu nhập")
                 CashEntry.objects.create(store=shift.store, shift=shift, kind=CashEntry.Kind.EXPENSE, amount=total,
                                          category=ExpenseCategory.MATERIALS, note=f"Phiếu nhập {receipt.code}",
                                          actor=user, operation_key=f"{operation_key[:56]}-quyca")
@@ -291,14 +329,27 @@ def pay_supplier(user, payable_id, amount, source, paid_on=None, *, operation_ke
     payload = {"payable": int(payable_id), "amount": str(amount), "source": source, "paid_on": str(paid_on or "")}
 
     def action():
-        payable = Payable.objects.select_for_update().get(pk=payload["payable"])
-        value = int(_dec(amount, "Số tiền"))
+        from apps.shifts.models import CashEntry, ExpenseCategory, Shift
+
+        payable = Payable.objects.select_for_update().select_related("receipt").get(pk=payload["payable"])
+        value = _vnd(amount, "Số tiền")
         if value > payable.remaining():
             raise ValidationError(f"Số tiền vượt phần còn phải trả ({payable.remaining():,} đ).".replace(",", "."))
         if source not in SupplierPayment.Source.values:
             raise ValidationError("Chọn nguồn tiền.")
         payment = SupplierPayment.objects.create(payable=payable, amount=value,
                                                  paid_on=paid_on or timezone.localdate(), source=source, actor=user)
+        if source == SupplierPayment.Source.SHIFT_CASH:  # tiền lấy từ két thì quỹ ca phải ghi khoản chi tương ứng
+            shift = Shift.objects.operating()
+            if shift is None:
+                raise ValidationError("Không có ca đang mở để chi tiền mặt quỹ ca; chọn nguồn tiền khác.")
+            from apps.shifts.services import check_cash_on_hand
+
+            check_cash_on_hand(shift, value, "trả nhà cung cấp")
+            CashEntry.objects.create(store=shift.store, shift=shift, kind=CashEntry.Kind.EXPENSE, amount=value,
+                                     category=ExpenseCategory.MATERIALS,
+                                     note=f"Trả {payable.supplier} phiếu {payable.receipt.code}",
+                                     actor=user, operation_key=f"{operation_key[:56]}-quyca")
         record(Action.CREATE, actor=user, obj=payable, object_type="inventory.Payable",
                after={"da_tra": value, "con_lai": payable.remaining(), "nguon": payment.get_source_display()})
         return {"payment": payment.pk}
@@ -336,13 +387,13 @@ def record_waste(user, operation_key, ingredient_id, quantity, reason, note="", 
             if lot is None:
                 raise ValidationError("Lô đã chọn không thuộc nguyên liệu này.")
             if qty > lot.remaining:
-                raise ValidationError(f"Lô {lot.code} chỉ còn {stock.fmt_qty(lot.remaining)} "
+                raise ValidationError(f"Lô {lot.code} chỉ còn {stock.fmt_vn(lot.remaining)} "
                                       f"{ingredient.get_unit_display()}.")
         physical = stock._lock([ingredient.pk])[ingredient.pk].physical
         if qty > physical:
             # Không xuất hao hụt quá tồn vật lý trên sổ; sổ sai thì kiểm kê trước rồi ghi hao hụt.
-            raise ValidationError(f"Hao hụt {stock.fmt_qty(qty)} {ingredient.get_unit_display()} vượt tồn vật lý "
-                                  f"{stock.fmt_qty(max(physical, 0))}; kiểm kê lại trước khi ghi hao hụt.")
+            raise ValidationError(f"Hao hụt {stock.fmt_vn(qty)} {ingredient.get_unit_display()} vượt tồn vật lý "
+                                  f"{stock.fmt_vn(max(physical, 0))}; kiểm kê lại trước khi ghi hao hụt.")
         waste = Waste.objects.create(store=ingredient.store, ingredient=ingredient, quantity=qty, reason=reason,
                                      note=note[:255], actor=user, operation_key=operation_key,
                                      is_one_off=bool(is_one_off and user.is_owner))
@@ -381,7 +432,7 @@ def submit_count(user, operation_key, ingredient_id, counted, reason=""):
         limit = params.get("count_threshold_percent")
         over = percent > limit
         if over and not reason.strip():
-            raise ValidationError(f"Chênh lệch {percent:.1f}% vượt ngưỡng; ghi lý do để gửi Chủ quán xác nhận.")  # AC-56
+            raise ValidationError(f"Chênh lệch {stock.fmt_vn(percent, 1)}% vượt ngưỡng; ghi lý do để gửi Chủ quán xác nhận.")  # AC-56
         count = StockCount.objects.create(
             store=ingredient.store, ingredient=ingredient, counted=value, physical_at_count=row.physical,
             difference=diff, percent=percent.quantize(Decimal("0.01")), reason=reason[:255],
@@ -410,6 +461,11 @@ def confirm_count(user, count_id, approve=True):
     count = StockCount.objects.select_for_update().get(pk=count_id)
     if count.status != StockCount.Status.PENDING:
         return count
+    later = later_count(count)
+    if approve and later is not None:
+        # Lần đếm sau đã tính lại chênh lệch từ tồn lúc đó; điều chỉnh thêm lần cũ là trừ hai lần.
+        raise ValidationError(f"{count.ingredient.name} đã được đếm lại lúc {timezone.localtime(later.created_at):%H:%M %d/%m}; "
+                              "lần đếm này đã cũ nên chỉ chọn Không xác nhận.")
     count.status = StockCount.Status.APPLIED if approve else StockCount.Status.REJECTED
     count.confirmed_by, count.confirmed_at = user, timezone.now()
     count.save(update_fields=["status", "confirmed_by", "confirmed_at", "updated_at"])
@@ -420,6 +476,12 @@ def confirm_count(user, count_id, approve=True):
     record(Action.STATUS_CHANGE, actor=user, obj=count, object_type="inventory.StockCount",
            after={"trang_thai": count.get_status_display()})
     return count
+
+
+def later_count(count):
+    """Lần đếm sau của cùng nguyên liệu (trừ lần Chủ quán không xác nhận), nếu có."""
+    return (StockCount.objects.filter(ingredient_id=count.ingredient_id, created_at__gt=count.created_at)
+            .exclude(status=StockCount.Status.REJECTED).order_by("created_at").first())
 
 
 def _check_count_accumulated(count):
@@ -437,9 +499,9 @@ def _check_count_accumulated(count):
         counters = sorted({str(c.counter) for c in month})
         open_exception(ExceptionCase.Kind.COUNT_ACCUMULATED, ingredient=ingredient, period=f"{now:%Y-%m}",
                        store=ingredient.store,
-                       rule=f"Thiếu kiểm kê tích lũy tháng của {ingredient.name} vượt {stock.fmt_qty(threshold)} "
-                            f"{ingredient.get_unit_display()} (BRU-25)",
-                       detail=f"Tổng thiếu {stock.fmt_qty(total)} {ingredient.get_unit_display()} qua {month.count()} lần "
+                       rule=f"Thiếu kiểm kê tích lũy tháng của {ingredient.name} vượt {stock.fmt_vn(threshold)} "
+                            f"{ingredient.get_unit_display()}",
+                       detail=f"Tổng thiếu {stock.fmt_vn(total)} {ingredient.get_unit_display()} qua {month.count()} lần "
                               f"kiểm kê; người kiểm kê: {', '.join(counters)}.")
 
 
@@ -501,6 +563,7 @@ def update_lot(user, lot_id, expiry_date=None, supplier_lot=None):
             expiry_date = date.fromisoformat(expiry_date) if expiry_date else None
         except ValueError:
             raise ValidationError("Hạn sử dụng không hợp lệ.")
+    stock.check_expiry(expiry_date)
     if expiry_date is not None and expiry_date != lot.expiry_date:
         lot.expiry_date, lot.expiry_estimated = expiry_date, False
     if supplier_lot is not None:

@@ -120,7 +120,7 @@ def dashboard(start_day, end_day, today=None):
 
     value_chart = charts.line([f"{d:%d/%m}" for d in days],
                               [{"name": "Giá trị tồn", "values": value_series, "slot": 1, "area": True}],
-                              tip_labels=[f"{d:%d/%m/%Y}" for d in days], width=charts.HALF)
+                              tip_labels=[f"{d:%d/%m/%Y}" for d in days], width=charts.HALF) if any(value_series) else None
 
     # Hao hụt theo lý do (giá trị) và theo nguyên liệu
     reason_labels = dict(Waste.Reason.choices)
@@ -138,7 +138,7 @@ def dashboard(start_day, end_day, today=None):
     waste_chart = charts.hbars([{
         "label": names[i].name if i in names else str(i), "value": v, "text": _money(v),
         "tip": f"{names[i].name if i in names else i}: hao hụt {_money(v)}"
-               + (f", bằng {v / (used_qty[i] * prices.at(i, end_day)) * 100:.1f}% giá trị đã dùng"
+               + (f", bằng {v / (used_qty[i] * prices.at(i, end_day)) * 100:.1f}".replace(".", ",") + "% giá trị đã dùng"
                   if used_qty.get(i) and prices.at(i, end_day) else "")} for i, v in top_waste],
         label_w=110, width=charts.THIRD)
 

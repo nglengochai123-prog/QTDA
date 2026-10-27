@@ -1,24 +1,40 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Hao hụt · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
-<h1>Ghi hao hụt xuất kho</h1>
-<details class="help-tip"><summary>Giải thích</summary><p>Nguyên liệu hư, hết hạn, đổ vỡ hoặc pha hỏng trước khi bấm Xong. Món đã pha rồi bị hủy thì không ghi ở đây; hệ thống tự ghi khi yêu cầu hủy được duyệt.</p></details>
-<form data-draft="hao-hut" method="post" class="mini-form narrow" data-once>{% csrf_token %}
-  <input type="hidden" name="operation_key" value="{{ operation_key }}">
-  <div class="field"><label for="w-ing">Nguyên vật liệu</label><select class="input" id="w-ing" name="ingredient" required>
-    <option value="">Chọn nguyên liệu</option>{% for i in ingredients %}<option value="{{ i.pk }}">{{ i.name }} ({{ i.get_unit_display }})</option>{% endfor %}</select></div>
-  <div class="field"><label for="w-lot">Lô</label><select class="input" id="w-lot" name="lot" data-lots-for="w-ing">
-    <option value="">Tự chọn theo quy tắc xuất (hết hạn thì lấy lô quá hạn trước)</option>{% for l in open_lots %}<option value="{{ l.pk }}" data-ingredient="{{ l.ingredient_id }}">{{ l.code }} · còn {{ l.remaining|floatformat:"-2g" }} {{ l.ingredient.get_unit_display }}{% if l.expiry_date %} · HSD {{ l.expiry_date|date:"d/m" }}{% if l.expiry_date < today %} (quá hạn){% endif %}{% endif %}</option>{% endfor %}</select>
-    <span class="hint">Chọn lô nếu biết hàng hỏng thuộc lô nào.</span></div>
-  <div class="field"><label for="w-qty">Số lượng</label><input class="input" id="w-qty" name="quantity" inputmode="decimal" required></div>
-  <fieldset class="option-group"><legend>Lý do</legend><div class="choice-row">
-    {% for v, l in reasons %}<label class="pick"><input type="radio" name="reason" value="{{ v }}" required><span>{{ l }}</span></label>{% endfor %}</div></fieldset>
-  <div class="field"><label for="w-note">Ghi chú</label><input class="input" id="w-note" name="note" maxlength="255"></div>
-  {% if is_owner %}<label class="pick"><input type="checkbox" name="one_off" value="1"><span>Sự cố đơn lẻ, không tính vào hao hụt thường lệ khi dự báo</span></label>{% endif %}
-  <button class="btn btn-primary btn-block" type="submit">Lưu hao hụt</button>
-</form>
-{% if recent %}
-<section class="panel"><h2>Gần đây</h2><ul class="ruled-list compact">{% for w in recent %}<li class="row-between"><span>{{ w.created_at|date:"H:i d/m" }} · {{ w.ingredient.name }} · {{ w.get_reason_display }}{% if w.note %} · {{ w.note }}{% endif %} · {{ w.actor }}</span><strong>{{ w.quantity|floatformat:"-2g" }} {{ w.ingredient.get_unit_display }}</strong></li>{% endfor %}</ul></section>
-{% endif %}
+<header class="page-head"><div><h1>Hao hụt</h1><p class="page-sub">Ghi nguyên liệu hư, hết hạn, đổ vỡ hoặc pha hỏng trước khi bấm Xong. Món đã pha rồi bị hủy thì hệ thống tự ghi khi yêu cầu hủy được duyệt.</p></div></header>
+
+{% include "partials/missing_setup.html" %}
+<div class="waste-grid">
+<section class="card" aria-labelledby="w-title">
+  <div class="card-head"><h2 id="w-title">Ghi hao hụt</h2></div>
+  <form data-draft="hao-hut" method="post" class="card-body waste-form" data-once>{% csrf_token %}
+    <input type="hidden" name="operation_key" value="{{ operation_key }}">
+    <label class="field"><span>Nguyên liệu</span><select class="input" id="w-ing" name="ingredient" required data-w-ingredient>
+      <option value="">Chọn nguyên liệu</option>{% for i in ingredients %}<option value="{{ i.pk }}" data-unit="{{ i.get_unit_display }}" data-stock="{{ i.stock.physical|floatformat:'-2g' }}">{{ i.name }}</option>{% endfor %}</select>
+      <span class="hint" data-w-stock></span></label>
+    <label class="field"><span>Số lượng bỏ đi</span><span class="unit-input"><input class="input" name="quantity" inputmode="decimal" autocomplete="off" required><span aria-hidden="true" data-w-unit></span></span></label>
+    <fieldset class="field waste-reasons"><legend>Lý do</legend><div class="choice-row">
+      {% for v, l in reasons %}<label class="pick"><input type="radio" name="reason" value="{{ v }}" required><span>{{ l }}</span></label>{% endfor %}</div></fieldset>
+    <label class="field"><span>Lô</span><select class="input" name="lot" data-lots-for="w-ing">
+      <option value="">Tự chọn: lô quá hạn trước, rồi theo quy tắc xuất</option>{% for l in open_lots %}<option value="{{ l.pk }}" data-ingredient="{{ l.ingredient_id }}">{{ l.code }} · còn {{ l.remaining|floatformat:"-2g" }} {{ l.ingredient.get_unit_display }}{% if l.expiry_date %} · HSD {{ l.expiry_date|date:"d/m" }}{% if l.expiry_date < today %} (quá hạn){% endif %}{% endif %}</option>{% endfor %}</select>
+      <span class="hint">Chọn lô nếu biết hàng hỏng thuộc lô nào.</span></label>
+    <label class="field"><span>Ghi chú</span><input class="input" name="note" maxlength="255" placeholder="Ví dụ: rơi hộp khi xếp tủ"></label>
+    {% if is_owner %}<label class="check"><input type="checkbox" name="one_off" value="1"> Sự cố đơn lẻ, không tính vào hao hụt thường lệ khi ước tính</label>{% endif %}
+    <button class="btn btn-primary" type="submit">Lưu hao hụt</button>
+  </form>
+</section>
+
+<section class="card" aria-labelledby="w-recent">
+  <div class="card-head"><h2 id="w-recent">Gần đây</h2>{% if can_report %}<a class="btn btn-ghost btn-sm" href="{% url 'inventory:report' %}">Báo cáo tháng</a>{% endif %}</div>
+  {% if recent %}
+  <ul class="row-list">{% for w in recent %}
+    <li><span class="row-day">{{ w.created_at|date:"d/m" }}<small>{{ w.created_at|date:"H:i" }}</small></span>
+      <span class="row-main"><strong>{{ w.ingredient.name }}</strong><small>{{ w.get_reason_display }}{% if w.note %} · {{ w.note }}{% endif %} · {{ w.actor }}{% if w.is_one_off %} · sự cố đơn lẻ{% endif %}</small></span>
+      <span class="num-cell">{{ w.quantity|floatformat:"-2g" }} {{ w.ingredient.get_unit_display }}</span></li>{% endfor %}
+  </ul>
+  {% else %}<p class="empty-cell">Chưa ghi hao hụt nào.</p>{% endif %}
+</section>
+</div>
 {% endblock %}
+{% block scripts %}<script src="{% static 'js/kho.js' %}" defer></script>{% endblock %}

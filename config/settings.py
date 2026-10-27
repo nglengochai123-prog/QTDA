@@ -91,7 +91,9 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "apps.accounts.permissions.DeniedAccessLogMiddleware",
     "apps.core.middleware.FormErrorMiddleware",
+    "apps.core.middleware.SessionExpiryMiddleware",
 ]
+CSRF_FAILURE_VIEW = "apps.core.middleware.csrf_failure"
 
 ROOT_URLCONF = "config.urls"
 
@@ -155,7 +157,7 @@ AUTH_USER_MODEL = "accounts.User"
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "NAME": "apps.accounts.validators.MinimumLengthValidator",
         "OPTIONS": {"min_length": 8},
     },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
@@ -187,7 +189,7 @@ LANGUAGES = [("vi", "Tiếng Việt")]
 TIME_ZONE = "Asia/Ho_Chi_Minh"
 USE_I18N = True
 USE_TZ = True
-USE_THOUSAND_SEPARATOR = True
+USE_THOUSAND_SEPARATOR = False  # Bật thì mã dòng 5243 ra "5.243" trong data-line, nút Xong gửi sai dòng. Tiền dùng intcomma.
 THOUSAND_SEPARATOR = "."
 DECIMAL_SEPARATOR = ","
 NUMBER_GROUPING = 3
@@ -229,6 +231,12 @@ if not DEBUG and env_bool("DJANGO_STATIC_MANIFEST", True):
     STORAGES = {
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
         "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"},
+    }
+elif DEBUG:
+    # Chạy trên máy cá nhân: đường dẫn kèm giờ sửa tệp để trình duyệt tải bản mới ngay sau khi chép mã mới.
+    STORAGES = {
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "apps.core.storage.VersionedStaticFilesStorage"},
     }
 
 if not DEBUG:

@@ -2,8 +2,7 @@
 {% load humanize %}
 {% block title %}Tham số · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><h1>Tham số quản trị</h1></header>
-<details class="help-tip"><summary>Giải thích</summary><p>Mỗi lần lưu là một giá trị mới có thời điểm hiệu lực; giá trị cũ được giữ để các ca, yêu cầu và báo cáo đã chốt không bị tính lại. Để trống “Hiệu lực từ” nghĩa là áp dụng ngay.</p></details>
+<header class="page-head"><div><h1>Tham số quản trị</h1><p class="page-sub">Mỗi lần lưu là một giá trị mới có thời điểm hiệu lực; giá trị cũ được giữ để các ca, yêu cầu và báo cáo đã chốt không bị tính lại. Để trống “Hiệu lực từ” nghĩa là áp dụng ngay.</p></div></header>
 <ul class="ruled-list">
   {% for p in rows %}
   <li class="param-row">
@@ -18,7 +17,7 @@
     <form method="post" class="inline-form" data-once>{% csrf_token %}
       <input type="hidden" name="key" value="{{ p.key }}">
       <label class="visually-hidden" for="p-{{ p.key }}">{{ p.label }}</label>
-      <input class="input input-sm" id="p-{{ p.key }}" name="value" value="{{ p.value }}" inputmode="numeric">
+      <input class="input input-sm" id="p-{{ p.key }}" name="value" value="{{ p.value|intcomma }}" inputmode="numeric" autocomplete="off">
       <span class="muted">{{ p.unit }}</span>
       <label class="muted" for="e-{{ p.key }}">hiệu lực từ</label>
       <input class="input input-sm" id="e-{{ p.key }}" type="datetime-local" name="effective_from">

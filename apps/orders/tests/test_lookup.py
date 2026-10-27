@@ -43,6 +43,13 @@ class LookupTests(Base):
             r = self.client.get(reverse("orders:lookup"), {"trang_thai": "da_gui"})
         self.assertEqual(r.context["page"].paginator.num_pages, 2)
         self.assertContains(r, "trang_thai=da_gui&amp;trang=2")
+        # Tổng tiền tính trên mọi đơn khớp bộ lọc, không chỉ trang đang xem; bộ lọc thêm mở sẵn khi đang dùng.
+        from apps.orders.models import Order
+        waiting = sum(Order.objects.filter(status="da_gui").values_list("total", flat=True))
+        self.assertEqual((r.context["count_total"], len(r.context["page"].object_list)), (waiting, 1))
+        self.assertEqual(r.context["advanced"], 1)
+        self.assertContains(r, "2 đơn khớp bộ lọc")
+        self.assertContains(r, "1 điều kiện đang dùng")
 
     def test_detail_and_permission(self):
         r = self.client.get(reverse("orders:detail", args=[self.paid.pk]))
@@ -51,3 +58,11 @@ class LookupTests(Base):
         self.client.login(username=self.d["waiter"].username, password=PASSWORD)
         self.assertEqual(self.client.get(reverse("orders:lookup")).status_code, 403)
         self.assertEqual(self.client.get(reverse("orders:detail", args=[self.paid.pk])).status_code, 403)
+
+    def test_detail_history_includes_adjustment_requests(self):
+        line = self.unpaid.lines.get()
+        req = self.request(self.d["waiter"], self.unpaid, "huy_mon", line=line.pk, cups=1)
+        r = self.client.get(reverse("orders:detail", args=[self.unpaid.pk]))
+        trail = [str(log) for log in r.context["trail"]]
+        self.assertTrue(any(log.object_type == "orders.AdjustmentRequest" and log.object_id == str(req.pk)
+                            for log in r.context["trail"]), trail)

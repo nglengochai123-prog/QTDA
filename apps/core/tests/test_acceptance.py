@@ -85,7 +85,7 @@ class FiveRoleAcceptanceTests(TestCase):
         self.client.post(reverse("inventory:receipt"), receipt)
         self.assertFalse(Receipt.objects.exists())  # thiếu ảnh
         for _ in range(2):
-            photo = SimpleUploadedFile("hd.jpg", b"jpeg", content_type="image/jpeg")
+            photo = SimpleUploadedFile("hd.jpg", b"\xff\xd8\xffjpeg", content_type="image/jpeg")
             self.client.post(reverse("inventory:receipt"), {**receipt, "invoice_photo": photo})
         self.assertEqual(Receipt.objects.count(), 1)
         self.assertEqual(levels(self.d["milk"])[0], D(2000))

@@ -37,8 +37,16 @@ class Employee(StoreScopedModel):
     def is_working(self):
         return self.status == EmploymentStatus.WORKING
 
+    def effective_roles(self):
+        """Vai trò hiện trên hồ sơ: các vai trò đã chọn, cộng Chủ quán nếu tài khoản tạo với vai trò chính Chủ quán."""
+        roles = list(self.roles or [])
+        if self.user_id and self.user.role == Role.CHU_QUAN and Role.CHU_QUAN not in roles:
+            roles.insert(0, Role.CHU_QUAN)
+        return roles
+
     def role_labels(self):
-        return ", ".join(label for value, label in Role.choices if value in (self.roles or []))
+        roles = self.effective_roles()
+        return ", ".join(label for value, label in Role.choices if value in roles)
     role_labels.short_description = "Vai trò"
 
     def clean(self):

@@ -22,7 +22,7 @@ from django.utils import timezone
 
 from apps.audit.models import Action
 from apps.audit.services import record
-from apps.core import params
+from apps.core import numbers, params
 from apps.core.idempotency import run_once
 from apps.core.models import OperationRecord
 from apps.inventory import stock
@@ -113,6 +113,14 @@ def enter_slip(user, operation_key, payload):
         number = _number(clean["number"])
         sold_at = _when(clean["sold_at"], "Thời điểm bán")
         restored_at = _when(clean["restored_at"] or timezone.now().isoformat(), "Giờ có mạng lại")
+        # Gõ nhầm ngày giờ trên phiếu làm sai giá, định mức và hạn nhập bù; chặn những giá trị không thể xảy ra.
+        soon = timezone.now() + timedelta(minutes=5)
+        if sold_at > soon:
+            raise ValidationError(f"Thời điểm bán {timezone.localtime(sold_at):%H:%M %d/%m/%Y} chưa tới; kiểm tra "
+                                  "lại ngày giờ ghi trên phiếu.")
+        if restored_at > soon:
+            raise ValidationError(f"Giờ có mạng lại {timezone.localtime(restored_at):%H:%M %d/%m/%Y} chưa tới; "
+                                  "kiểm tra lại.")
         rng = _range_for(number)
         if rng is None:
             from apps.shifts.models import Shift
@@ -250,7 +258,7 @@ def confirm_slip(user, operation_key, slip_id, prices=None, versions=None, note=
             raise ValidationError(f"{shift} đã kết; không ghi thêm doanh thu vào ca đã kết.")
         overrides = {}
         for key, value in payload["prices"].items():
-            overrides.setdefault(int(key), {})["price"] = int(str(value).replace(".", ""))
+            overrides.setdefault(int(key), {})["price"] = numbers.vnd(value, f"Đơn giá dòng {key}")
         for key, value in payload["versions"].items():
             overrides.setdefault(int(key), {})["version"] = int(value)
         missing = []

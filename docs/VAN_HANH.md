@@ -41,8 +41,7 @@ Mở http://127.0.0.1:8766. Mật khẩu chung `demo-lam-2026`:
 
 | Vai trò | Tài khoản | Nên thử |
 |---|---|---|
-| Chủ quán | `demo_chuquan` | /bang-dieu-khien/, /bao-cao/doanh-thu/ (Xuất file Excel), /bao-cao/kiem-soat/, /bao-cao/nguyen-lieu/, /ca/tinh-trang/ (duyệt đính chính), /canh-bao/, /du-phong/ (xác nhận giá phiếu chờ), /tham-so/, /quan-tri/ |
-| Quản lý ca | `demo_quanlyca` | /ca/ và /ca/<số>/ (đính chính báo cáo), /duyet/, /du-phong/, /cham-cong/ (bổ sung giờ ra), /tai/, /canh-bao/ |
+| Chủ quán | `demo_chuquan` | /bang-dieu-khien/, /bao-cao/doanh-thu/ (Xuất file Excel), /bao-cao/kiem-soat/, /bao-cao/nguyen-lieu/, /ca/tinh-trang/ (duyệt đính chính), /ca/ và /ca/<số>/ (đính chính báo cáo), /duyet/, /cham-cong/ (bổ sung giờ ra), /tai/, /canh-bao/, /du-phong/ (xác nhận giá phiếu chờ), /tham-so/, /quan-tri/ |
 | Thu ngân | `demo_thungan` | /thu-ngan/, /ca/ (xác nhận đã hoàn tiền) |
 | Phục vụ | `demo_phucvu` | /don/moi/ trên điện thoại, /don/san-sang/, /don/dang-mo/ |
 | Pha chế | `demo_phache` | /quay/, /kho/, /cham-cong/ |
@@ -115,11 +114,11 @@ ssh -o StrictHostKeyChecking=accept-new -R 80:127.0.0.1:8767 nokey@localhost.run
 ### Các bước trên điện thoại
 
 **Android (Chrome):**
-1. Mở địa chỉ `https://xxxx.lhr.life` bằng Chrome, đăng nhập `demo_quanlyca` / `demo-lam-2026`.
-2. Vào **Cảnh báo** (thanh dưới). Ở khối "Thông báo đẩy trên điện thoại", bấm **Bật thông báo trên thiết bị này**.
+1. Mở địa chỉ `https://xxxx.lhr.life` bằng Chrome, đăng nhập `demo_chuquan` / `demo-lam-2026` (nhân viên như `demo_phucvu` bật ở **Lịch của tôi**, khối cuối trang).
+2. Vào **Cảnh báo** (thanh dưới). Ở khối "Thông báo trên điện thoại", bấm **Bật trên thiết bị này**.
 3. Chrome hỏi quyền: chọn **Cho phép**. Nếu lỡ chặn: chạm biểu tượng ổ khóa cạnh địa chỉ › **Quyền** › **Thông báo** › **Cho phép**, rồi tải lại trang.
 4. Kiểm tra cài đặt điện thoại: **Cài đặt › Ứng dụng › Chrome › Thông báo** đang bật; tắt chế độ **Không làm phiền**.
-5. Bấm **Gửi thử đến thiết bị của tôi**. Rồi **thoát Chrome về màn hình chính** (hoặc khóa máy) để thử khi ứng dụng không mở.
+5. Bấm **Gửi thử**. Rồi **thoát Chrome về màn hình chính** (hoặc khóa máy) để thử khi ứng dụng không mở.
 6. Thông báo "Thử thông báo LAM Coffee" phải hiện. Chạm vào nó; Chrome mở trang Cảnh báo.
 7. Ở bảng bên dưới nút, cột **Điện thoại đã hiện** và **Đã chạm mở** phải có giờ.
 
@@ -127,11 +126,11 @@ ssh -o StrictHostKeyChecking=accept-new -R 80:127.0.0.1:8767 nokey@localhost.run
 1. Mở địa chỉ bằng **Safari** (không dùng Chrome trên iPhone), đăng nhập.
 2. Chạm nút **Chia sẻ** › **Thêm vào Màn hình chính** › **Thêm**.
 3. **Đóng Safari**, mở ứng dụng LAM Coffee từ biểu tượng vừa thêm (bắt buộc; iPhone chỉ cho thông báo khi mở theo cách này). Đăng nhập lại nếu được hỏi.
-4. Vào **Cảnh báo** › **Bật thông báo trên thiết bị này** › chọn **Cho phép**.
+4. Vào **Cảnh báo** (nhân viên: **Lịch của tôi**) › **Bật trên thiết bị này** › chọn **Cho phép**.
 5. Nếu lỡ chặn: **Cài đặt › Thông báo › LAM Coffee › Cho phép thông báo**.
 6. Bấm **Gửi thử**, về màn hình chính, chờ thông báo, chạm mở, rồi xem bảng như bước 7 của Android.
 
-**Thử với cảnh báo thật:** trên máy tính đăng nhập Pha chế, ở /kho/bao-nhanh/ bấm **Đã hết** một nguyên liệu (trong giờ 6–22), rồi chạy `chay_dinh_ky` với bộ dữ liệu mẫu; điện thoại của Quản lý ca phải nhận thông báo "Khẩn: ... đã hết".
+**Thử với cảnh báo thật:** trên máy tính đăng nhập Pha chế, ở /kho/bao-nhanh/ bấm **Đã hết** một nguyên liệu (trong giờ 6–22), rồi chạy `chay_dinh_ky` với bộ dữ liệu mẫu; điện thoại của Chủ quán phải nhận thông báo "Khẩn: ... đã hết".
 
 **Đọc kết quả:** "Dịch vụ đẩy đã nhận: Có (mã 201)" mà "Điện thoại đã hiện: Chưa" nghĩa là máy chủ đã gửi đúng nhưng điện thoại chưa hiện (thường do quyền thông báo, Không làm phiền, tiết kiệm pin hoặc điện thoại mất mạng). Cả hai có giờ là đạt.
 

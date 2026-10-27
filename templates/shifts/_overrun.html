@@ -1,0 +1,6 @@
+{% if shift and shift.overrun %}
+<div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
+  <div><strong>{{ shift }} đã quá giờ kết thúc ({{ shift.ends_at|date:"H:i d/m" }}) mà chưa kết.</strong>
+    Tiền thu lúc này vẫn vào quỹ của ca đó. {% if request.user.is_owner %}Kết ca ở <a href="{% url 'shifts:my_shift_detail' shift.pk %}">Quỹ ca</a> và mở ca mới ở <a href="{% url 'masterdata:list' 'ca' %}">Ca làm việc</a> nếu đã sang ca khác.{% else %}Báo Chủ quán kết ca và mở ca mới nếu đã sang ca khác.{% endif %}</div>
+</div>
+{% endif %}

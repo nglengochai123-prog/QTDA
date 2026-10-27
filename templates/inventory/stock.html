@@ -51,7 +51,7 @@
     </div>
   </div>
   <div class="table-wrap">
-  <table class="data-table">
+  <table class="data-table table-stack">
     <thead><tr><th scope="col">Nguyên vật liệu</th><th scope="col">Quy tắc xuất</th><th scope="col" class="num">Có thể dùng</th>
       <th scope="col" class="num">Đủ dùng</th><th scope="col">Lấy trước</th><th scope="col" class="num">Số lô</th>
       {% if can_confirm %}<th scope="col" class="num">Giá trị</th>{% endif %}<th scope="col">Tình trạng</th></tr></thead>
@@ -59,16 +59,18 @@
     {% for r in rows %}{% with i=r.i d=r.d %}
     <tr>
       <th scope="row"><a href="{% url 'inventory:lot_detail' i.pk %}">{{ i.name }}</a>{% if i.is_critical %} <span class="tag">Trọng yếu</span>{% endif %}</th>
-      <td><span class="rule" title="{{ i.rule_label }}">{{ i.rule_short }}</span></td>
-      <td class="num">{{ i.stock.available|floatformat:"-2g" }} <span class="unit">{{ i.get_unit_display }}</span>{% if i.stock.reserved %}<div class="cell-sub">đang giữ {{ i.stock.reserved|floatformat:"-2g" }}</div>{% endif %}</td>
-      <td class="num">{% if d.cover_days is not None %}{{ d.cover_days|floatformat:"0" }} ngày{% else %}<span class="muted">—</span>{% endif %}</td>
-      <td>{% if d.pick %}<span class="mono">{{ d.pick.code }}</span><div class="cell-sub">{% if d.pick.expiry_date %}HSD {{ d.pick.expiry_date|date:"d/m" }}{% if d.pick.days_left is not None %} · còn {{ d.pick.days_left }} ngày{% endif %}{% else %}Chưa rõ hạn{% endif %}</div>{% else %}<span class="muted">—</span>{% endif %}</td>
-      <td class="num">{{ d.lots|length }}</td>
-      {% if can_confirm %}<td class="num">{{ d.value|intcomma }}</td>{% endif %}
-      <td>{% if r.state == 'expired' %}<span class="pill pill-danger">{{ d.expired|length }} lô quá hạn</span>
+      <td class="stack-hide"><span class="rule" title="{{ i.rule_label }}">{{ i.rule_short }}</span></td>
+      <td class="num" data-label="Có thể dùng">{{ i.stock.available|floatformat:"-2g" }} <span class="unit">{{ i.get_unit_display }}</span>{% if i.stock.reserved %}<div class="cell-sub">đang giữ {{ i.stock.reserved|floatformat:"-2g" }}</div>{% endif %}</td>
+      <td class="num" data-label="Đủ dùng">{% if d.cover_days is not None %}{{ d.cover_days|floatformat:"0g" }} ngày{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td data-label="Lấy trước">{% if d.pick %}<span class="mono">{{ d.pick.code }}</span><div class="cell-sub">{% if d.pick.expiry_date %}HSD {{ d.pick.expiry_date|date:"d/m" }}{% if d.pick.days_left is not None %} · còn {{ d.pick.days_left }} ngày{% endif %}{% else %}Chưa rõ hạn{% endif %}</div>{% else %}<span class="muted">—</span>{% endif %}</td>
+      <td class="num stack-hide">{{ d.lots|length }}</td>
+      {% if can_confirm %}<td class="num" data-label="Giá trị">{{ d.value|intcomma }} <span class="unit">đ</span></td>{% endif %}
+      <td data-label="Tình trạng">{% if r.state == 'expired' %}<span class="pill pill-danger">{{ d.expired|length }} lô quá hạn</span>
+        {% elif r.state == 'out' and r.never %}<span class="pill pill-warn">Chưa ghi tồn đầu kỳ</span>{% if can_open %}<div class="cell-sub"><a href="{% url 'masterdata:edit' 'nguyen-lieu' i.pk %}">Ghi tồn đầu kỳ</a></div>{% endif %}
+        {% elif r.state == 'out' %}<span class="pill pill-danger">Hết hàng</span>
         {% elif r.state == 'low' %}<span class="pill pill-warn">Dưới mức an toàn</span>
         {% elif r.state == 'near' %}<span class="pill pill-warn">Sắp hết hạn</span>
-        {% elif r.state == 'risk' %}<span class="pill pill-info">Dự kiến bỏ {{ d.at_risk|floatformat:"0" }} {{ i.get_unit_display }}</span>
+        {% elif r.state == 'risk' %}<span class="pill pill-info">Dự kiến bỏ {{ d.at_risk|floatformat:"0g" }} {{ i.get_unit_display }}</span>
         {% else %}<span class="pill pill-ok">Ổn</span>{% endif %}</td>
     </tr>
     {% endwith %}{% empty %}
@@ -78,7 +80,7 @@
   </table>
   </div>
 </section>
-<details class="help-tip"><summary>Cách đọc bảng</summary><p>Có thể dùng là tồn trong kho trừ phần đang giữ cho món đã gửi pha chế. Đủ dùng là số ngày tồn hiện có còn dùng được. Quy tắc xuất: FEFO lấy lô hết hạn sớm nhất trước, dùng cho hàng có hạn dùng; FIFO lấy lô nhập trước, dùng cho hàng không có hạn (ly, ống hút); LIFO chỉ cho hàng không có hạn mà lô mới nằm trên, dễ lấy. Bấm tên nguyên liệu để xem từng lô.</p></details>
+<details class="help-tip"><summary>Cách đọc bảng</summary><p>Có thể dùng là tồn trong kho trừ phần đang giữ cho món đã gửi pha chế. Đủ dùng là số ngày tồn hiện có còn dùng được. Cột quy tắc xuất cho biết lô nào được lấy trước: "Theo hạn" lấy lô gần hết hạn nhất, dùng cho hàng có hạn dùng; "Nhập trước" lấy lô nhập sớm nhất, dùng cho hàng không có hạn (ly, ống hút); "Nhập sau" chỉ cho hàng không có hạn mà lô mới nằm trên, dễ lấy. Bấm tên nguyên liệu để xem từng lô.</p></details>
 {% else %}
 <div class="empty"><p><strong>Chưa có nguyên vật liệu.</strong></p><p>Chủ quán khai báo nguyên vật liệu và tồn đầu kỳ ở Quản trị.</p></div>
 {% endif %}

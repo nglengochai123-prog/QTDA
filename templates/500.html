@@ -1,0 +1,18 @@
+{% load static %}<!doctype html>
+{% comment %}Trang lỗi máy chủ: Django hiển thị không kèm ngữ cảnh (không có người dùng, thanh điều hướng), nên không kế thừa base.html.{% endcomment %}
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Có lỗi xảy ra</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+  <main class="content" style="max-width: 560px; margin: 3rem auto; padding: 0 1rem;">
+    <h1>Có lỗi xảy ra</h1>
+    <p>Máy chủ chưa xử lý được yêu cầu này. Thao tác vừa rồi có thể chưa được lưu: tải lại trang để xem đã lưu chưa rồi làm lại nếu cần.</p>
+    <p>Lỗi lặp lại thì báo Chủ quán kèm giờ xảy ra.</p>
+    <p><a class="btn btn-primary" href="/">Về trang chủ</a></p>
+  </main>
+</body>
+</html>

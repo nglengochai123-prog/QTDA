@@ -11,12 +11,17 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
+from apps.core import numbers
+
 from .models import Ingredient, IngredientStock, StockMovement
 
 
 def fmt_qty(value):
     """Số lượng gọn, không dùng dạng mũ: Decimal("2000.00") -> "2000", Decimal("12.50") -> "12.5"."""
     return format(Decimal(value).normalize(), "f")
+
+
+fmt_vn = numbers.fmt
 
 
 class InsufficientStock(Exception):
@@ -63,8 +68,26 @@ def move(ingredient_id, delta, *, kind, actor, store, source_type, source_id="",
     return movement
 
 
+EXPIRY_YEARS_AHEAD = 5
+
+
+def check_expiry(expiry, name=""):
+    """Hạn sử dụng gõ nhầm năm (2062 thay vì 2026) làm lô coi như không bao giờ hết hạn; chặn ngày quá xa."""
+    if expiry is None:
+        return expiry
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    today = timezone.localdate()
+    if expiry > today + timedelta(days=365 * EXPIRY_YEARS_AHEAD) or expiry < today - timedelta(days=365 * 2):
+        label = f" của {name}" if name else ""
+        raise ValidationError(f"Hạn sử dụng{label} ({expiry:%d/%m/%Y}) quá xa so với hôm nay; kiểm tra lại năm.")
+    return expiry
+
+
 @transaction.atomic
-def record_opening(ingredient, quantity, actor, note="", expiry_date=None, supplier_lot=""):
+def record_opening(ingredient, quantity, actor, note="", expiry_date=None, supplier_lot="", unit_cost=None):
     """Tồn đầu kỳ: chỉ ghi một lần, trước mọi biến động khác của nguyên liệu. Tạo một lô Tồn đầu kỳ."""
     quantity = Decimal(str(quantity))
     if quantity < 0:
@@ -72,8 +95,10 @@ def record_opening(ingredient, quantity, actor, note="", expiry_date=None, suppl
     _lock([ingredient.pk])
     if StockMovement.objects.filter(ingredient=ingredient).exists():
         raise ValidationError(f"{ingredient.name} đã có tồn đầu kỳ hoặc biến động; hãy dùng kiểm kê để điều chỉnh.")
+    lot = {"expiry_date": check_expiry(expiry_date, ingredient.name), "supplier_lot": supplier_lot,
+           "unit_cost": unit_cost}
     return move(ingredient.pk, quantity, kind=StockMovement.Kind.OPENING, actor=actor, store=ingredient.store,
-                source_type="ton_dau_ky", note=note, lot={"expiry_date": expiry_date, "supplier_lot": supplier_lot})
+                source_type="ton_dau_ky", note=note, lot=lot)
 
 
 def reserve(totals):
@@ -88,7 +113,7 @@ def reserve(totals):
         if stock.available < needed:
             shortages.append({"ingredient_id": ingredient_id, "ingredient": stock.ingredient.name,
                               "unit": stock.ingredient.get_unit_display(),
-                              "needed": fmt_qty(needed), "available": fmt_qty(max(stock.available, 0))})
+                              "needed": fmt_vn(needed), "available": fmt_vn(max(stock.available, 0))})
     if shortages:
         raise InsufficientStock(shortages)
     for ingredient_id, needed in totals.items():

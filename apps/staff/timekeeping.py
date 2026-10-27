@@ -21,6 +21,7 @@ from apps.core.models import Store
 from .models import Attendance
 
 WORK_ROLES = [Role.THU_NGAN, Role.PHUC_VU, Role.PHA_CHE]
+MAX_SHIFT_HOURS = 18  # lượt làm dài hơn mức này thường là quên bấm Ra ca hoặc chọn nhầm ngày
 
 
 def open_attendance(user):
@@ -35,8 +36,11 @@ def clock_in(user, operation_key, role):
             raise ValidationError("Chọn vai trò bạn đảm nhận được.")
         current = open_attendance(user)
         if current is not None:
-            raise ValidationError(f"Bạn đang trong ca từ {timezone.localtime(current.clock_in):%H:%M}; ra ca trước "
-                                  f"rồi mới vào ca mới.")
+            since = timezone.localtime(current.clock_in)
+            if since.date() != timezone.localdate():
+                raise ValidationError(f"Lượt vào ca lúc {since:%H:%M %d/%m} chưa có giờ ra; báo Chủ quán bổ sung giờ "
+                                      f"ra rồi mới vào ca mới.")
+            raise ValidationError(f"Bạn đang trong ca từ {since:%H:%M}; ra ca trước rồi mới vào ca mới.")
         att = Attendance.objects.create(store=user.store or Store.get_default(), user=user, role=role, clock_in=timezone.now())
         record(Action.CREATE, actor=user, obj=att, object_type="staff.Attendance",
                after={"vao_ca": timezone.localtime(att.clock_in).isoformat(), "vai_tro": att.get_role_display()})
@@ -50,6 +54,10 @@ def clock_out(user, operation_key):
         att = open_attendance(user)
         if att is None:
             raise ValidationError("Bạn chưa vào ca.")
+        if (timezone.now() - att.clock_in).total_seconds() > MAX_SHIFT_HOURS * 3600:
+            # Trang mở từ hôm trước: ra ca bây giờ sẽ tính cả đêm vào giờ công.
+            raise ValidationError(f"Lượt vào ca lúc {timezone.localtime(att.clock_in):%H:%M %d/%m} đã quá "
+                                  f"{MAX_SHIFT_HOURS} giờ nên không ra ca được; báo Chủ quán bổ sung giờ ra đúng.")
         att.clock_out = timezone.now()
         att.save(update_fields=["clock_out", "updated_at"])
         record(Action.UPDATE, actor=user, obj=att, object_type="staff.Attendance",
@@ -57,6 +65,7 @@ def clock_out(user, operation_key):
         return {"attendance": att.pk}
 
     return run_once(operation_key, "clock_out", {}, action, actor=user)
+
 
 
 @transaction.atomic
@@ -71,10 +80,15 @@ def supplement_clock_out(manager, attendance_id, when, reason):
         raise ValidationError("Lượt chấm công này đã có giờ ra.")
     if not str(reason or "").strip():
         raise ValidationError("Ghi lý do bổ sung giờ ra.")
+    if len(reason.strip()) > 255:
+        raise ValidationError("Lý do tối đa 255 ký tự.")
     if timezone.is_naive(when):
         when = timezone.make_aware(when)
     if when <= att.clock_in or when > timezone.now():
         raise ValidationError("Giờ ra phải sau giờ vào và không ở tương lai.")
+    if (when - att.clock_in).total_seconds() > MAX_SHIFT_HOURS * 3600:
+        raise ValidationError(f"Lượt làm dài hơn {MAX_SHIFT_HOURS} giờ (vào ca "
+                              f"{timezone.localtime(att.clock_in):%H:%M %d/%m}); kiểm tra lại ngày giờ ra.")
     att.clock_out, att.out_supplemented_by, att.out_reason = when, manager, reason.strip()
     att.save(update_fields=["clock_out", "out_supplemented_by", "out_reason", "updated_at"])
     record(Action.UPDATE, actor=manager, obj=att, object_type="staff.Attendance",

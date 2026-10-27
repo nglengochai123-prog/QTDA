@@ -19,6 +19,7 @@
   }
   function cell(row, value) { const td = document.createElement("td"); td.textContent = value; row.appendChild(td); }
   async function refreshLog() {
+    if (!log) return;
     const data = await (await fetch(box.dataset.logUrl, { credentials: "same-origin" })).json();
     const body = log.querySelector("tbody");
     body.textContent = "";
@@ -39,7 +40,11 @@
   }
   if (!window.isSecureContext) { say("Thông báo đẩy cần mở ứng dụng qua HTTPS."); return; }
   fetch(box.dataset.statusUrl, { credentials: "same-origin" }).then((r) => r.json()).then(async (st) => {
-    if (!st.ready) { say("Máy chủ chưa sẵn sàng gửi thông báo: " + st.reason); return; }
+    if (!st.ready) {
+      // Nhân viên không sửa được cấu hình máy chủ: ẩn thẻ; Chủ quán (thẻ có bảng nhật ký) xem lý do để xử lý.
+      if (!log) { box.hidden = true; return; }
+      say("Máy chủ chưa sẵn sàng gửi thông báo: " + st.reason); return;
+    }
     const reg = await navigator.serviceWorker.ready;
     const current = await reg.pushManager.getSubscription();
     say(current ? "Thiết bị này đã bật thông báo." : (Notification.permission === "denied"
@@ -54,6 +59,7 @@
         if (await Notification.requestPermission() !== "granted") { say("Bạn chưa cho phép thông báo."); return; }
         const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64(st.public_key) });
         const res = await post(box.dataset.subscribeUrl, JSON.stringify(sub.toJSON()));
+        try { if (res.ok) localStorage.setItem("lam-push-user", document.body.dataset.user || ""); } catch (e) {}
         say(res.ok ? "Đã bật thông báo trên thiết bị này. Bấm Gửi thử để kiểm tra." : "Không lưu được đăng ký; thử lại.");
         enable.hidden = res.ok; test.hidden = !res.ok;
       } catch (e) { say("Không bật được thông báo: " + e.message); } finally { enable.disabled = false; }

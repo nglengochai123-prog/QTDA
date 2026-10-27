@@ -298,7 +298,7 @@ class AdjustmentRequest(StoreScopedModel):
             return f"Đổi {self.cups} × {self.line.item_name} {self.line.size_name} sang {self.new_line_text}"
         if self.kind == self.Kind.MOVE_TABLE:
             return f"Chuyển đơn từ {self.order.table} sang {self.target_table}"
-        return f"Hủy hóa đơn đã thanh toán {self.order.total:,} đồng".replace(",", ".")
+        return f"Hủy hóa đơn đã thanh toán {self.order.total:,} đ".replace(",", ".")
 
 
 class PostPrepCancellation(models.Model):

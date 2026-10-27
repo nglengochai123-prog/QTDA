@@ -2,20 +2,20 @@
 {% load humanize %}
 {% block title %}Tình trạng ca · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><h1>Tình trạng ca và đối soát</h1></header>
+<header class="page-head"><div><h1>Tình trạng ca và đối soát</h1><p class="page-sub">Khoản chênh lệch cần bạn quyết định, thiếu tiền tích lũy và tình trạng kết ca, báo cáo của các ca gần đây.</p></div></header>
 
 {% if control %}
 <section class="panel" aria-labelledby="ctrl-title">
   <h2 id="ctrl-title">Giá trị kiểm soát tạm tính tháng {{ month }}</h2>
-  <dl class="figure-grid">
+  <dl class="figure-grid figure-grid-3">
     <div class="figure-key"><dt>Giá trị kiểm soát tạm tính</dt><dd>{{ control.control_value|intcomma }} đ</dd></div>
-    <div><dt>Mục tiêu BO-01</dt><dd class="dd-text">dưới {{ control.target|intcomma }} đ</dd></div>
+    <div><dt>Mục tiêu tháng</dt><dd class="dd-text">dưới {{ control.target|intcomma }} đ</dd></div>
     <div><dt>Tổn thất đã xác minh</dt><dd>{{ control.verified|intcomma }} đ</dd></div>
     <div><dt>Thiếu tiền đang xử lý</dt><dd>{{ control.in_process|intcomma }} đ</dd></div>
     <div><dt>Đã thu hồi</dt><dd>{{ control.recovered|intcomma }} đ</dd></div>
     <div><dt>Đã xác minh còn lại</dt><dd>{{ control.verified_remaining|intcomma }} đ</dd></div>
   </dl>
-  <details class="help-tip"><summary>Giải thích</summary><p>Cập nhật {{ control.updated_at|date:"H:i d/m" }} · {{ control.open_cases }} vụ việc chưa kết luận. Đây là số tổng hợp để theo dõi, không phải kết luận toàn bộ số đã thất thoát. Mục tiêu BO-01 là chỉ tiêu dự án; ngưỡng cảnh báo thiếu tiền tích lũy toàn quán ({{ store_threshold|intcomma }} đ/tháng) là tham số riêng.</p></details>
+  <details class="help-tip"><summary>Giải thích</summary><p>Cập nhật {{ control.updated_at|date:"H:i d/m" }} · {{ control.open_cases }} vụ việc chưa kết luận. Đây là số tổng hợp để theo dõi, không phải kết luận toàn bộ số đã thất thoát. Mục tiêu tháng là chỉ tiêu quán tự đặt; ngưỡng cảnh báo thiếu tiền tích lũy toàn quán ({{ store_threshold|intcomma }} đ/tháng) là tham số riêng.</p></details>
 </section>
 {% endif %}
 
@@ -25,7 +25,7 @@
   <ul class="ruled-list compact">
     {% for c in pending_corrections %}
     <li class="discrepancy">
-      <div><strong>{{ c.report.shift }}</strong> · {{ c.requested_by }}: tiền mặt {{ c.report.counted_cash|intcomma }} → {{ c.counted_cash|intcomma }}, CK nhận {{ c.report.transfer_received|intcomma }} → {{ c.transfer_received|intcomma }}, CK hoàn {{ c.report.transfer_refunded|intcomma }} → {{ c.transfer_refunded|intcomma }}</div>
+      <div><strong>{{ c.report.shift }}</strong> · {{ c.requested_by }}: tiền mặt {{ c.report.counted_cash|intcomma }} → {{ c.counted_cash|intcomma }} đ, chuyển khoản nhận {{ c.report.transfer_received|intcomma }} → {{ c.transfer_received|intcomma }} đ, hoàn chuyển khoản {{ c.report.transfer_refunded|intcomma }} → {{ c.transfer_refunded|intcomma }} đ</div>
       <p>Lý do: {{ c.reason }}</p>
       {% if request.user.is_owner %}<div class="approval-actions">
         <form method="post" action="{% url 'shifts:decide_correction' c.pk %}" data-once>{% csrf_token %}<input type="hidden" name="decision" value="reject"><button class="btn btn-quiet" type="submit">Từ chối</button></form>
@@ -37,24 +37,23 @@
 </section>
 {% endif %}
 
-<section class="panel" aria-labelledby="dec-title">
-  <h2 id="dec-title">Chênh lệch chờ quyết định</h2>
+<section class="card{% if pending_decisions %} card-warn{% endif %}" aria-labelledby="dec-title">
+  <div class="card-head"><h2 id="dec-title">Chênh lệch chờ quyết định{% if pending_decisions %} · {{ pending_decisions|length }}{% endif %}</h2></div>
   {% if pending_decisions %}
-  <ul class="ruled-list compact">
+  <ul class="row-list decision-list">
     {% for d in pending_decisions %}
-    <li class="discrepancy">
-      <div class="row-between"><span>{{ d.shift }} · {{ d.get_method_display }} · {{ d.manager }}</span>
-        <strong class="{% if d.difference < 0 %}text-warn{% endif %}">{{ d.difference|intcomma }} đ{% if d.over_threshold %} · vượt ngưỡng{% endif %}</strong></div>
-      {% if d.explanation %}<p>Giải trình: {{ d.explanation }}</p>{% elif d.over_threshold %}<p class="muted">Chờ người phụ trách ca giải trình.</p>{% else %}<p class="muted">Dưới ngưỡng: đã lưu và cộng vào tích lũy nếu thiếu.</p>{% endif %}
-      {% if request.user.is_owner %}{% if d.explanation or not d.over_threshold %}
-      <div class="approval-actions">
-        <form method="post" action="{% url 'shifts:decide' d.pk %}" data-once>{% csrf_token %}<input type="hidden" name="decision" value="reject"><button class="btn btn-quiet" type="submit">Không chấp nhận</button></form>
-        <form method="post" action="{% url 'shifts:decide' d.pk %}" data-once>{% csrf_token %}<input type="hidden" name="decision" value="accept"><button class="btn btn-primary" type="submit">Chấp nhận</button></form>
-      </div>{% endif %}{% endif %}
+    <li><span class="row-main"><strong>{{ d.shift }}</strong>
+      <small>{{ d.get_method_display }} · {{ d.manager }} · {% if d.explanation %}giải trình: {{ d.explanation }}{% elif d.over_threshold %}vượt ngưỡng, chờ người phụ trách ca giải trình{% else %}dưới ngưỡng, đã cộng vào tích lũy nếu thiếu{% endif %}</small></span>
+      <strong class="decision-amount{% if d.difference < 0 %} neg{% endif %}">{{ d.difference|intcomma }} đ</strong>
+      {% if request.user.is_owner and d.explanation or request.user.is_owner and not d.over_threshold %}
+      <span class="approval-actions">
+        <form method="post" action="{% url 'shifts:decide' d.pk %}" data-once>{% csrf_token %}<input type="hidden" name="decision" value="reject"><button class="btn btn-quiet btn-sm" type="submit">Không chấp nhận</button></form>
+        <form method="post" action="{% url 'shifts:decide' d.pk %}" data-once>{% csrf_token %}<input type="hidden" name="decision" value="accept"><button class="btn btn-primary btn-sm" type="submit">Chấp nhận</button></form>
+      </span>{% endif %}
     </li>
     {% endfor %}
   </ul>
-  {% else %}<p class="muted">Không có khoản nào chờ quyết định.</p>{% endif %}
+  {% else %}<p class="empty-cell">Không có khoản nào chờ quyết định.</p>{% endif %}
 </section>
 
 <section class="panel" aria-labelledby="acc-title">
@@ -69,19 +68,21 @@
 
 <section class="panel" aria-labelledby="shift-title">
   <h2 id="shift-title">Các ca gần đây</h2>
-  <div class="table-wrap"><table class="data-table">
+  {% if not rows %}<p class="muted">Chưa có ca nào.</p>{% else %}
+  <div class="table-wrap"><table class="data-table table-stack">
     <thead><tr><th scope="col">Ca</th><th scope="col">Người phụ trách</th><th scope="col">Kết ca</th><th scope="col">Báo cáo</th><th scope="col" class="num">Doanh thu</th><th scope="col">Cần chú ý</th><th scope="col"></th></tr></thead>
     <tbody>
     {% for r in rows %}
     <tr>
-      <th scope="row">{{ r.shift }}</th><td>{% if r.shift.report %}{{ r.shift.report.submitted_by }}{% else %}{{ r.shift.closed_by|default:'–' }}{% endif %}</td>
-      <td>{% if r.closed %}Đã kết{% else %}Chưa{% endif %}</td><td>{% if r.has_report %}Đã gửi{% else %}Chưa{% endif %}</td>
-      <td class="num">{{ r.figures.revenue_total|intcomma }} đ</td>
-      <td>{% for i in r.issues %}<span class="flag-low">{{ i }}</span>{% empty %}<span class="muted">Đủ</span>{% endfor %}</td>
-      <td><a href="{% url 'shifts:my_shift_detail' r.shift.pk %}">Xem</a> · <a href="{% url 'control:adjustment_report' r.shift.pk %}">Điều chỉnh</a></td>
+      <th scope="row">{{ r.shift }}</th><td data-label="Người phụ trách">{% if r.shift.report %}{{ r.shift.report.submitted_by }}{% else %}{{ r.shift.closed_by|default:'–' }}{% endif %}</td>
+      <td data-label="Kết ca">{% if r.closed %}Đã kết{% else %}Chưa{% endif %}</td><td data-label="Báo cáo">{% if r.has_report %}Đã gửi{% else %}Chưa{% endif %}</td>
+      <td class="num" data-label="Doanh thu">{{ r.figures.revenue_total|intcomma }} đ</td>
+      <td data-label="Cần chú ý">{% for i in r.issues %}<span class="flag-low">{{ i }}</span>{% empty %}<span class="muted">Đủ</span>{% endfor %}</td>
+      <td class="actions"><a href="{% url 'shifts:my_shift_detail' r.shift.pk %}">Xem</a> · <a href="{% url 'control:adjustment_report' r.shift.pk %}">Điều chỉnh</a></td>
     </tr>
     {% endfor %}
     </tbody>
-  </table></div>
+  </table></div>{% endif %}
+  {% if more %}<p class="table-more"><a href="?tat_ca=1#shift-title">Xem {{ more }} ca trước đó</a></p>{% endif %}
 </section>
 {% endblock %}

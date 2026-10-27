@@ -1,24 +1,27 @@
 {% extends "base.html" %}
 {% block title %}Nhật ký thao tác · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><h1>Nhật ký thao tác</h1></header>
+<header class="page-head"><div><h1>Nhật ký thao tác</h1><p class="page-sub">Mọi thao tác ghi dữ liệu, kể cả việc hệ thống tự làm, đều được ghi lại; nhật ký không sửa hay xóa được.</p></div></header>
 <form method="get" class="filter-bar" aria-label="Bộ lọc nhật ký">
   <div class="field"><label for="f-q">Tìm</label><input class="input" id="f-q" type="search" name="q" value="{{ f.q }}" placeholder="Mã đơn, tên, lý do"></div>
   <div class="field"><label for="f-tt">Thao tác</label><select class="input" id="f-tt" name="thao_tac"><option value="">Tất cả</option>{% for v, l in actions %}<option value="{{ v }}"{% if f.thao_tac == v %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
   <div class="field"><label for="f-ng">Người thực hiện</label><select class="input" id="f-ng" name="nguoi"><option value="">Tất cả</option>{% for u in people %}<option value="{{ u.pk }}"{% if f.nguoi == u.pk|stringformat:"d" %} selected{% endif %}>{{ u }}</option>{% endfor %}</select></div>
-  <div class="field"><label for="f-loai">Loại dữ liệu</label><select class="input" id="f-loai" name="loai"><option value="">Tất cả</option>{% for t in types %}{% if t %}<option value="{{ t }}"{% if f.loai == t %} selected{% endif %}>{{ t }}</option>{% endif %}{% endfor %}</select></div>
+  <div class="field"><label for="f-loai">Loại dữ liệu</label><select class="input" id="f-loai" name="loai"><option value="">Tất cả</option>{% for t, label in types %}<option value="{{ t }}"{% if f.loai == t %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
   <div class="field"><label for="f-tu">Từ ngày</label><input class="input" id="f-tu" type="date" name="tu" value="{{ f.tu }}"></div>
   <div class="field"><label for="f-den">Đến ngày</label><input class="input" id="f-den" type="date" name="den" value="{{ f.den }}"></div>
   <div class="filter-actions"><button class="btn btn-primary" type="submit">Lọc</button><a class="btn btn-quiet" href="{% url 'masterdata:audit_log' %}">Xóa lọc</a></div>
 </form>
 {% if page.object_list %}
-<div class="table-wrap"><table class="data-table">
+<div class="table-wrap"><table class="data-table log-table table-stack">
   <thead><tr><th scope="col">Thời điểm</th><th scope="col">Người</th><th scope="col">Thao tác</th><th scope="col">Đối tượng</th><th scope="col">Thay đổi</th><th scope="col">Lý do</th></tr></thead>
-  <tbody>{% for log in page.object_list %}<tr>
-    <td>{{ log.created_at|date:"H:i:s d/m/Y" }}</td><td>{{ log.actor|default:log.actor_label }}</td><td>{{ log.get_action_display }}</td>
-    <td>{{ log.object_repr|default:log.object_type }}</td>
-    <td class="log-change">{% if log.before %}<del>{{ log.before }}</del> {% endif %}{% if log.after %}{{ log.after }}{% endif %}</td>
-    <td>{{ log.reason }}</td></tr>{% endfor %}</tbody>
+  <tbody>{% for log in logs %}<tr>
+    <th scope="row" class="nowrap">{{ log.created_at|date:"H:i:s" }}<div class="cell-sub">{{ log.created_at|date:"d/m/Y" }}</div></th>
+    <td class="nowrap" data-label="Người">{{ log.actor|default:log.actor_label }}</td><td class="nowrap" data-label="Thao tác">{{ log.get_action_display }}</td>
+    <td data-label="Đối tượng">{{ log.object_repr|default:log.type_label }}{% if log.object_repr and log.type_label %}<div class="cell-sub">{{ log.type_label }}</div>{% endif %}</td>
+    <td class="log-change stack-note" data-label="Thay đổi">{% if log.raw %}{% if log.before %}<del>{{ log.raw.0 }}</del> {% endif %}{% if log.after %}{{ log.raw.1 }}{% endif %}
+      {% elif log.changes %}<ul class="log-diff">{% for label, old, new in log.changes %}<li><span>{{ label }}</span> {% if old is not None %}<del>{{ old }}</del>{% if new is not None %} → {% endif %}{% endif %}{% if new is not None %}<b>{{ new }}</b>{% endif %}</li>{% endfor %}
+        {% if log.more %}<li class="muted">và {{ log.more }} mục khác</li>{% endif %}</ul>{% endif %}</td>
+    <td data-label="Lý do">{{ log.reason }}</td></tr>{% endfor %}</tbody>
 </table></div>
 {% include "partials/pagination.html" %}
 {% else %}<div class="empty"><p><strong>Không có dòng nhật ký nào khớp bộ lọc.</strong></p></div>{% endif %}

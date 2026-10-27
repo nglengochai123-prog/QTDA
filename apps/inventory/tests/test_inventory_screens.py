@@ -3,6 +3,7 @@ import uuid
 
 from django.urls import reverse
 
+from apps.inventory import operations as ops
 from apps.inventory.models import QuickReport, ShortageCase
 from apps.orders.tests.test_adjust_pay import Base
 
@@ -30,3 +31,17 @@ class InventoryScreenTests(Base):
             r = self.client.post(reverse("orders:customer_switched"), json.dumps(body), content_type="application/json")
             self.assertTrue(r.json()["ok"])
         self.assertEqual(ShortageCase.objects.filter(source="doi_mon").count(), 1)
+
+    def test_monthly_report_groups_by_ingredient(self):
+        # Báo cáo tháng gom theo nguyên liệu; mọi lần kiểm kê đều có trong phần chi tiết (trước đây chỉ 50 lần đầu).
+        milk = self.d["milk"]
+        ops.record_shortage(milk, "doi_mon")
+        for _ in range(3):
+            ops.submit_count(self.d["owner"], uuid.uuid4().hex, milk.pk, "0", reason="Đổ vỡ")
+        self.client.force_login(self.d["owner"])
+        page = self.client.get(reverse("inventory:report"))
+        self.assertContains(page, "Hao hụt và kiểm kê tháng")
+        self.assertEqual(page.context["count_summary"][0]["n"], 3)
+        self.assertEqual(len(page.context["counts"]), 3)
+        self.assertEqual(page.context["shortage_total"], 1)
+        self.assertContains(page, "Xem từng lần (3)")

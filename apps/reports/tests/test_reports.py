@@ -110,7 +110,7 @@ class ReportTests(Base):
         page = self.client.get(reverse("reports:dashboard"))
         self.assertContains(page, "Ca đang mở")
         self.assertContains(page, "Sữa đặc")
-        self.assertContains(page, "BO-01")
+        self.assertContains(page, "Giá trị kiểm soát tạm tính")
         for name in ("reports:revenue", "reports:materials", "reports:revenue_control"):
             self.assertEqual(self.client.get(reverse(name)).status_code, 200)
         self.client.login(username=self.cashier.username, password=PASSWORD)

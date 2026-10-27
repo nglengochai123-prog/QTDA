@@ -53,7 +53,7 @@ def _check_adjust_count(req):
     count = AdjustmentRequest.objects.filter(requested_by=req.requested_by, shift=req.shift, after_prep=True).count()
     if count > limit:
         _exception(ExceptionCase.Kind.ADJUST_COUNT, req, one_per_scope=True,
-                   rule=f"Hơn {limit} yêu cầu điều chỉnh sau pha chế trong ca (BRU-12)",
+                   rule=f"Hơn {limit} yêu cầu điều chỉnh sau pha chế trong ca",
                    detail=f"Yêu cầu thứ {count}: {req.summary()}")
 
 
@@ -68,7 +68,7 @@ def _check_post_prep_value(req):
                 PostPrepCancellation.objects.filter(request__shift=req.shift).select_related("line"))
     if total > limit:
         open_exception(ExceptionCase.Kind.POST_PREP_VALUE, shift=req.shift, store=req.order.store, request=req,
-                       rule=f"Tổng giá trị món hủy sau pha chế trong ca vượt {limit:,} đ (BRU-12)".replace(",", "."),
+                       rule=f"Tổng giá trị món hủy sau pha chế trong ca vượt {limit:,} đ".replace(",", "."),
                        amount=total, detail=f"Tổng hủy sau pha chế {total:,} đ".replace(",", "."))
 
 
@@ -223,8 +223,13 @@ def escalate_due(now=None):
                 moved.append(req.pk)
                 from apps.core.push import notify_later
 
-                notify_later(approver_ids(req, now), f"Chuyển cấp duyệt: {req.summary()}"[:120],
-                             f"Quá hạn ở cấp trước; giờ chờ {req.get_level_display()}.", "/duyet/")
+                if req.level == Level.EXHAUSTED:  # chỉ còn một cấp duyệt (Chủ quán) nên quá hạn là hết hạn
+                    notify_later(approver_ids(req, now), f"Quá hạn duyệt: {req.summary()}"[:120],
+                                 "Chưa được duyệt kịp; thu ngân được thu tiền theo món khách thực nhận, yêu cầu chờ "
+                                 "hậu kiểm.", "/duyet/")
+                else:
+                    notify_later(approver_ids(req, now), f"Chuyển cấp duyệt: {req.summary()}"[:120],
+                                 f"Quá hạn ở cấp trước; giờ chờ {req.get_level_display()}.", "/duyet/")
     return moved
 
 
@@ -298,7 +303,7 @@ def apply_effects(req, actor, delivered=False):
         order.status = Order.Status.CANCELLED
         order.save(update_fields=["status", "updated_at"])
         approve_refund(order, actor, req.pk)
-        _exception(ExceptionCase.Kind.PAID_CANCELLED, req, rule="Hóa đơn đã thanh toán bị hủy (BRU-12)",
+        _exception(ExceptionCase.Kind.PAID_CANCELLED, req, rule="Hóa đơn đã thanh toán bị hủy",
                    amount=order.total, detail=f"{req.summary()} · duyệt bởi {actor}")
         payment = order.payment
         if payment is not None and not payment.orders.exclude(status=Order.Status.CANCELLED).exists():
@@ -339,7 +344,7 @@ def decide(user, operation_key, request_id, approve, note=""):
             req.status = Status.REJECTED
             if req.after_prep:
                 _exception(ExceptionCase.Kind.REJECTED_ADJUSTMENT, req,
-                           rule="Yêu cầu điều chỉnh sau pha chế bị từ chối (BRU-12)",
+                           rule="Yêu cầu điều chỉnh sau pha chế bị từ chối",
                            amount=_request_value(req),
                            detail=f"{req.summary()} · bị từ chối bởi {user} · {payload['note']}")
         req.decided_by, req.decided_at, req.decision_note = user, timezone.now(), payload["note"]

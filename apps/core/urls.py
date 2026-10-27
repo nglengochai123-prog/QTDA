@@ -12,6 +12,7 @@ urlpatterns = [
     path("offline/", views.offline, name="offline"),
     path("thong-bao-du-lieu/", views.data_notice, name="data_notice"),
     path("thong-bao/dang-ky/", views.push_subscribe, name="push_subscribe"),
+    path("thong-bao/thoi/", views.push_unsubscribe, name="push_unsubscribe"),
     path("thong-bao/trang-thai/", views.push_status, name="push_status"),
     path("thong-bao/thu/", views.push_test, name="push_test"),
     path("thong-bao/nhat-ky/", views.push_log, name="push_log"),

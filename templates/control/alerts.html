@@ -1,39 +1,37 @@
 {% extends "base.html" %}
+{% load static loi_thuong %}
 {% block title %}Cảnh báo · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><h1>Cảnh báo của bạn</h1></header>
-<details class="help-tip"><summary>Giải thích</summary><p>Mỗi cảnh báo có người xử lý chính và thời hạn theo Bảng 5.4. Quá hạn thì chuyển Chủ quán hoặc nhắc lại. Cảnh báo tự đóng khi điều kiện không còn; đóng tay phải ghi kết quả.</p></details>
-<section class="panel" aria-labelledby="push-title" data-push data-status-url="{% url 'core:push_status' %}" data-subscribe-url="{% url 'core:push_subscribe' %}" data-test-url="{% url 'core:push_test' %}" data-log-url="{% url 'core:push_log' %}" data-csrf="{{ csrf_token }}">
-  <h2 id="push-title">Thông báo đẩy trên điện thoại</h2>
-  <p data-push-text>Đang kiểm tra…</p>
-  <div class="action-row">
-    <button class="btn btn-primary" type="button" data-push-enable hidden>Bật thông báo trên thiết bị này</button>
-    <button class="btn btn-quiet" type="button" data-push-test hidden>Gửi thử đến thiết bị của tôi</button>
-  </div>
-  <div class="table-wrap" data-push-log hidden><table class="data-table">
-    <thead><tr><th scope="col">Thông báo</th><th scope="col">Máy chủ gửi lúc</th><th scope="col">Dịch vụ đẩy đã nhận</th><th scope="col">Điện thoại đã hiện</th><th scope="col">Đã chạm mở</th></tr></thead>
-    <tbody></tbody></table></div>
-  <details class="help-tip"><summary>Giải thích</summary><p>"Dịch vụ đẩy đã nhận" chỉ nghĩa là máy chủ gửi thành công tới dịch vụ của Google hoặc Apple. "Điện thoại đã hiện" do chính điện thoại báo về khi thông báo xuất hiện.</p></details>
+<header class="page-head"><div><h1>Cảnh báo</h1><p class="page-sub">Việc cần bạn xử lý, xếp theo loại. Mỗi việc có hạn; quá hạn thì được chuyển Chủ quán hoặc nhắc lại mỗi ngày. Việc tự đóng khi đã xử lý xong ở màn hình tương ứng; chỉ đóng tay khi đã xử lý cách khác, kèm kết quả.</p></div></header>
+
+<div class="stats">
+  <div class="stat{% if overdue %} stat-warn{% elif not open_count %} stat-ok{% endif %}"><p class="stat-label">Đang chờ xử lý</p><p class="stat-value">{{ open_count }}</p><p class="stat-note">{% if overdue %}{{ overdue }} việc đã quá hạn{% elif open_count %}Chưa có việc quá hạn{% else %}Không còn việc nào{% endif %}</p></div>
+  {% if urgent %}<div class="stat stat-danger"><p class="stat-label">Khẩn</p><p class="stat-value">{{ urgent }}</p><p class="stat-note">Cần xử lý ngay</p></div>{% endif %}
+  {% if stats %}<div class="stat"><p class="stat-label">7 ngày qua</p><p class="stat-value">{{ stats.total }}<span class="stat-of"> cảnh báo</span></p><p class="stat-note">{{ stats.escalated }} bị chuyển cấp{% if stats.avg_minutes is not None %} · xử lý trung bình {{ stats.avg_minutes|phut }}{% endif %}</p></div>{% endif %}
+</div>
+
+{% for g in groups %}
+<section class="card alert-group" aria-labelledby="ag-{{ g.kind }}">
+  <div class="card-head"><h2 id="ag-{{ g.kind }}">{{ g.label }} <span class="seg-count">{{ g.items|length }}</span></h2>
+    {% if g.kind == "ngoai_le" %}<a class="btn btn-quiet btn-sm" href="{% url 'control:exceptions' %}">Mở danh sách ngoại lệ</a>{% endif %}</div>
+  <ul class="row-list alert-list">{% for a in g.first %}{% include "control/_alert_row.html" %}{% endfor %}</ul>
+  {% if g.rest %}<details class="alert-more"><summary>Xem thêm {{ g.rest|length }} việc</summary>
+    <ul class="row-list alert-list">{% for a in g.rest %}{% include "control/_alert_row.html" %}{% endfor %}</ul></details>{% endif %}
 </section>
-{% if stats %}<p class="muted">7 ngày qua: {{ stats.total }} cảnh báo, {{ stats.to_owner }} đến Chủ quán, {{ stats.escalated }} bị chuyển cấp{% if stats.avg_minutes is not None %}, xử lý trung bình {{ stats.avg_minutes }} phút{% endif %}.</p>{% endif %}
-{% if open %}
-<ul class="ruled-list">
-  {% for a in open %}
-  <li class="param-row">
-    <div class="exc-text"><strong>{% if a.severity == "khan" %}<span class="flag-low">Khẩn</span> {% endif %}{{ a.title }}</strong>
-      <span class="muted">{{ a.get_status_display }} · xử lý: {{ a.handler_label }} · hạn {{ a.due_at|date:"H:i d/m" }}{% if a.is_overdue %} · <strong class="text-warn">quá hạn</strong>{% endif %}{% if a.reminded_count %} · đã nhắc {{ a.reminded_count }} lần{% endif %}</span>
-      {% if a.detail %}<span class="muted">{{ a.detail }}</span>{% endif %}
-      {% if a.link %}<a href="{{ a.link }}">Mở màn hình xử lý</a>{% endif %}</div>
-    <div class="approval-actions">
-      {% if a.status == "moi" %}<form method="post" data-once>{% csrf_token %}<input type="hidden" name="action" value="take"><input type="hidden" name="alert" value="{{ a.pk }}"><button class="btn btn-quiet" type="submit">Nhận xử lý</button></form>{% endif %}
-      <form method="post" class="inline-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="close"><input type="hidden" name="alert" value="{{ a.pk }}">
-        <input class="input input-sm" name="note" placeholder="Kết quả xử lý" required aria-label="Kết quả xử lý"><button class="btn btn-primary" type="submit">Đóng</button></form>
-    </div>
-  </li>
-  {% endfor %}
-</ul>
-{% else %}<div class="empty"><p><strong>Không có cảnh báo nào cần bạn xử lý.</strong></p></div>{% endif %}
-{% if closed %}<h2>Đã đóng gần đây</h2>
-<ul class="ruled-list compact">{% for a in closed %}<li class="row-between"><span>{{ a.title }} · {{ a.close_note }}</span><span class="muted">{{ a.closed_at|date:"H:i d/m" }} · {{ a.handling_minutes|floatformat:"0" }} phút</span></li>{% endfor %}</ul>{% endif %}
+{% empty %}
+<div class="empty"><p><strong>Không có việc nào cần bạn xử lý.</strong></p><p>Cảnh báo mới sẽ hiện ở đây và được gửi lên điện thoại nếu bạn bật thông báo bên dưới.</p></div>
+{% endfor %}
+
+{% if closed %}
+<section class="card" aria-labelledby="closed-title">
+  <div class="card-head"><h2 id="closed-title">Đã đóng gần đây</h2></div>
+  <ul class="row-list">{% for a in closed %}
+    <li class="is-done"><span class="row-day">{{ a.closed_at|date:"d/m" }}<small>{{ a.closed_at|date:"H:i" }}</small></span>
+      <span class="row-main">{{ a.title|loi_thuong }}<small>{% if a.auto_closed %}Tự đóng khi đã xử lý xong{% else %}{{ a.close_note }}{% if a.closed_by %} · {{ a.closed_by }}{% endif %}{% endif %}</small></span></li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% include "pwa/_push_card.html" with log=True %}
 {% endblock %}
-{% block scripts %}{% load static %}<script src="{% static 'js/push.js' %}" defer></script>{% endblock %}
+{% block scripts %}<script src="{% static 'js/push.js' %}" defer></script>{% endblock %}

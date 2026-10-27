@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Không tìm thấy trang · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head"><h1>Không tìm thấy trang này</h1></header>
+<div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
+  <div>Địa chỉ có thể gõ sai, hoặc mục này đã bị xóa. Mở lại từ trang chủ hoặc thanh điều hướng.</div></div>
+<p><a class="btn btn-primary" href="{% url 'core:home' %}">Về trang chủ</a></p>
+{% endblock %}

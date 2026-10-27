@@ -8,7 +8,15 @@
   var menu = JSON.parse(document.getElementById("menu-data").textContent);
   // Tồn có thể dùng theo nguyên liệu, để tính ngay số ly còn đáp ứng cho lựa chọn đang chọn (FR-01, AC-03).
   var stockLeft = JSON.parse(document.getElementById("stock-data").textContent);
-  var DRAFT_KEY = "lam-order-draft";
+  // Nháp theo từng tài khoản: máy dùng chung ở quầy thì người đăng nhập sau không gửi nhầm nháp của người trước.
+  var DRAFT_KEY = "lam-order-draft:" + (document.body.dataset.user || "");
+  try {
+    var legacy = localStorage.getItem("lam-order-draft");  // nháp lưu trước khi tách theo tài khoản
+    if (legacy !== null) {
+      if (localStorage.getItem(DRAFT_KEY) === null) localStorage.setItem(DRAFT_KEY, legacy);
+      localStorage.removeItem("lam-order-draft");
+    }
+  } catch (e) {}
   var vnd = new Intl.NumberFormat("vi-VN");
   var items = {};
   menu.forEach(function (group) { group.items.forEach(function (item) { items[item.id] = item; }); });

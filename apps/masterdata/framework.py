@@ -6,14 +6,15 @@ Mọi thay đổi đi qua một chỗ để ghi nhật ký trước/sau (FR-61) 
 """
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Callable
 
 from django import forms
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.db.models import Q
-from django.forms import inlineformset_factory, modelform_factory
+from django.forms import BaseInlineFormSet, inlineformset_factory, modelform_factory
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -21,6 +22,7 @@ from django.urls import reverse
 from apps.accounts.permissions import Cap, _deny, user_can
 from apps.audit.models import Action
 from apps.audit.services import changed_fields, record, snapshot
+from apps.core import numbers
 from apps.core.paging import paginate
 
 
@@ -101,6 +103,11 @@ def get_resource(request, key):
 
 def _style(form):
     for f in form.fields.values():
+        # Ô chọn để trống được: thay dòng "---------" mặc định bằng chữ.
+        if isinstance(f, forms.ModelChoiceField) and f.empty_label == "---------":
+            f.empty_label = "Chưa chọn"
+        elif isinstance(f, forms.ChoiceField) and list(f.choices[:1]) == [("", "---------")]:
+            f.choices = [("", "Chưa chọn"), *f.choices[1:]]
         widget = f.widget
         if isinstance(widget, (forms.CheckboxInput, forms.CheckboxSelectMultiple, forms.RadioSelect)):
             continue
@@ -117,7 +124,30 @@ def _formfield(db_field, **kwargs):
         kwargs["widget"] = forms.CheckboxSelectMultiple
     elif isinstance(db_field, models.TextField):
         kwargs["widget"] = forms.Textarea(attrs={"rows": 3})
+    else:
+        return numbers.formfield(db_field, **kwargs)
     return db_field.formfield(**kwargs)
+
+
+def _check_duplicates(form, request):
+    """Ràng buộc không trùng theo cửa hàng (tên nhóm món, mã bàn…) có ô cửa hàng không nằm trong biểu mẫu nên Django không
+    tự kiểm; lưu trùng thì cơ sở dữ liệu báo lỗi và trang hỏng. Kiểm ở đây để báo ngay dưới ô bị trùng."""
+    from apps.core.models import Store
+
+    model, instance = form._meta.model, form.instance
+    store_id = instance.store_id if getattr(instance, "store_id", None) else (request.user.store_id
+                                                                             or Store.get_default().pk)
+    for c in model._meta.constraints:
+        if not isinstance(c, models.UniqueConstraint) or c.condition is not None or "store" not in c.fields:
+            continue
+        others = [f for f in c.fields if f != "store"]
+        if not others or not all(f in form.cleaned_data for f in others):
+            continue
+        lookup = {"store_id": store_id, **{f: form.cleaned_data[f] for f in others}}
+        if model._default_manager.filter(**lookup).exclude(pk=instance.pk).exists():
+            name = others[-1]
+            form.add_error(name, f"Đã có {form.fields[name].label.lower()} \"{form.cleaned_data[name]}\"; "
+                                 f"đặt khác hoặc sửa mục đã có.")
 
 
 def _assign_store(obj, request):
@@ -136,6 +166,10 @@ def _cell(obj, accessor):
     display = getattr(obj, f"get_{accessor}_display", None) if isinstance(accessor, str) else None
     if display:
         return display()
+    if isinstance(value, Decimal):
+        return numbers.fmt(value)
+    if isinstance(value, int):
+        return numbers.fmt(value, 0)
     return "" if value is None else value
 
 
@@ -155,19 +189,27 @@ def list_view(request, key):
             qs = qs.filter(**{fld: {"1": True, "0": False}.get(value, value)})
         active_filters.append({"param": param, "label": label, "choices": choices, "value": value})
     page, qs_params = paginate(request, qs)
-    rows = [{"obj": obj, "cells": [_cell(obj, acc) for _, acc in resource.columns]} for obj in page.object_list]
+    rows = [{"obj": obj, "cells": [(h, _cell(obj, acc)) for h, acc in resource.columns]} for obj in page.object_list]
     return render(request, "masterdata/list.html", {
         "r": resource, "page": page, "qs": qs_params, "rows": rows, "q": q, "filters": active_filters,
         "headers": [h for h, _ in resource.columns],
     })
 
 
+class _InlineFormSet(BaseInlineFormSet):
+    def get_unique_error_message(self, unique_check):
+        # Câu mặc định ghi tên trường tiếng Anh ("trùng lặp cho name"); dùng nhãn của ô.
+        labels = [str(self.form.base_fields[f].label).lower() for f in unique_check
+                  if f in self.form.base_fields and f != self.fk.name]
+        return f"Có hai dòng trùng {' và '.join(labels) or 'nội dung'}; mỗi dòng cần khác nhau."
+
+
 def _formset_classes(resource):
     classes = []
     for inline in resource.inlines:
         classes.append(inlineformset_factory(
-            resource.model, inline.model, fields=inline.fields, fk_name=inline.fk_name, extra=inline.extra,
-            can_delete=inline.can_delete, formfield_callback=_formfield))
+            resource.model, inline.model, formset=_InlineFormSet, fields=inline.fields, fk_name=inline.fk_name,
+            extra=inline.extra, can_delete=inline.can_delete, formfield_callback=_formfield))
     return classes
 
 
@@ -205,15 +247,21 @@ def edit_view(request, key, pk=None):
             formsets.append({"inline": inline, "fs": fs, "editable": inline_editable})
     if data is not None:
         live = [x for x in formsets if x["editable"]]
+        if form.is_valid():
+            _check_duplicates(form, request)
         if form.is_valid() and all(x["fs"].is_valid() for x in live):
             try:
                 with transaction.atomic():
                     saved = _save(request, resource, form, obj, live)
             except ValidationError as error:
                 form.add_error(None, error)
+            except IntegrityError:  # trùng ở dòng con (ví dụ hai cỡ cùng tên) mà biểu mẫu chưa bắt được
+                form.add_error(None, "Có mục trùng tên hoặc mã với mục đã có; kiểm tra lại rồi lưu.")
             else:
                 messages.success(request, f"Đã lưu {resource.singular.lower()} {saved}.")
-                if obj is None and resource.inlines:
+                # Bản ghi mới có dòng con hoặc thao tác riêng (đặt mật khẩu, ghi tồn đầu kỳ): mở luôn trang của nó
+                # để làm tiếp bước đó.
+                if obj is None and (resource.inlines or resource.actions):
                     return redirect("masterdata:edit", key=key, pk=saved.pk)
                 return redirect("masterdata:list", key=key)
     actions = []

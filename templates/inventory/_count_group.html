@@ -1,0 +1,22 @@
+{% if rows %}
+<section class="card" aria-labelledby="g-{{ gid }}">
+  <div class="card-head"><div><h2 id="g-{{ gid }}">{{ title }}</h2><p class="card-sub">{{ sub }}</p></div></div>
+  <ul class="row-list count-list">
+    {% for i in rows %}
+    <li class="{% if i.today %}is-done{% endif %}{% if i.asked %} is-asked{% endif %}">
+      <span class="row-main"><strong>{{ i.name }}</strong>{% if i.asked %}<span class="pill pill-warn">Được đề nghị kiểm lại</span>{% elif i.today and i.last.status == "cho_xac_nhan" %}<span class="pill pill-warn">Chờ xác nhận</span>{% elif i.today %}<span class="pill pill-ok">Đã kiểm {{ i.last.created_at|date:"H:i" }}</span>{% endif %}
+        <small>Trên sổ {{ i.stock.physical|floatformat:"-2g" }} {{ i.get_unit_display }}{% if i.last and not i.today %} · lần trước {{ i.last.created_at|date:"d/m" }}{% if i.last.difference %}, lệch {% if i.last.difference > 0 %}+{% endif %}{{ i.last.difference|floatformat:"-2g" }}{% endif %}{% elif not i.last %} · chưa kiểm trong 30 ngày{% endif %}</small></span>
+      <form data-draft="kiem-ke-{{ i.pk }}" method="post" class="count-form" data-once data-physical="{{ i.stock.physical|stringformat:'s' }}" data-threshold="{{ threshold }}" data-unit="{{ i.get_unit_display }}">{% csrf_token %}
+        <input type="hidden" name="operation_key" value="{{ i.op }}"><input type="hidden" name="ingredient" value="{{ i.pk }}">
+        <label class="unit-input"><span class="visually-hidden">{{ i.name }} đếm được</span>
+          <input class="input input-sm" name="counted" inputmode="decimal" autocomplete="off" placeholder="Đếm được" required><span aria-hidden="true">{{ i.get_unit_display }}</span></label>
+        <button class="btn btn-primary btn-sm" type="submit">Lưu</button>
+        <p class="count-diff" aria-live="polite"></p>
+        <label class="count-reason"><span class="visually-hidden">Lý do lệch</span>
+          <input class="input input-sm" name="reason" maxlength="255" placeholder="Lý do lệch (bắt buộc khi lệch nhiều)"></label>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}

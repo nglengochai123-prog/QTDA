@@ -12,6 +12,8 @@ Mỗi hàm trả về dict hình học; mẫu ở templates/reports/charts/ vẽ
 import math
 from datetime import timedelta
 
+from apps.core import numbers
+
 WIDTH = 640
 # Bề rộng hệ tọa độ theo chỗ đặt, để chữ 11–12px trong SVG hiện gần đúng cỡ đó trên màn hình máy tính:
 # thẻ chiếm cả hàng, thẻ nửa hàng (grid-2), thẻ một phần ba hàng (grid-3).
@@ -438,7 +440,7 @@ def stacked(parts, target):
         w = value / top * plot_w
         if w > 0:
             segs.append({"label": label, "value": value, "x": round(x, 1), "w": round(max(w - 2, 1), 1), "slot": slot,
-                         "tip": f"{label}: {value:,} đ".replace(",", ".")})
+                         "tip": f"{label}: {numbers.fmt(value, 0)} đ"})
         x += w
     return {"segs": segs, "target_x": round(x0 + target / top * plot_w, 1), "w": x0 + plot_w + 8, "h": 56,
             "total": total, "target": target}

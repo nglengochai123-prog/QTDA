@@ -19,7 +19,7 @@ from apps.reports import charts, insights, services
 
 
 def photo():
-    return SimpleUploadedFile("hd.jpg", b"jpeg", content_type="image/jpeg")
+    return SimpleUploadedFile("hd.jpg", b"\xff\xd8\xffjpeg", content_type="image/jpeg")
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="lam-test-media-"))

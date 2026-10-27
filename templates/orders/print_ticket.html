@@ -22,11 +22,11 @@
 </head>
 <body>
   <h1>{{ order.code }}</h1>
-  <div class="meta"><span>Bàn {{ order.table.code }}</span><span>{{ lines|length }} món</span></div>
+  <div class="meta"><span>Bàn {{ order.table.code }}</span><span>{{ cups }} ly</span></div>
   <div class="time">Gửi lúc {{ order.created_at|date:"H:i d/m/Y" }} · {{ order.created_by }}</div>
   <ul>
     {% for line in lines %}
-    <li><span class="qty">{{ line.quantity }}</span><span class="name">{{ line.item_name }} {{ line.size_name }}</span>
+    <li><span class="qty">{{ line.to_make }}</span><span class="name">{{ line.item_name }} {{ line.size_name }}</span>
       {% if line.options.all %}<span class="opt">{% for o in line.options.all %}{{ o.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
       {% if line.note %}<span class="note">Ghi chú: {{ line.note }}</span>{% endif %}</li>
     {% endfor %}

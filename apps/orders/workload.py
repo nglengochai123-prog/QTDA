@@ -33,9 +33,10 @@ def _pending_at(line, moment):
     return max(line.quantity - line.cancelled_quantity - already, 0)
 
 
-def day_frames(day):
+def day_frames(day, now=None):
     from apps.staff.timekeeping import presence
 
+    now = now or timezone.now()
     start = timezone.make_aware(datetime.combine(day, time.min))
     end = start + timedelta(days=1)
     lines = list(OrderLine.objects.filter(order__created_at__gte=start - timedelta(hours=12),
@@ -43,9 +44,12 @@ def day_frames(day):
                  .select_related("order", "order__backup_slip", "item__group"))
     standard = params.get("wait_standard_minutes", at=start)
     backlog_limit = params.get("bar_backlog_limit", at=start)
+    open_hour, close_hour = params.get("open_hour", at=start), params.get("close_hour", at=start)
     frames = []
     for hour in range(24):
         f_start, f_end = start + timedelta(hours=hour), start + timedelta(hours=hour + 1)
+        if f_start >= now:
+            break  # khung chưa tới
         in_frame = [l for l in lines if f_start <= _order_time(l) < f_end]
         cups = sum(l.quantity - l.cancelled_quantity for l in in_frame)
         load = sum((l.quantity - l.cancelled_quantity) * l.item.group.load_factor for l in in_frame)
@@ -54,8 +58,8 @@ def day_frames(day):
         backlog = sum(_pending_at(l, f_end) for l in lines)
         med = Decimal(str(round(median(waits), 1))) if waits else None
         over = bool((med is not None and med > standard) or backlog > backlog_limit)
-        if not in_frame and not backlog:
-            continue
+        if not in_frame and (not backlog or not open_hour <= hour < close_hour):
+            continue  # ngoài giờ mở cửa, món tồn từ tối trước không phải tải của khung đó
         frames.append({"start": f_start, "end": f_end, "orders": len({l.order_id for l in in_frame}), "cups": cups,
                        "load": Decimal(load).quantize(Decimal("0.1")), "median_wait": med, "backlog": backlog,
                        "overloaded": over, "presence": presence(f_start, f_end)})

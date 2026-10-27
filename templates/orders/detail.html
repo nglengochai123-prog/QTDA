@@ -2,7 +2,7 @@
 {% load humanize %}
 {% block title %}Đơn {{ order.code }} · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<p><a href="{% url 'orders:lookup' %}">‹ Tra cứu đơn</a></p>
+<nav class="crumbs"><a href="{% url 'orders:lookup' %}">‹ Tra cứu đơn</a></nav>
 <header class="page-head">
   <h1>Đơn {{ order.code }} <span class="muted">· Bàn {{ order.table.code }}</span></h1>
   <span class="chip">{{ order.get_status_display }}</span>
@@ -16,11 +16,11 @@
   {% if slip %}<div><dt>Phiếu dự phòng</dt><dd class="dd-text">{{ slip }} · bán lúc {{ slip.sold_at|date:"H:i d/m" }}{% if slip.confirmed_by %} · xác nhận bởi {{ slip.confirmed_by }}{% endif %}</dd></div>{% endif %}
 </dl>
 <section class="panel" aria-labelledby="ln-title"><h2 id="ln-title">Món</h2>
-  <div class="table-wrap"><table class="data-table">
+  <div class="table-wrap"><table class="data-table table-stack">
     <thead><tr><th scope="col">Món</th><th scope="col" class="num">Số ly</th><th scope="col" class="num">Đã pha</th><th scope="col" class="num">Hủy trước pha</th><th scope="col" class="num">Hủy sau pha</th><th scope="col" class="num">Đơn giá</th><th scope="col">Định mức</th><th scope="col">Trạng thái</th></tr></thead>
     <tbody>{% for l in lines %}<tr><th scope="row">{{ l.item_name }} {{ l.size_name }}{% for o in l.options.all %} · {{ o.name }}{% endfor %}{% if l.note %} <span class="muted">({{ l.note }})</span>{% endif %}</th>
-      <td class="num">{{ l.quantity }}</td><td class="num">{{ l.done_quantity }}</td><td class="num">{{ l.cancelled_quantity }}</td><td class="num">{{ l.voided_done_quantity }}</td><td class="num">{{ l.unit_price|intcomma }} đ</td>
-      <td>{% if l.recipe_version %}Bản {{ l.recipe_version.number }}{% else %}Không dùng nguyên liệu{% endif %}</td><td>{{ l.get_status_display }}</td></tr>{% endfor %}</tbody>
+      <td class="num" data-label="Số ly">{{ l.quantity }}</td><td class="num" data-label="Đã pha">{{ l.done_quantity }}</td><td class="num" data-label="Hủy trước pha">{% if l.cancelled_quantity %}{{ l.cancelled_quantity }}{% endif %}</td><td class="num" data-label="Hủy sau pha">{% if l.voided_done_quantity %}{{ l.voided_done_quantity }}{% endif %}</td><td class="num" data-label="Đơn giá">{{ l.unit_price|intcomma }} đ</td>
+      <td class="stack-hide">{% if l.recipe_version %}Bản {{ l.recipe_version.number }}{% else %}Không dùng nguyên liệu{% endif %}</td><td data-label="Trạng thái"><span class="pill {% if l.status == 'da_huy' %}pill-danger{% elif l.status == 'da_phuc_vu' %}pill-ok{% else %}pill-neutral{% endif %}">{{ l.get_status_display }}</span></td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
 <section class="panel" aria-labelledby="rq-title"><h2 id="rq-title">Yêu cầu điều chỉnh và hoàn tiền</h2>

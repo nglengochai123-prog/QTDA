@@ -1,41 +1,76 @@
 {% extends "base.html" %}
-{% block title %}Báo cáo nguyên vật liệu · {{ STORE_NAME }}{% endblock %}
+{% block title %}Hao hụt và kiểm kê · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
-<header class="page-head"><h1>Báo cáo nguyên vật liệu tháng {{ month }}</h1>
-  <form method="get" class="inline-form filter-row" aria-label="Bộ lọc"><label for="f-month">Tháng</label><input class="input input-sm" id="f-month" type="month" name="thang" value="{{ month_value }}"><button class="btn btn-quiet" type="submit">Xem</button></form></header>
-<dl class="figure-grid"><div class="figure-key"><dt>Trường hợp thiếu nguyên liệu</dt><dd>{{ shortage_total }}</dd></div><div><dt>Mục tiêu</dt><dd class="dd-text">không quá 1 mỗi tháng</dd></div></dl>
+<nav class="crumbs"><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></nav>
+<header class="page-head"><div><h1>Hao hụt và kiểm kê tháng {{ month }}</h1><p class="page-sub">Thiếu nguyên liệu, tiêu hao so với định mức, kiểm kê và hao hụt trong tháng.</p></div>
+  <div class="page-tools">
+    <a class="btn btn-quiet btn-sm" href="?thang={{ prev_month|date:'Y-m' }}">‹ Tháng {{ prev_month|date:"n" }}</a>
+    {% if next_month %}<a class="btn btn-quiet btn-sm" href="?thang={{ next_month|date:'Y-m' }}">Tháng {{ next_month|date:"n" }} ›</a>{% endif %}
+    <form method="get" class="inline-form" aria-label="Chọn tháng"><input class="input input-sm" type="month" name="thang" value="{{ month_value }}" aria-label="Tháng" onchange="this.form.submit()"><noscript><button class="btn btn-quiet btn-sm" type="submit">Xem</button></noscript></form>
+  </div></header>
 
-<section class="panel"><h2>Trường hợp thiếu theo nguyên liệu</h2>
-  {% if shortage_by_ingredient %}<ul class="ruled-list compact">{% for r in shortage_by_ingredient %}<li class="row-between"><span>{{ r.ingredient__name }}</span><strong>{{ r.n }}</strong></li>{% endfor %}</ul>{% else %}<p class="muted">Không có.</p>{% endif %}
-</section>
-<section class="panel"><h2>Trường hợp thiếu theo ngày</h2>
-  {% if shortage_by_day %}<ul class="ruled-list compact">{% for r in shortage_by_day %}<li class="row-between"><span>{{ r.day|date:"d/m/Y" }}</span><strong>{{ r.n }}</strong></li>{% endfor %}</ul>{% else %}<p class="muted">Không có.</p>{% endif %}
-  {% if shortages %}<ul class="ruled-list compact">{% for s in shortages %}<li>{{ s.day|date:"d/m" }} · {{ s.ingredient.name }} · {{ s.get_source_display }}{% if s.source_ref %} · {{ s.source_ref }}{% endif %}</li>{% endfor %}</ul>{% endif %}
-</section>
-<section class="panel"><h2>Hao hụt xuất kho theo lý do</h2>
-  {% if waste %}<ul class="ruled-list compact">{% for w in waste %}<li class="row-between"><span>{{ w.ingredient__name }} · {{ w.reason_label }}</span><strong>{{ w.total|floatformat:"-2g" }} {{ w.ingredient__unit }}</strong></li>{% endfor %}</ul>{% else %}<p class="muted">Không có.</p>{% endif %}
-</section>
-<section class="panel"><h2>Hủy sau pha chế (đã trừ khi pha, không trừ thêm)</h2>
-  {% if post_prep %}<ul class="ruled-list compact">{% for ing, qty in post_prep %}<li class="row-between"><span>{{ ing.name }}</span><strong>{{ qty|floatformat:"-2g" }} {{ ing.get_unit_display }}</strong></li>{% endfor %}</ul>{% else %}<p class="muted">Không có.</p>{% endif %}
-</section>
-<section class="panel"><h2>Kiểm kê trong tháng</h2>
-  {% if counts %}<div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">Lúc</th><th scope="col">Nguyên liệu</th><th scope="col" class="num">Vật lý</th><th scope="col" class="num">Đếm</th><th scope="col" class="num">Chênh lệch</th><th scope="col">Trạng thái</th><th scope="col">Người kiểm</th></tr></thead>
-  <tbody>{% for c in counts %}<tr><td>{{ c.created_at|date:"H:i d/m" }}</td><th scope="row">{{ c.ingredient.name }}</th><td class="num">{{ c.physical_at_count|floatformat:"-2g" }}</td><td class="num">{{ c.counted|floatformat:"-2g" }}</td><td class="num">{{ c.difference|floatformat:"-2g" }} ({{ c.percent }}%)</td><td>{{ c.get_status_display }}</td><td>{{ c.counter }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p class="muted">Chưa có.</p>{% endif %}
-</section>
+<div class="stats">
+  <div class="stat{% if shortage_total > shortage_target %} stat-warn{% else %} stat-ok{% endif %}"><p class="stat-label">Thiếu nguyên liệu</p><p class="stat-value">{{ shortage_total }}<span class="stat-of"> trường hợp</span></p><p class="stat-note">Mục tiêu không quá {{ shortage_target }} mỗi tháng</p></div>
+  <div class="stat{% if consumption_over %} stat-warn{% endif %}"><p class="stat-label">Tiêu hao vượt mức</p><p class="stat-value">{{ consumption_over }}<span class="stat-of"> / {{ consumption|length }} kỳ</span></p><p class="stat-note">{% if consumption_over %}Mỗi kỳ vượt mức đã mở ngoại lệ{% elif consumption %}Mọi kỳ trong mức cho phép{% else %}Chưa có kỳ đối chiếu{% endif %}</p></div>
+  <div class="stat{% if pending_counts %} stat-warn{% endif %}"><p class="stat-label">Kiểm kê</p><p class="stat-value">{{ counts|length }}<span class="stat-of"> lần</span></p><p class="stat-note">{% if pending_counts %}<a href="{% url 'inventory:count' %}">{{ pending_counts }} lần chờ Chủ quán xác nhận</a>{% else %}Không có lần nào chờ xác nhận{% endif %}</p></div>
+</div>
 
-<section class="panel" aria-labelledby="cons-title">
-  <h2 id="cons-title">Đối chiếu tiêu hao nguyên liệu trọng yếu</h2>
-  <details class="help-tip"><summary>Giải thích</summary><p>Thực tế là lượng đã dùng theo kiểm kê; theo đơn là lượng lẽ ra phải dùng theo định mức của các ly đã pha. Chênh lệch lớn cần kiểm tra lại.</p></details>
+{% if shortages %}
+<section class="card" aria-labelledby="sh-title">
+  <div class="card-head"><h2 id="sh-title">Trường hợp thiếu nguyên liệu</h2></div>
+  <div class="card-body chip-row">{% for r in shortage_by_ingredient %}<span class="chip">{{ r.ingredient__name }} <strong>{{ r.n }}</strong></span>{% endfor %}</div>
+  <ul class="row-list">{% for s in shortages %}<li><span class="row-day">{{ s.day|date:"d/m" }}</span><span class="row-main">{{ s.ingredient.name }}<small>{{ s.get_source_display }}{% if s.source_ref %} · {{ s.source_ref }}{% endif %}</small></span></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+<section class="card" aria-labelledby="cons-title">
+  <div class="card-head"><div><h2 id="cons-title">Tiêu hao nguyên liệu trọng yếu</h2><p class="card-sub">Thực tế là lượng đã dùng tính từ hai lần kiểm kê liền nhau; theo đơn là lượng lẽ ra phải dùng theo định mức của các ly đã pha.</p></div></div>
   {% if consumption %}
-  <div class="table-wrap"><table class="data-table">
-    <thead><tr><th scope="col">Nguyên liệu</th><th scope="col">Kỳ</th><th scope="col" class="num">Thực tế</th><th scope="col" class="num">Theo đơn</th><th scope="col" class="num">Vượt</th><th scope="col">Kết quả</th></tr></thead>
+  <div class="table-wrap"><table class="data-table table-stack">
+    <thead><tr><th scope="col">Nguyên liệu</th><th scope="col" class="num">Thực tế</th><th scope="col" class="num">Theo đơn</th><th scope="col" class="num">Vượt</th><th scope="col">Kỳ vượt mức</th></tr></thead>
+    <tbody>{% for r in consumption_summary %}<tr><th scope="row">{{ r.ingredient.name }}</th>
+      <td class="num" data-label="Thực tế">{{ r.actual|floatformat:"-2g" }} <span class="muted">{{ r.ingredient.get_unit_display }}</span></td><td class="num" data-label="Theo đơn">{{ r.by_orders|floatformat:"-2g" }}</td>
+      <td class="num" data-label="Vượt">{% if r.excess > 0 %}+{% endif %}{{ r.excess|floatformat:"-2g" }}{% if r.percent is not None %} <span class="muted">({{ r.percent|floatformat:"-1" }}%)</span>{% endif %}</td>
+      <td data-label="Kỳ vượt mức">{% if r.over %}<span class="pill pill-warn">{{ r.over }} / {{ r.n }} kỳ</span>{% else %}<span class="muted">0 / {{ r.n }} kỳ</span>{% endif %}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <details class="card-more"><summary>Xem từng kỳ ({{ consumption|length }})</summary>
+  <div class="table-wrap"><table class="data-table compact table-stack">
+    <thead><tr><th scope="col">Kỳ</th><th scope="col">Nguyên liệu</th><th scope="col" class="num">Thực tế</th><th scope="col" class="num">Theo đơn</th><th scope="col" class="num">Vượt</th><th scope="col">Kết quả</th></tr></thead>
     <tbody>{% for c in consumption %}
-    <tr><th scope="row">{{ c.ingredient.name }}</th><td>{{ c.from_count.created_at|date:"H:i d/m" }}–{{ c.to_count.created_at|date:"H:i d/m" }}</td>
-      <td class="num">{{ c.actual|floatformat:"-2g" }}</td><td class="num">{{ c.by_orders|floatformat:"-2g" }}</td>
-      <td class="num">{{ c.excess|floatformat:"-2g" }} ({{ c.percent|floatformat:"-2" }}%)</td>
-      <td>{% if c.over %}<span class="flag-low">Vượt mức {{ c.tolerance_percent }}%: đã tạo ngoại lệ</span>{% else %}Trong mức {{ c.tolerance_percent }}%{% endif %}</td></tr>
-    {% endfor %}</tbody></table></div>
-  {% else %}<p class="muted">Chưa có kết quả. Cần ít nhất hai lần kiểm kê đã áp dụng của nguyên liệu trọng yếu.</p>{% endif %}
+    <tr><td class="nowrap" data-label="Kỳ">{{ c.from_count.created_at|date:"d/m" }}–{{ c.to_count.created_at|date:"d/m" }}</td><th scope="row">{{ c.ingredient.name }}</th>
+      <td class="num" data-label="Thực tế">{{ c.actual|floatformat:"-2g" }}</td><td class="num" data-label="Theo đơn">{{ c.by_orders|floatformat:"-2g" }}</td>
+      <td class="num" data-label="Vượt">{% if c.excess > 0 %}+{% endif %}{{ c.excess|floatformat:"-2g" }} <span class="muted">({{ c.percent|floatformat:"-2" }}%)</span></td>
+      <td data-label="Kết quả">{% if c.over %}<span class="pill pill-warn">Vượt mức {{ c.tolerance_percent }}%</span>{% else %}<span class="muted">Trong mức {{ c.tolerance_percent }}%</span>{% endif %}</td></tr>
+    {% endfor %}</tbody></table></div></details>
+  {% else %}<p class="card-body muted">Chưa có kết quả. Cần ít nhất hai lần kiểm kê đã áp dụng của nguyên liệu trọng yếu.</p>{% endif %}
 </section>
+
+<section class="card" aria-labelledby="count-title">
+  <div class="card-head"><h2 id="count-title">Kiểm kê trong tháng</h2></div>
+  {% if counts %}
+  <div class="table-wrap"><table class="data-table table-stack">
+    <thead><tr><th scope="col">Nguyên liệu</th><th scope="col" class="num">Số lần</th><th scope="col" class="num">Tổng chênh lệch</th><th scope="col">Lệch nhiều nhất</th><th scope="col">Chờ xác nhận</th></tr></thead>
+    <tbody>{% for r in count_summary %}<tr><th scope="row">{{ r.ingredient.name }}</th><td class="num" data-label="Số lần">{{ r.n }}</td>
+      <td class="num" data-label="Tổng chênh lệch">{% if r.total > 0 %}+{% endif %}{{ r.total|floatformat:"-2g" }} <span class="muted">{{ r.ingredient.get_unit_display }}</span></td>
+      <td data-label="Lệch nhiều nhất">{% if r.worst.difference > 0 %}+{% endif %}{{ r.worst.difference|floatformat:"-2g" }} <span class="muted">({{ r.worst.percent|floatformat:"-2" }}%) ngày {{ r.worst.created_at|date:"d/m" }}</span></td>
+      <td data-label="Chờ xác nhận">{% if r.pending %}<span class="pill pill-warn">{{ r.pending }}</span>{% else %}<span class="muted">Không</span>{% endif %}</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <details class="card-more"><summary>Xem từng lần ({{ counts|length }})</summary>
+  <div class="table-wrap"><table class="data-table compact table-stack"><thead><tr><th scope="col">Lúc</th><th scope="col">Nguyên liệu</th><th scope="col" class="num">Trên sổ</th><th scope="col" class="num">Đếm được</th><th scope="col" class="num">Chênh lệch</th><th scope="col">Trạng thái</th><th scope="col">Người kiểm</th></tr></thead>
+  <tbody>{% for c in counts %}<tr><td class="nowrap" data-label="Lúc">{{ c.created_at|date:"H:i d/m" }}</td><th scope="row">{{ c.ingredient.name }}</th><td class="num" data-label="Trên sổ">{{ c.physical_at_count|floatformat:"-2g" }}</td><td class="num" data-label="Đếm được">{{ c.counted|floatformat:"-2g" }}</td><td class="num" data-label="Chênh lệch">{% if c.difference > 0 %}+{% endif %}{{ c.difference|floatformat:"-2g" }} <span class="muted">({{ c.percent|floatformat:"-2" }}%)</span></td><td data-label="Trạng thái">{% if c.status == "cho_xac_nhan" %}<span class="pill pill-warn">{{ c.get_status_display }}</span>{% else %}{{ c.get_status_display }}{% endif %}</td><td class="nowrap" data-label="Người kiểm">{{ c.counter }}</td></tr>{% endfor %}</tbody></table></div></details>
+  {% else %}<p class="card-body muted">Chưa có lần kiểm kê nào trong tháng.</p>{% endif %}
+</section>
+
+<div class="grid-2">
+<section class="card" aria-labelledby="waste-title">
+  <div class="card-head"><h2 id="waste-title">Hao hụt theo lý do</h2></div>
+  {% if waste %}<ul class="row-list">{% for w in waste %}<li><span class="row-main">{{ w.ingredient__name }}<small>{{ w.reason_label }}</small></span><span class="num-cell">{{ w.total|floatformat:"-2g" }} {{ w.unit }}</span></li>{% endfor %}</ul>
+  {% else %}<p class="card-body muted">Không có hao hụt.</p>{% endif %}
+</section>
+<section class="card" aria-labelledby="pp-title">
+  <div class="card-head"><div><h2 id="pp-title">Hủy sau pha chế</h2><p class="card-sub">Nguyên liệu đã trừ khi pha, không trừ thêm.</p></div></div>
+  {% if post_prep %}<ul class="row-list">{% for ing, qty in post_prep %}<li><span class="row-main">{{ ing.name }}</span><span class="num-cell">{{ qty|floatformat:"-2g" }} {{ ing.get_unit_display }}</span></li>{% endfor %}</ul>
+  {% else %}<p class="card-body muted">Không có món hủy sau pha chế.</p>{% endif %}
+</section>
+</div>
 {% endblock %}

@@ -224,3 +224,16 @@ class HistoricalScreenTests(BackupBase):
                                "version_1": self.d["v1"].pk, "note": "Bảng giá in"})
         slip.refresh_from_db()
         self.assertEqual((slip.status, slip.order.total), ("da_nhap_bu", 30000))
+
+
+class SlipTimeTypoTests(BackupBase):
+    def test_sale_or_restore_time_in_the_future_is_refused(self):
+        self.issue()
+        later = timezone.now() + timedelta(days=1)
+        for field in ("sold_at", "restored_at"):
+            payload = {"number": 151, "sold_at": self.sold_at.isoformat(), "restored_at": self.sold_at.isoformat(),
+                       "method": "tien_mat", "table": self.d["table"].pk, "lines": cart(self.d)["lines"],
+                       field: later.isoformat()}
+            with self.assertRaisesMessage(ValidationError, "chưa tới"):
+                backup.enter_slip(self.manager, key(), payload)
+        self.assertFalse(BackupSlip.objects.exists())

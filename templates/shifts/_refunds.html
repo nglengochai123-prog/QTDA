@@ -1,0 +1,17 @@
+{% load humanize %}
+{% if pending_refunds %}
+<section class="panel panel-warn" aria-labelledby="refund-title">
+  <h2 id="refund-title">Hoàn tiền đã duyệt, chờ trả khách</h2>
+  <details class="help-tip"><summary>Giải thích</summary><p>Bấm "Đã hoàn tiền" khi thực sự đưa tiền mặt hoặc chuyển khoản lại cho khách. Khoản hoàn được ghi vào ca đang mở lúc bấm.</p></details>
+  {% if not refund_shift_open %}<p class="muted">Chưa có ca đang mở. Khoản hoàn được ghi vào ca đang mở nên cần mở ca trước.</p>{% endif %}
+  <ul class="ruled-list compact">
+    {% for r, op in pending_refunds %}
+    <li class="row-between"><span>Đơn {{ r.order_code }} · {{ r.amount|intcomma }} đ · {{ r.get_method_display|lower }} · duyệt bởi {{ r.approved_by }} {{ r.created_at|date:"H:i d/m" }}</span>
+      <form method="post" action="{% url 'shifts:refund_paid' r.pk %}" class="inline-form" data-once>{% csrf_token %}
+        <input type="hidden" name="operation_key" value="{{ op }}"><input type="hidden" name="next" value="{{ request.path }}">
+        <input class="input input-sm" name="note" placeholder="Ghi chú (mã giao dịch nếu chuyển khoản)" aria-label="Ghi chú hoàn tiền">
+        <button class="btn btn-primary" type="submit"{% if not refund_shift_open %} disabled{% endif %}>Đã hoàn tiền</button></form></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}

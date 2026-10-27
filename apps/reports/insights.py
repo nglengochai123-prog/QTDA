@@ -45,12 +45,12 @@ def _pct(cur, prev):
 class _Period:
     """Gom dòng món đã thu tiền của một kỳ theo ngày, món, nhóm, phương thức và thứ × giờ."""
 
-    def __init__(self, start_day, end_day, prices):
+    def __init__(self, start_day, end_day, prices, lines=None):
         from apps.inventory.models import StockMovement
 
         self.start_day, self.end_day = start_day, end_day
         start, end = period_bounds(start_day, end_day)
-        lines = list(_paid_lines(start, end))
+        lines = list(_paid_lines(start, end)) if lines is None else lines
         # Giá vốn: lượng nguyên liệu thực trừ kho của từng dòng món (nguồn "dong_mon"); món pha trước lúc thu tiền
         # nên lấy rộng thêm hai ngày về trước.
         cost_of = defaultdict(float)
@@ -120,9 +120,9 @@ class _Period:
         return out
 
 
-def sales(start_day, end_day, prev=None, today=None, wide=False):
+def sales(start_day, end_day, prev=None, today=None, wide=False, lines=None):
     """Phân tích bán hàng kỳ [start_day, end_day]; prev = (từ, đến) của kỳ so sánh, mặc định là kỳ liền trước cùng độ
-    dài. wide: biểu đồ xu hướng chiếm cả hàng."""
+    dài. wide: biểu đồ xu hướng chiếm cả hàng. lines: dòng món đã nạp sẵn của đúng kỳ này (services.paid_lines)."""
     from .inventory import Prices
 
     today = today or timezone.localdate()
@@ -131,7 +131,7 @@ def sales(start_day, end_day, prev=None, today=None, wide=False):
     if prev is None:
         prev = (start_day - timedelta(days=length), start_day - timedelta(days=1))
     prices = Prices()
-    cur, old = _Period(start_day, end_day, prices), _Period(prev[0], prev[1], prices)
+    cur, old = _Period(start_day, end_day, prices, lines), _Period(prev[0], prev[1], prices)
     has_cost = cur.cost > 0
 
     aov = cur.revenue / cur.orders if cur.orders else 0
@@ -157,14 +157,17 @@ def sales(start_day, end_day, prev=None, today=None, wide=False):
         k["delta_abs"] = abs(k["delta"]) if k["delta"] is not None else None
 
     days = [start_day + timedelta(days=k) for k in range(length)]
-    cur_rev, old_rev = cur.series("revenue"), old.series("revenue")
+    cur_rev, old_rev = list(cur.series("revenue")), old.series("revenue")
+    if end_day == today and cur_rev and not cur_rev[-1]:
+        cur_rev[-1] = None  # hôm nay chưa bán ly nào: bỏ điểm, không vẽ thành doanh thu tụt về 0
     old_days = [prev[0] + timedelta(days=k) for k in range(len(old_rev))]
     series = [{"name": "Kỳ này", "values": cur_rev, "slot": 1, "area": True}]
     if any(old_rev):
         aligned = [old_rev[k] if k < len(old_rev) else None for k in range(length)]
         series.append({"name": f"Kỳ trước ({prev[0]:%d/%m}–{prev[1]:%d/%m})", "values": aligned, "slot": "muted",
                        "label_end": False})
-    tips = [f"{d:%d/%m}" + (f" (kỳ trước {old_days[k]:%d/%m})" if k < len(old_days) and any(old_rev) else "")
+    tips = [f"{d:%d/%m}" + (" (hôm nay, tính đến giờ)" if d == today else "")
+            + (f" (kỳ trước {old_days[k]:%d/%m})" if k < len(old_days) and any(old_rev) else "")
             for k, d in enumerate(days)]
     trend_chart = charts.line([f"{d:%d/%m}" for d in days], series, value_fmt=charts.fmt, tip_labels=tips,
                               width=charts.WIDE if wide else charts.HALF, height=240) if cur.revenue else None

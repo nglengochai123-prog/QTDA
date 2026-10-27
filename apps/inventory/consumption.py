@@ -15,6 +15,7 @@ from apps.audit.services import record
 from apps.core import params
 
 from .models import ConsumptionCheck, StockCount, StockMovement
+from .stock import fmt_vn
 
 
 def _sum(ingredient, kind, start, end):
@@ -58,8 +59,9 @@ def check_after_count(count, actor=None):
         unit = ingredient.get_unit_display()
         open_exception(ExceptionCase.Kind.CONSUMPTION_OVER, ingredient=ingredient, store=count.store,
                        one_per_scope=False,
-                       rule=f"Tiêu hao thực tế {ingredient.name} vượt tiêu hao theo đơn quá {tolerance}% (BRU-17)",
-                       detail=(f"Kỳ {timezone.localtime(start):%H:%M %d/%m}–{timezone.localtime(end):%H:%M %d/%m}: thực tế {actual.normalize():f} {unit}, "
-                               f"theo đơn {by_orders.normalize():f} {unit}, vượt {excess.normalize():f} {unit} "
-                               f"({percent:.2f}%). Kiểm tra món pha không qua đơn hoặc định mức chưa đúng."))
+                       rule=f"Tiêu hao thực tế {ingredient.name} vượt tiêu hao theo đơn quá {fmt_vn(tolerance)}%",
+                       detail=(f"Từ {timezone.localtime(start):%H:%M %d/%m} đến {timezone.localtime(end):%H:%M %d/%m}: "
+                               f"thực tế dùng {fmt_vn(actual)} {unit}, theo đơn {fmt_vn(by_orders)} {unit}, "
+                               f"vượt {fmt_vn(excess)} {unit} ({fmt_vn(percent, 1)}%). "
+                               "Kiểm tra món pha không qua đơn hoặc định mức chưa đúng."))
     return check

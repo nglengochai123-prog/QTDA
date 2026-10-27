@@ -20,23 +20,23 @@
 <div class="grid-2">
   <section class="card">
     <div class="card-head"><div><h2>Giá trị tồn theo ngày</h2><p class="card-sub">Tồn cuối ngày nhân giá nhập gần nhất.</p></div></div>
-    <div class="card-body">{% if value_chart %}{% include "reports/charts/line.html" with c=value_chart label="Giá trị tồn theo ngày" %}{% else %}<p class="chart-empty">Chưa có dữ liệu trong kỳ.</p>{% endif %}
-      <details class="chart-table"><summary>Bảng số liệu</summary><div class="table-wrap"><table class="data-table compact"><thead><tr><th scope="col">Ngày</th><th scope="col" class="num">Giá trị tồn (đ)</th></tr></thead><tbody>{% for d, v in value_table %}<tr><td>{{ d|date:"d/m/Y" }}</td><td class="num">{{ v|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table></div></details></div>
+    <div class="card-body">{% if value_chart %}{% include "reports/charts/line.html" with c=value_chart label="Giá trị tồn theo ngày" %}
+      <details class="chart-table"><summary>Bảng số liệu</summary><div class="table-wrap"><table class="data-table compact"><thead><tr><th scope="col">Ngày</th><th scope="col" class="num">Giá trị tồn (đ)</th></tr></thead><tbody>{% for d, v in value_table %}<tr><td>{{ d|date:"d/m/Y" }}</td><td class="num">{{ v|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table></div></details>{% else %}<p class="chart-empty">Chưa có dữ liệu trong kỳ.</p>{% endif %}</div>
   </section>
   <section class="card">
     <div class="card-head"><div><h2>Xuất kho theo tuần</h2><p class="card-sub">Tiêu hao theo món và hao hụt, tính bằng tiền.</p></div></div>
-    <div class="card-body">{% if flow_chart %}{% include "reports/charts/stacked_columns.html" with c=flow_chart label="Xuất kho theo tuần" %}{% else %}<p class="chart-empty">Chưa có xuất kho trong kỳ.</p>{% endif %}
-      <details class="chart-table"><summary>Bảng số liệu</summary><div class="table-wrap"><table class="data-table compact"><thead><tr><th scope="col">Tuần từ</th><th scope="col" class="num">Tiêu hao (đ)</th><th scope="col" class="num">Hao hụt (đ)</th></tr></thead><tbody>{% for w, c, x in weeks %}<tr><td>{{ w|date:"d/m" }}</td><td class="num">{{ c|floatformat:"0g" }}</td><td class="num">{{ x|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table></div></details></div>
+    <div class="card-body">{% if flow_chart %}{% include "reports/charts/stacked_columns.html" with c=flow_chart label="Xuất kho theo tuần" %}
+      <details class="chart-table"><summary>Bảng số liệu</summary><div class="table-wrap"><table class="data-table compact"><thead><tr><th scope="col">Tuần từ</th><th scope="col" class="num">Tiêu hao (đ)</th><th scope="col" class="num">Hao hụt (đ)</th></tr></thead><tbody>{% for w, c, x in weeks %}<tr><td>{{ w|date:"d/m" }}</td><td class="num">{{ c|floatformat:"0g" }}</td><td class="num">{{ x|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table></div></details>{% else %}<p class="chart-empty">Chưa có xuất kho trong kỳ.</p>{% endif %}</div>
   </section>
 </div>
 
 <div class="grid-2">
   <section class="card">
     <div class="card-head"><div><h2>Lịch hết hạn</h2><p class="card-sub">Giá trị hàng trong kho theo tuần hết hạn. Cột đầu là hàng đã quá hạn còn nằm trong kho.</p></div><a class="btn btn-ghost btn-sm" href="{% url 'inventory:lots' %}">Xem lô</a></div>
-    <div class="card-body">{% if expiry_chart %}{% include "reports/charts/stacked_columns.html" with c=expiry_chart label="Lịch hết hạn" %}{% else %}<p class="chart-empty">Chưa có lô nào ghi hạn.</p>{% endif %}
+    <div class="card-body">{% if expiry_chart %}{% include "reports/charts/stacked_columns.html" with c=expiry_chart label="Lịch hết hạn" %}
+      <details class="chart-table"><summary>Bảng số liệu</summary><div class="table-wrap"><table class="data-table compact"><thead><tr><th scope="col">Tuần</th><th scope="col" class="num">Giá trị (đ)</th></tr></thead><tbody>{% for l, v in expiry_table %}<tr><td>{{ l }}</td><td class="num">{{ v|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table></div></details>{% else %}<p class="chart-empty">Chưa có lô nào ghi hạn.</p>{% endif %}
       {% if undated_value %}<p class="note">Ngoài ra {{ undated_value|intcomma }} đ hàng không ghi hạn dùng (bao bì, dụng cụ hoặc lô chưa nhập hạn).</p>{% endif %}
-      {% if at_risk_value %}<p class="note note-warn">Theo tốc độ dùng 4 tuần qua, khoảng {{ at_risk_value|intcomma }} đ sẽ hết hạn trước khi kịp dùng.</p>{% endif %}
-      <details class="chart-table"><summary>Bảng số liệu</summary><div class="table-wrap"><table class="data-table compact"><thead><tr><th scope="col">Tuần</th><th scope="col" class="num">Giá trị (đ)</th></tr></thead><tbody>{% for l, v in expiry_table %}<tr><td>{{ l }}</td><td class="num">{{ v|floatformat:"0g" }}</td></tr>{% endfor %}</tbody></table></div></details></div>
+      {% if at_risk_value %}<p class="note note-warn">Theo tốc độ dùng 4 tuần qua, khoảng {{ at_risk_value|intcomma }} đ sẽ hết hạn trước khi kịp dùng.</p>{% endif %}</div>
   </section>
   <section class="card">
     <div class="card-head"><div><h2>Đủ dùng so với thời gian giao hàng</h2><p class="card-sub">Số ngày tồn hiện có đủ dùng; vạch là số ngày chờ hàng về cộng một ngày. Thanh đỏ: có thể hết trước khi hàng mới về nếu đặt hôm nay.</p></div></div>

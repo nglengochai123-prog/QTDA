@@ -81,6 +81,14 @@ class AdjustmentTests(Base):
         self.assertIn("Khách đổi ý", log.reason)
         self.assertEqual(log.actor, self.manager)
 
+    def test_bar_sees_pending_request_on_ticket(self):
+        from django.urls import reverse
+        order, line = self.order(quantity=2)
+        self.request(self.d["waiter"], order, "huy_mon", line=line.pk, cups=1)
+        self.client.login(username=self.d["barista"].username, password=PASSWORD)
+        self.assertContains(self.client.get(reverse("orders:bar_queue")),
+                            f"Đang chờ duyệt: Hủy 1 × {line.item_name} {line.size_name}")
+
     def test_cancel_waiting_cup_returns_available(self):
         # AC-49: hủy ly chờ pha trả lại tồn có thể dùng, tồn vật lý không đổi.
         order, line = self.order(quantity=3)
@@ -176,6 +184,15 @@ class PaymentTests(Base):
         order.refresh_from_db()
         self.assertEqual(order.status, Order.Status.SENT)
 
+    def test_bill_changed_since_cashier_saw_it_is_not_paid(self):
+        order, line = self.order(quantity=2)
+        self.finish(line)
+        with self.assertRaisesMessage(ValidationError, "vừa thay đổi: cần thu 50.000 đ, không phải 25.000 đ"):
+            payments.pay_table(self.cashier, key(), order.table_id, "tien_mat", expected=25000)
+        self.assertEqual(Payment.objects.count(), 0)
+        result, _ = payments.pay_table(self.cashier, key(), order.table_id, "tien_mat", expected=50000)
+        self.assertEqual(result["amount"], 50000)
+
     def test_transfer_needs_confirmation_and_records_once(self):
         # AC-08
         order, line = self.order(quantity=2)
@@ -202,6 +219,25 @@ class PaymentTests(Base):
         self.assertIn("Chủ quán", state["blockers"][0])
         with self.assertRaises(ValidationError):
             payments.pay_table(self.cashier, key(), order.table_id, "tien_mat")
+
+    def test_owner_steps_in_when_authorizer_has_left(self):
+        order, line = self.order()
+        self.finish(line)
+        req = self.request(self.d["waiter"], order, "chuyen_ban", target_table=self.other_table.pk)
+        adjustments.escalate_due(req.level_since + timedelta(minutes=10))
+        self.authorizer.is_active = False  # nghỉ việc: tài khoản bị khóa
+        self.authorizer.save()
+        self.shift.refresh_from_db()
+        self.assertEqual(self.shift.missing_roles, ["người được ủy quyền thanh toán theo món thực nhận"])
+        state = payments.bill(order.table)
+        self.assertIn("Chủ quán thu tiền theo món", state["blockers"][-1])
+        self.assertTrue(payments.can_pay_received_items(self.manager, state["exhausted"][0]))
+        self.shift.payment_authorizer = self.d["barista"]  # pha chế không mở được màn Thu ngân
+        self.shift.save()
+        self.assertIsNone(self.shift.authorizer)
+        self.client.force_login(self.manager)
+        page = self.client.get("/du-lieu/ca/moi/")
+        self.assertNotIn(self.d["barista"], list(page.context["form"].fields["payment_authorizer"].queryset))
 
     def test_pay_received_items_when_all_levels_expired(self):
         # AC-10: đổi món 50.000 đ sang món 30.000 đ, quá hạn mọi cấp, khách đã nhận món mới.

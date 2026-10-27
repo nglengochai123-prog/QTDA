@@ -87,7 +87,7 @@ class LotFlowTests(TestCase):
         result, _ = ops.create_receipt(self.owner, key(), self.supplier.pk, [
             {"ingredient": self.milk.pk, "quantity": str(qty), "unit_price": price,
              "expiry_date": expiry.isoformat() if expiry else None, "supplier_lot": supplier_lot}],
-            "tra_ngay", invoice_photo=SimpleUploadedFile("hd.jpg", b"jpeg", content_type="image/jpeg"))
+            "tra_ngay", invoice_photo=SimpleUploadedFile("hd.jpg", b"\xff\xd8\xffjpeg", content_type="image/jpeg"))
         return StockLot.objects.get(code=result["lots"][0])
 
     def use(self, qty):
@@ -195,3 +195,14 @@ class LotFlowTests(TestCase):
         self.assertContains(r, lot.code)
         self.client.login(username=self.d["waiter"].username, password=PASSWORD)
         self.assertEqual(self.client.get(reverse("inventory:lots")).status_code, 403)
+
+    def test_dispose_only_returns_to_pages_of_this_site(self):
+        self.client.login(username=self.owner.username, password=PASSWORD)
+        url = reverse("inventory:lots")
+        for nxt, expected in (("-5", url), ("2,5", url), ("https://lua-dao.example/", url), ("//lua-dao.example/", url),
+                              (reverse("inventory:stock"), reverse("inventory:stock"))):
+            lot = self.receive(10)
+            r = self.client.post(reverse("inventory:lot_dispose", args=[lot.pk]),
+                                 {"operation_key": key(), "note": "Bao bì rách", "next": nxt})
+            self.assertRedirects(r, expected, fetch_redirect_response=False)
+            self.assertEqual(self.remaining(lot), [0])

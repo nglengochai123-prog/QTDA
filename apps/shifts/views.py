@@ -14,7 +14,7 @@ from apps.accounts.permissions import Cap, capability_required, user_can
 from apps.core.idempotency import OperationKeyError
 
 from . import services
-from apps.core import params
+from apps.core import links, params
 
 from .models import CashEntry, Discrepancy, ExpenseCategory, Shift, ShiftReport, ShiftReportCorrection
 
@@ -46,11 +46,14 @@ def my_shift(request, shift_id=None):
 
         context.update(
             figures=services.figures(shift), entries=shift.cash_entries.select_related("receiver", "actor"),
+            opening_entry=shift.cash_entries.filter(kind=CashEntry.Kind.OPENING).first(),
             blockers=services.close_blockers(shift) if shift.status == Shift.Status.OPEN else [],
             open_orders=Order.objects.filter(shift=shift).exclude(status__in=["da_thanh_toan", "da_huy"])
             .select_related("table"),
             next_shifts=Shift.objects.filter(status=Shift.Status.OPEN, starts_at__gt=shift.starts_at).exclude(pk=shift.pk),
-            receivers=User.objects.filter(is_active=True).exclude(pk=request.user.pk).order_by("first_name"),
+            # Chỉ người mở được màn Ca của tôi mới bấm xác nhận đã nhận tiền (thu ngân, Chủ quán).
+            receivers=[u for u in User.objects.filter(is_active=True).exclude(pk=request.user.pk)
+                       .select_related("employee").order_by("first_name") if user_can(u, Cap.CASH_FUND)],
             discrepancies=shift.discrepancies.current(), status=services.data_status(shift),
             history=shift.discrepancies.exclude(superseded_at=None), op_correction=uuid.uuid4().hex,
             op_open=uuid.uuid4().hex, op_expense=uuid.uuid4().hex, op_handover=uuid.uuid4().hex,
@@ -61,7 +64,9 @@ def my_shift(request, shift_id=None):
             context["corrections"] = report.corrections.select_related("requested_by", "decided_by")
     context["to_confirm"] = CashEntry.objects.filter(kind=CashEntry.Kind.HANDOVER, receiver=request.user,
                                                      confirmed_at__isnull=True).select_related("shift", "actor")
-    context["pending_refunds"] = [(r, uuid.uuid4().hex) for r in services.pending_refunds()]
+    if user_can(request.user, Cap.PAYMENT):  # chỉ người thu tiền bấm được "Đã hoàn tiền"
+        context["pending_refunds"] = [(r, uuid.uuid4().hex) for r in services.pending_refunds()]
+        context["refund_shift_open"] = Shift.objects.operating() is not None
     return render(request, "shifts/my_shift.html", context)
 
 
@@ -71,7 +76,7 @@ def refund_paid(request, refund_id):
     p = request.POST
     _flash(request, lambda: services.confirm_refund(request.user, p.get("operation_key", ""), refund_id,
                                                     p.get("note", "")), "Đã ghi đã hoàn tiền vào ca hiện tại.")
-    return redirect(p.get("next") or "shifts:my_shift")
+    return links.back(request, "shifts:my_shift")
 
 
 @capability_required(Cap.SHIFT_CLOSE)
@@ -95,6 +100,15 @@ def decide_correction(request, correction_id):
 
 @capability_required(Cap.CASH_FUND)
 @require_POST
+def correct_opening(request, shift_id):
+    p = request.POST
+    _flash(request, lambda: services.correct_opening(request.user, shift_id, p.get("amount", ""), p.get("reason", "")),
+           "Đã sửa tiền đầu ca.")
+    return redirect("shifts:my_shift_detail", shift_id=shift_id)
+
+
+@capability_required(Cap.CASH_FUND)
+@require_POST
 def cash_entry(request, shift_id):
     p = request.POST
     _flash(request, lambda: services.add_cash_entry(
@@ -108,7 +122,15 @@ def cash_entry(request, shift_id):
 @require_POST
 def confirm_handover(request, entry_id):
     _flash(request, lambda: services.confirm_handover(request.user, entry_id), "Đã xác nhận nhận tiền.")
-    return redirect(request.POST.get("next") or "core:home")
+    return links.back(request, "core:home")
+
+
+@login_required
+@require_POST
+def cancel_handover(request, entry_id):
+    _flash(request, lambda: services.cancel_handover(request.user, entry_id, request.POST.get("reason", "")),
+           "Đã bỏ khoản nộp; khoản này không tính vào quỹ ca.")
+    return links.back(request, "core:home")
 
 
 @capability_required(Cap.SHIFT_CLOSE)
@@ -144,7 +166,7 @@ def report(request, shift_id):
 def explain(request, discrepancy_id):
     _flash(request, lambda: services.explain(request.user, discrepancy_id, request.POST.get("text", "")),
                "Đã gửi giải trình.")
-    return redirect(request.POST.get("next") or "shifts:status")
+    return links.back(request, "shifts:status")
 
 
 @capability_required(Cap.EXCEPTION_REVIEW)
@@ -161,11 +183,13 @@ def status(request):
     from apps.control.services import monthly_control
 
     now = timezone.localtime()
-    shifts = Shift.objects.select_related("approver").order_by("-starts_at")[:30]
-    rows = [services.data_status(s) for s in shifts]
+    limit = 60 if request.GET.get("tat_ca") else 10
+    shifts = list(Shift.objects.select_related("approver").order_by("-starts_at")[:limit + 1])
+    more = len(shifts) > limit
+    rows = [services.data_status(s) for s in shifts[:limit]]
     for row in rows:
         row["figures"] = services.figures(row["shift"])
-    context = {"rows": rows,
+    context = {"rows": rows, "more": 50 if more and limit == 10 else 0,
                "pending_decisions": Discrepancy.objects.current().filter(decision="").select_related("shift", "manager")
                .order_by("-created_at"),
                "pending_corrections": ShiftReportCorrection.objects.filter(status=ShiftReportCorrection.Status.PENDING)

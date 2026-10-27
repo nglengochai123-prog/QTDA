@@ -1,13 +1,12 @@
 """Bảng điều khiển và báo cáo theo kỳ (FR-50, FR-52, FR-53, FR-54)."""
 
-from datetime import date
-
 from django.http import HttpResponse
 from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from apps.accounts.permissions import Cap, capability_required, user_can
+from apps.core.dates import parse_day, parse_month
 
 from . import services
 
@@ -26,25 +25,15 @@ def presets(today):
 def _period(request):
     today = timezone.localdate()
     first, _ = services.month_bounds(today)
-    try:
-        start = date.fromisoformat(request.GET.get("tu", ""))
-    except ValueError:
-        start = first
-    try:
-        end = date.fromisoformat(request.GET.get("den", ""))
-    except ValueError:
-        end = today
+    start = parse_day(request.GET.get("tu")) or first
+    end = parse_day(request.GET.get("den")) or today
     return (start, end) if start <= end else (end, start)
 
 
 @capability_required(Cap.VIEW_DASHBOARD)
 @require_GET
 def dashboard(request):
-    month = None
-    try:
-        month = date.fromisoformat(request.GET.get("thang", "") + "-01")
-    except ValueError:
-        pass
+    month = parse_month(request.GET.get("thang"))
     fallback = None
     if month is None:
         # Tháng hiện tại chưa có đơn đã thanh toán thì mở tháng gần nhất có đơn (ví dụ dữ liệu lịch sử đã nhập).
@@ -79,11 +68,12 @@ def revenue(request):
         dim = "ngay"
     from . import insights
 
-    data = services.revenue(start, end, dim)
+    lines = services.paid_lines(start, end)
+    data = services.revenue(start, end, dim, lines)
     kind, chart = insights.dimension_chart(data)
     return render(request, "reports/revenue.html", {
         "start": start, "end": end, "dims": services.DIMENSIONS.items(), "presets": presets(timezone.localdate()),
-        "extra": f"theo={dim}", "sales": insights.sales(start, end, wide=True), "dim_kind": kind, "dim_chart": chart,
+        "period_qs": f"theo={dim}", "sales": insights.sales(start, end, wide=True, lines=lines), "dim_kind": kind, "dim_chart": chart,
         **data})
 
 
@@ -92,6 +82,7 @@ def revenue(request):
 def revenue_control(request):
     start, end = _period(request)
     return render(request, "reports/revenue_control.html", {"start": start, "end": end,
+                                                            "presets": presets(timezone.localdate()),
                                                             **services.revenue_control(start, end)})
 
 
@@ -99,7 +90,8 @@ def revenue_control(request):
 @require_GET
 def materials(request):
     start, end = _period(request)
-    return render(request, "reports/materials.html", {"start": start, "end": end, **services.materials(start, end)})
+    return render(request, "reports/materials.html", {"start": start, "end": end, "presets": presets(timezone.localdate()),
+                                                      **services.materials(start, end)})
 
 
 @capability_required(Cap.VIEW_DASHBOARD)

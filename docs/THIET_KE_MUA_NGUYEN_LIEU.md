@@ -503,7 +503,7 @@ Mọi lần tính đều là đọc và ghi kết quả tính toán; không lầ
 | Ngày dự kiến hết hàng và ngày rủi ro | Theo mục 6.6 |
 | Ngày phải đặt chậm nhất | Theo mục 6.6; ghi Đặt ngay nếu đã qua |
 | Lượng đề xuất | Q 0 theo đơn vị chuẩn, số gói n, phần làm tròn Δ, giới hạn nào đã ràng buộc |
-| Hành động | Mua, Mua bổ sung, Thúc giao, Không cần mua |
+| Hành động | Mua, Mua bổ sung, Thúc giao, Chưa cần mua |
 | Đơn liên quan | Các đơn đã được tính vào vị thế tồn hoặc bị loại ra |
 | Lý do | Một đến hai câu tự sinh từ số liệu |
 | Giai đoạn dữ liệu và phương pháp | Ước tính ban đầu, Thống kê bước đầu hoặc Mô hình; M0, M1 hoặc M2 |

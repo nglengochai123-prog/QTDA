@@ -1,11 +1,42 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Lịch của tôi · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><h1>Lịch của tôi</h1></header>
-{% if items %}
-<div class="table-wrap"><table class="data-table">
-  <thead><tr><th scope="col">Ngày</th><th scope="col">Ca</th><th scope="col">Giờ</th><th scope="col">Vị trí</th></tr></thead>
-  <tbody>{% for a in items %}<tr><th scope="row">{{ a.day }} {{ a.shift.date|date:"d/m" }}</th><td>{{ a.shift.name }}</td><td>{{ a.shift.start|time:"H:i" }}–{{ a.shift.end|time:"H:i" }}</td><td>{{ a.role_label }}</td></tr>{% endfor %}</tbody>
-</table></div>
-{% else %}<div class="empty"><p><strong>Chưa có lịch đã công bố.</strong></p><p><a href="{% url 'schedule:register' %}">Đăng ký ca tuần sau</a></p></div>{% endif %}
+<header class="page-head"><div><h1>Lịch của tôi</h1><p class="page-sub">Các ca bạn được xếp trong lịch đã công bố.</p></div></header>
+
+{% if upcoming %}
+<section class="next-shift{% if upcoming.state == 'now' %} is-now{% endif %}" aria-label="Ca sắp tới">
+  <p class="next-kicker">{% if upcoming.state == "now" %}Đang trong ca · còn {{ upcoming.until }}{% elif upcoming.today %}Hôm nay · còn {{ upcoming.until }} nữa{% else %}Ca tiếp theo · còn {{ upcoming.until }} nữa{% endif %}</p>
+  <h2>{{ upcoming.day }} {{ upcoming.shift.date|date:"d/m" }} · {{ upcoming.shift.name }}</h2>
+  <p class="next-time">{{ upcoming.shift.start|time:"H:i" }}–{{ upcoming.shift.end|time:"H:i" }} <span>{{ upcoming.role }}</span></p>
+  {% if upcoming.state == "now" or upcoming.today %}<a class="btn btn-quiet btn-sm" href="{% url 'staff:attendance' %}">Chấm công</a>{% endif %}
+</section>
+{% endif %}
+
+{% if not next_published and next_has_shifts %}
+<a class="reg-banner reg-link{% if register_open and not regs_next %} is-soon{% endif %}" href="{% url 'schedule:register' %}?tuan={{ next_week|date:'Y-m-d' }}">
+  <svg class="icon" aria-hidden="true"><use href="#i-register"/></svg>
+  <div>{% if register_open %}<strong>{% if regs_next %}Bạn đã đăng ký {{ regs_next }} ca tuần sau{% else %}Bạn chưa đăng ký ca tuần sau{% endif %}</strong><span>Còn {{ left }} · hạn {{ deadline|date:"H:i d/m" }}. Bấm để {% if regs_next %}xem hoặc sửa{% else %}đăng ký{% endif %}.</span>
+  {% else %}<strong>Tuần sau đang chờ Chủ quán công bố lịch</strong><span>{% if regs_next %}Bạn đã đăng ký {{ regs_next }} ca.{% else %}Bạn không đăng ký ca nào.{% endif %}</span>{% endif %}</div>
+  <svg class="icon icon-flip chevron" aria-hidden="true"><use href="#i-back"/></svg>
+</a>
+{% endif %}
+
+{% for w in weeks %}
+<section class="card">
+  <div class="card-head"><h2>{% if w.label %}{{ w.label }} · {% endif %}{{ w.week|date:"d/m" }} – {{ w.week_end|date:"d/m" }}</h2><span class="muted">{{ w.items|length }} ca · {{ w.hours|floatformat:"-1" }} giờ</span></div>
+  <ul class="row-list">
+    {% for x in w.items %}
+    <li class="is-{{ x.state }}{% if x.today %} is-today{% endif %}"><span class="row-day">{{ x.short }} {{ x.shift.date|date:"d/m" }}</span>
+      <span class="row-main"><strong>{{ x.shift.name }}</strong> {{ x.shift.start|time:"H:i" }}–{{ x.shift.end|time:"H:i" }}<small>{{ x.role }}</small></span>
+      {% if x.state == "now" %}<span class="pill pill-info">Đang làm</span>{% elif x.state == "done" %}<span class="pill pill-neutral">Đã qua</span>{% elif x.today %}<span class="pill pill-info">Hôm nay</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% empty %}
+<div class="empty"><p><strong>Chưa có lịch đã công bố.</strong></p><p>Khi Chủ quán công bố lịch, ca của bạn hiện ở đây và bạn nhận thông báo trên điện thoại.</p></div>
+{% endfor %}
+
+{% include "pwa/_push_card.html" %}
 {% endblock %}
+{% block scripts %}<script src="{% static 'js/push.js' %}" defer></script>{% endblock %}

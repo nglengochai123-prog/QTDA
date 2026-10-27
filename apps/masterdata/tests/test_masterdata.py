@@ -1,6 +1,7 @@
 """Trang dữ liệu nền riêng: quyền chỉ Chủ quán, ghi nhật ký, quy tắc nghiệp vụ giữ nguyên như trước."""
 
 from datetime import timedelta
+from decimal import Decimal
 
 from django.test import TestCase
 from django.urls import reverse
@@ -87,8 +88,8 @@ class MasterDataTests(TestCase):
                 f"{prefix}-TOTAL_FORMS": 2, f"{prefix}-INITIAL_FORMS": 1, f"{prefix}-MIN_NUM_FORMS": 0,
                 f"{prefix}-MAX_NUM_FORMS": 1000,
                 f"{prefix}-0-id": size.pk, f"{prefix}-0-item": item.pk, f"{prefix}-0-name": "M",
-                f"{prefix}-0-price": 27000, f"{prefix}-0-sort_order": 0, f"{prefix}-0-is_active": "on",
-                f"{prefix}-1-item": item.pk, f"{prefix}-1-name": "L", f"{prefix}-1-price": 32000,
+                f"{prefix}-0-price": "27.000", f"{prefix}-0-sort_order": 0, f"{prefix}-0-is_active": "on",
+                f"{prefix}-1-item": item.pk, f"{prefix}-1-name": "L", f"{prefix}-1-price": "32,000",
                 f"{prefix}-1-sort_order": 1, f"{prefix}-1-is_active": "on"}
         r = self.client.post(self.url("mon", item.pk), data)
         self.assertEqual(r.status_code, 302, r.context and (r.context["form"].errors, [x["fs"].errors for x in r.context["formsets"]], [x["fs"].non_form_errors() for x in r.context["formsets"]]))
@@ -135,12 +136,34 @@ class MasterDataTests(TestCase):
         form = {"name": "Ly nhựa", "unit": "cai", "pack_size": "50", "lead_time_days": "2", "safety_stock": "0",
                 "moq_packs": "1", "exposure_days": "1", "is_active": "on", "issue_rule": "lifo"}
         r = self.client.post(self.url("nguyen-lieu", ing.pk), {**form, "shelf_life_days": "7"})
-        self.assertContains(r, "Hàng có hạn dùng không xuất theo LIFO")
+        self.assertContains(r, "Hàng có hạn dùng không xuất theo kiểu nhập sau, xuất trước")
         r = self.client.post(self.url("nguyen-lieu", ing.pk), form)
         self.assertEqual(r.status_code, 302)
         ing.refresh_from_db()
-        self.assertEqual((ing.issue_rule, ing.rule_short), ("lifo", "LIFO"))
-        self.assertContains(self.client.get(reverse("masterdata:list", args=["nguyen-lieu"])), "LIFO")
+        self.assertEqual((ing.issue_rule, ing.rule_short), ("lifo", "Nhập sau"))
+        self.assertContains(self.client.get(reverse("masterdata:list", args=["nguyen-lieu"])), "Nhập sau")
+
+    def test_number_fields_read_vietnamese_thousands(self):
+        # Ô số trong Dữ liệu nền: "1.000" là một nghìn, không phải 1; hiện lại đúng như đã gõ.
+        ing = Ingredient.objects.create(store=self.d["store"], name="Sữa tươi", unit="ml", pack_size=50, lead_time_days=2)
+        form = {"name": "Sữa tươi", "unit": "ml", "pack_size": "1.000", "lead_time_days": "2", "safety_stock": "1.500,5",
+                "moq_packs": "1", "exposure_days": "1", "is_active": "on"}
+        self.assertEqual(self.client.post(self.url("nguyen-lieu", ing.pk), form).status_code, 302)
+        ing.refresh_from_db()
+        self.assertEqual((ing.pack_size, ing.safety_stock), (1000, Decimal("1500.5")))
+        page = self.client.get(self.url("nguyen-lieu", ing.pk))
+        self.assertContains(page, 'value="1.000"')
+        self.assertContains(page, 'value="1.500,5"')
+        self.assertNotContains(page, "---------")
+        self.assertContains(page, "Tự chọn theo hạn dùng")
+        self.assertContains(self.client.get(reverse("masterdata:list", args=["nguyen-lieu"])), "1.500,5")
+        r = self.client.post(self.url("nguyen-lieu", ing.pk), {**form, "pack_size": "1.0.0"})
+        self.assertContains(r, "Nhập một số, ví dụ 1.000 hoặc 1,5.")
+        # Nhật ký hiện tên trường và số như người đọc, không hiện khóa nội bộ.
+        log = self.client.get(reverse("masterdata:audit_log"), {"loai": "inventory.Ingredient"})
+        self.assertContains(log, "Quy cách đóng gói")
+        self.assertContains(log, "<b>1.000</b>", html=False)
+        self.assertNotContains(log, "pack_size")
 
     def test_audit_log_filters(self):
         r = self.client.get(reverse("masterdata:audit_log"), {"thao_tac": "login"})

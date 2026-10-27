@@ -43,7 +43,7 @@ class ShiftBase(TestCase):
 class CashFundTests(ShiftBase):
     def test_entries_and_handover_effective_after_confirmation(self):
         # AC-14
-        self.entry("dau_ca", 500000)
+        self.entry("dau_ca", 2500000)
         self.entry("chi", 120000, category="sua_chua", note="Thay bóng đèn")
         self.entry("nop", 2000000, receiver_id=self.d["owner"].pk, note="Nộp Chủ quán")
         self.assertEqual(shift_services.figures(self.shift)["handovers"], 0)
@@ -51,16 +51,95 @@ class CashFundTests(ShiftBase):
             shift_services.confirm_handover(self.manager, CashEntry.objects.get(kind="nop").pk)
         shift_services.confirm_handover(self.d["owner"], CashEntry.objects.get(kind="nop").pk)
         f = shift_services.figures(self.shift)
-        self.assertEqual((f["opening"], f["expenses"], f["handovers"]), (500000, 120000, 2000000))
+        self.assertEqual((f["opening"], f["expenses"], f["handovers"]), (2500000, 120000, 2000000))
+
+    def test_handover_receiver_must_be_able_to_confirm(self):
+        self.entry("dau_ca", 500000)
+        with self.assertRaisesMessage(ValidationError, "Người nhận phải là Chủ quán hoặc thu ngân"):
+            self.entry("nop", 100000, receiver_id=self.d["waiter"].pk)  # phục vụ không mở được màn xác nhận
+        self.client.force_login(self.manager)
+        page = self.client.get(f"/ca/{self.shift.pk}/")
+        self.assertNotIn(self.d["waiter"], page.context["receivers"])
+        from unittest import mock
+
+        with mock.patch("apps.core.push.notify_later") as notify:
+            self.entry("nop", 100000, receiver_id=self.d["owner"].pk)
+        self.assertEqual(notify.call_args.args[:2], ([self.d["owner"].pk], "Xác nhận nhận 100.000 đ tiền nộp"))
+        self.client.force_login(self.d["owner"])
+        self.assertContains(self.client.get("/"), "Tiền nộp chờ tôi xác nhận")
+
+    def test_handover_to_wrong_person_can_be_dropped_so_shift_closes(self):
+        self.entry("dau_ca", 1500000)
+        wrong, _ = self.entry("nop", 1000000, receiver_id=self.cashier.pk, note="Chọn nhầm người nhận")
+        self.assertTrue(any("chưa được xác nhận" in b for b in shift_services.close_blockers(self.shift)))
+        with self.assertRaisesMessage(ValidationError, "Ghi lý do"):
+            shift_services.cancel_handover(self.manager, wrong["entry"], "")
+        with self.assertRaisesMessage(ValidationError, "Chỉ người nộp, người nhận hoặc Chủ quán"):
+            shift_services.cancel_handover(self.d["waiter"], wrong["entry"], "Nhầm")
+        shift_services.cancel_handover(self.manager, wrong["entry"], "Chọn nhầm người nhận")
+        self.assertFalse(CashEntry.objects.filter(kind="nop").exists())
+        self.assertEqual(shift_services.close_blockers(self.shift), [])
+        from apps.audit.models import AuditLog
+
+        log = AuditLog.objects.filter(object_type="shifts.CashEntry", reason="Chọn nhầm người nhận").get()
+        self.assertEqual(log.before["so_tien"], 1000000)
+        # Người nhận báo không nhận được; khoản đã xác nhận thì không bỏ được.
+        other, _ = self.entry("nop", 300000, receiver_id=self.d["owner"].pk)
+        self.client.force_login(self.d["owner"])
+        page = self.client.get(f"/ca/{self.shift.pk}/")
+        self.assertContains(page, "Bỏ khoản nộp")
+        self.client.post(f"/ca/nhan-tien/{other['entry']}/bo/", {"next": "/ca/"})
+        self.assertFalse(CashEntry.objects.filter(kind="nop").exists())
+        kept, _ = self.entry("nop", 200000, receiver_id=self.d["owner"].pk)
+        shift_services.confirm_handover(self.d["owner"], kept["entry"])
+        with self.assertRaisesMessage(ValidationError, "đã được người nhận xác nhận"):
+            shift_services.cancel_handover(self.d["owner"], kept["entry"], "Nhầm")
 
     @override_settings(MEDIA_ROOT=tempfile.mkdtemp(prefix="lam-test-media-"))
     def test_large_expense_needs_receipt(self):
         # AC-15
+        self.entry("dau_ca", 1000000)
         with self.assertRaises(ValidationError):
             self.entry("chi", 600000, category="sua_chua", note="Sửa máy xay")
-        photo = SimpleUploadedFile("hoa-don.jpg", b"jpegdata", content_type="image/jpeg")
+        photo = SimpleUploadedFile("hoa-don.jpg", b"\xff\xd8\xffjpegdata", content_type="image/jpeg")
         self.entry("chi", 600000, category="sua_chua", note="Sửa máy xay", receipt=photo)
         self.assertEqual(CashEntry.objects.filter(kind="chi").count(), 1)
+
+    def test_cannot_pay_out_more_than_the_drawer_holds(self):
+        with self.assertRaisesMessage(ValidationError, "Ca chưa xác nhận tiền đầu ca"):
+            self.entry("chi", 50000, category="sua_chua", note="Mua bóng đèn")
+        self.entry("dau_ca", 500000)
+        self.sell("tien_mat")  # thu 25.000 tiền mặt
+        with self.assertRaisesMessage(ValidationError, "theo sổ chỉ còn 525.000 đ, ít hơn khoản chi 5.000.000 đ"):
+            self.entry("chi", 5000000, category="sua_chua", note="Gõ thừa số 0")
+        self.entry("nop", 400000, receiver_id=self.d["owner"].pk)  # chưa xác nhận vẫn coi như đã ra khỏi két
+        with self.assertRaisesMessage(ValidationError, "chỉ còn 125.000 đ"):
+            self.entry("nop", 200000, receiver_id=self.d["owner"].pk)
+        self.entry("chi", 125000, category="sua_chua", note="Mua bóng đèn")
+        self.assertEqual(shift_services.cash_on_hand(self.shift), 0)
+
+    def test_mistyped_opening_cash_can_be_corrected_with_a_reason(self):
+        self.sell("tien_mat")  # bán trước khi kịp xác nhận tiền đầu ca
+        self.entry("chi", 20000, category="sua_chua", note="Mua bóng đèn")
+        self.client.force_login(self.manager)
+        self.assertContains(self.client.get(f"/ca/{self.shift.pk}/"), "Xác nhận tiền đầu ca")  # vẫn xác nhận được
+        self.entry("dau_ca", 50000)  # đúng ra là 500.000
+        with self.assertRaisesMessage(ValidationError, "chỉ còn 55.000 đ"):
+            self.entry("chi", 100000, category="sua_chua", note="Sửa vòi nước")
+        self.assertContains(self.client.get(f"/ca/{self.shift.pk}/"), "Sửa tiền đầu ca")
+        with self.assertRaisesMessage(ValidationError, "Ghi lý do"):
+            shift_services.correct_opening(self.manager, self.shift.pk, "500.000", "")
+        with self.assertRaisesMessage(ValidationError, "Chỉ người đã xác nhận tiền đầu ca hoặc Chủ quán"):
+            shift_services.correct_opening(self.cashier, self.shift.pk, "500.000", "Gõ thiếu số 0")
+        self.client.post(f"/ca/{self.shift.pk}/tien-dau-ca/", {"amount": "500.000", "reason": "Gõ thiếu số 0"})
+        self.assertEqual(shift_services.figures(self.shift)["opening"], 500000)
+        self.entry("chi", 100000, category="sua_chua", note="Sửa vòi nước")
+        with self.assertRaisesMessage(ValidationError, "két theo sổ sẽ âm 95.000 đ"):
+            shift_services.correct_opening(self.manager, self.shift.pk, "0", "Không có tiền để sẵn")
+        from apps.audit.models import AuditLog
+
+        log = AuditLog.objects.get(object_type="shifts.CashEntry", reason="Gõ thiếu số 0")
+        self.assertEqual((log.before["tien_dau_ca"], log.after["tien_dau_ca"]), (50000, 500000))
 
     def test_opening_only_once_and_entry_resend_safe(self):
         op = key()
@@ -84,10 +163,19 @@ class CloseAndReconcileTests(ShiftBase):
         order = Order.objects.get()
         with self.assertRaises(ValidationError):
             shift_services.carry_over(self.manager, order.pk, next_shift.pk, "")
+        earlier = Shift.objects.create(store=self.d["store"], name="Ca sớm", starts_at=self.shift.starts_at - timedelta(hours=8),
+                                       ends_at=self.shift.starts_at, approver=self.manager)
+        with self.assertRaises(ValidationError):  # chỉ chuyển sang ca bắt đầu sau
+            shift_services.carry_over(self.manager, order.pk, earlier.pk, "Nhầm ca")
         shift_services.carry_over(self.manager, order.pk, next_shift.pk, "Khách còn ngồi")
         shift_services.close_shift(self.manager, self.shift.pk)
         self.shift.refresh_from_db()
         self.assertEqual(self.shift.status, Shift.Status.CLOSED)
+        later = Shift.objects.create(store=self.d["store"], name="Ca khuya", starts_at=next_shift.ends_at,
+                                     ends_at=next_shift.ends_at + timedelta(hours=2), approver=self.manager)
+        Order.objects.filter(pk=order.pk).update(status=Order.Status.PAID)
+        with self.assertRaises(ValidationError):  # đơn đã thu giữ nguyên ca
+            shift_services.carry_over(self.manager, order.pk, later.pk, "Đổi ca")
 
     def test_cash_reconciliation_formula_and_threshold(self):
         # AC-25: 500.000 + 2.500.000 - 120.000 - 2.000.000 = 880.000; đếm 800.000 thiếu 80.000 vượt ngưỡng 50.000.

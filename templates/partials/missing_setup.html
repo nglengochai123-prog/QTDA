@@ -1,0 +1,5 @@
+{% comment %}Nhắc khai báo khi màn hình cần danh mục còn trống. Tham số: ingredients, suppliers (bỏ qua nếu không truyền), can_setup.{% endcomment %}
+{% if ingredients is not None and not ingredients or suppliers is not None and not suppliers %}<div class="notice notice-warn" role="status"><div>
+  {% if ingredients is not None and not ingredients %}Chưa có nguyên liệu nào đang dùng.{% if can_setup %} <a href="{% url 'masterdata:create' 'nguyen-lieu' %}">Thêm nguyên liệu</a>.{% endif %}{% endif %}
+  {% if suppliers is not None and not suppliers %}Chưa có nhà cung cấp nào đang giao dịch.{% if can_setup %} <a href="{% url 'masterdata:create' 'nha-cung-cap' %}">Thêm nhà cung cấp</a>.{% endif %}{% endif %}
+  {% if not can_setup %}Chủ quán khai báo ở Quản trị.{% endif %}</div></div>{% endif %}

@@ -1,0 +1,145 @@
+{% load humanize loi_thuong %}
+<div class="stats ov-stats">
+  <a class="stat" href="{% url 'orders:open_orders' %}"><p class="stat-label">Bàn có khách</p>
+    <p class="stat-value">{{ tables_busy }}<small class="stat-of"> / {{ tables_total }}</small></p>
+    <p class="stat-note">{{ tables_free }} bàn trống{% if open_amount %} · {{ open_amount|intcomma }} đ chưa thu{% endif %}</p></a>
+  {% if can_approve %}<a class="stat{% if approvals %} stat-warn{% endif %}" href="{% url 'orders:approvals' %}">{% else %}<div class="stat{% if approvals %} stat-warn{% endif %}">{% endif %}
+    <p class="stat-label">Chờ duyệt</p><p class="stat-value">{{ approvals|length }}</p>
+    <p class="stat-note">{% if my_approvals %}{{ my_approvals }} yêu cầu chờ bạn{% elif approvals %}Đang chờ người duyệt{% else %}Không có yêu cầu nào{% endif %}</p>
+  {% if can_approve %}</a>{% else %}</div>{% endif %}
+  {% if can_bar %}<a class="stat{% if bar.over %} stat-warn{% endif %}" href="{% url 'orders:bar' %}">{% else %}<div class="stat{% if bar.over %} stat-warn{% endif %}">{% endif %}
+    <p class="stat-label">Món chờ pha</p><p class="stat-value">{{ bar.cups }} <small class="stat-of">ly</small></p>
+    <p class="stat-note">{% if bar.cups %}{{ bar.tickets }} phiếu · phiếu cũ nhất {{ bar.oldest|phut }}{% if bar.over %} · quầy đang dồn món{% endif %}{% else %}Quầy không còn món chờ{% endif %}</p>
+  {% if can_bar %}</a>{% else %}</div>{% endif %}
+  <a class="stat{% if ready.cups %} stat-ok{% endif %}" href="{% url 'orders:ready' %}"><p class="stat-label">Chờ mang ra</p>
+    <p class="stat-value">{{ ready.cups }} <small class="stat-of">ly</small></p>
+    <p class="stat-note">{% if ready.cups %}Bàn {{ ready.tables|join:", " }} · chờ {{ ready.oldest|phut }}{% else %}Không có món chờ mang ra{% endif %}</p></a>
+  {% if can_pay %}<a class="stat" href="{% url 'orders:cashier' %}">{% else %}<div class="stat">{% endif %}
+    <p class="stat-label">Chờ thanh toán</p><p class="stat-value">{{ to_pay.tables }} <small class="stat-of">bàn</small></p>
+    <p class="stat-note">{% if to_pay.tables %}{{ to_pay.amount|intcomma }} đ đã phục vụ xong{% else %}Không có bàn chờ thu tiền{% endif %}</p>
+  {% if can_pay %}</a>{% else %}</div>{% endif %}
+</div>
+
+{% include "shifts/_overrun.html" %}
+{% if shift %}
+<section class="card" aria-labelledby="ov-shift">
+  <div class="card-head"><div><h2 id="ov-shift">Ca này đến giờ</h2>
+    <p class="card-sub">{{ shift.name }} tính từ {{ shift.starts_at|date:"H:i" }}{% if shift.starts_at|date:"Ymd" != now|date:"Ymd" %} ngày {{ shift.starts_at|date:"d/m" }}{% endif %}, cập nhật lúc {{ now|date:"H:i:s" }}.</p></div>
+    {% if can_money %}<a class="btn btn-ghost btn-sm" href="{% url 'shifts:my_shift' %}">Quỹ ca</a>{% endif %}</div>
+  <div class="mini-stats">
+    <div class="mini-stat"><span>Đơn</span><strong>{{ sales.orders }}</strong><small>{{ sales.paid }} đơn đã thu tiền</small></div>
+    <div class="mini-stat"><span>Ly đã bán</span><strong>{{ sales.cups }}</strong></div>
+    <div class="mini-stat{% if sales.median_wait and sales.median_wait > wait_standard %} is-warn{% endif %}"><span>Khách chờ món</span>
+      <strong>{% if sales.median_wait is not None %}{{ sales.median_wait }} <small>phút</small>{% else %}<span class="muted">–</span>{% endif %}</strong><small>Thời gian chờ thường gặp</small></div>
+    {% if money %}
+    <div class="mini-stat"><span>Doanh thu ca</span><strong>{{ money.revenue_total|intcomma }} <small>đ</small></strong>
+      <small>Tiền mặt {{ money.revenue_cash|intcomma }} · Chuyển khoản {{ money.revenue_transfer|intcomma }}</small></div>
+    <div class="mini-stat"><span>Tiền mặt phải có</span><strong>{{ money.expected_cash|intcomma }} <small>đ</small></strong></div>
+    {% endif %}
+  </div>
+</section>
+{% else %}
+<p class="notice notice-warn">Chưa có ca nào đang mở. Đơn mới vẫn được nhận nhưng chưa thuộc ca nào; Chủ quán mở ca ở Quản trị, mục Ca làm việc.</p>
+{% endif %}
+
+<div class="ov-grid">
+  <section class="card" aria-labelledby="ov-tables">
+    <div class="card-head"><div><h2 id="ov-tables">Bàn</h2>
+      <p class="card-sub">{{ tables_busy }} bàn có khách, {{ tables_free }} bàn trống. Bấm bàn có khách để xem đơn.</p></div></div>
+    <div class="card-body">
+      {% if tables %}
+      <ul class="ov-legend" aria-label="Chú thích tình trạng bàn">
+        {% for label, tone, n in states %}<li><span class="pill pill-{{ tone }}">{{ label }}</span> {{ n }}</li>{% endfor %}
+        <li><span class="pill pill-free">Trống</span> {{ tables_free }}</li>
+      </ul>
+      {% for area, rows in areas %}
+      {% if areas|length > 1 %}<h3 class="ov-area">{{ area }}</h3>{% endif %}
+      <ul class="table-map">
+        {% for t in rows %}
+        <li>
+          {% if t.state %}
+          <a class="table-tile is-busy" href="{% url 'orders:open_orders' %}#o-{{ t.link_order }}">
+            <span class="table-tile-head"><strong>Bàn {{ t.table.code }}</strong>
+              <span class="table-time{% if t.slow %} is-slow{% endif %}" title="Thời gian từ đơn đầu tiên">{{ t.minutes|phut }}</span></span>
+            <span class="pill pill-{{ t.tone }}">{{ t.label }}</span>
+            <span class="table-meta">{% if t.waiting %}{{ t.waiting }} ly chờ pha{% endif %}{% if t.waiting and t.ready %} · {% endif %}{% if t.ready %}{{ t.ready }} ly chờ mang ra{% endif %}{% if not t.waiting and not t.ready %}{{ t.orders|length }} đơn{% endif %}</span>
+            <span class="table-amount">{{ t.amount|intcomma }} đ</span>
+          </a>
+          {% else %}
+          <div class="table-tile is-free"><span class="table-tile-head"><strong>Bàn {{ t.table.code }}</strong></span>
+            <span class="table-meta">Trống · {{ t.table.seats }} chỗ</span></div>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endfor %}
+      {% else %}
+      <p class="muted">Chưa khai báo bàn. Chủ quán thêm bàn ở Quản trị, mục Bàn.</p>
+      {% endif %}
+    </div>
+  </section>
+
+  <div class="ov-side">
+    <section class="card" aria-labelledby="ov-todo">
+      <div class="card-head"><h2 id="ov-todo">Cần xử lý</h2></div>
+      {% if approvals or slow_tables or bar.over %}
+      <ul class="list">
+        {% for a in approvals %}
+        <li class="list-row ov-row">
+          <span><strong>Bàn {{ a.req.order.table.code }}: {{ a.summary }}</strong>
+            <span class="cell-sub">{{ a.req.requested_by }} gửi {{ a.minutes|phut }} trước · {% if a.exhausted %}quá hạn duyệt{% else %}chờ {{ a.level }}{% endif %}</span></span>
+          {% if a.mine %}<a class="btn btn-quiet btn-sm" href="{% url 'orders:approvals' %}">Duyệt</a>{% elif a.exhausted %}<span class="pill pill-danger">Quá hạn</span>{% else %}<span class="pill pill-warn">Chờ duyệt</span>{% endif %}
+        </li>
+        {% endfor %}
+        {% for t in slow_tables %}
+        <li class="list-row ov-row">
+          <span><strong>Bàn {{ t.table.code }} chờ món lâu</strong>
+            <span class="cell-sub">Gọi từ {{ t.minutes|phut }} trước{% if t.waiting %}, còn {{ t.waiting }} ly chưa pha{% endif %}{% if t.ready %}, {{ t.ready }} ly pha xong chưa mang ra{% endif %}</span></span>
+          <span class="pill pill-danger">Chờ lâu</span>
+        </li>
+        {% endfor %}
+        {% if bar.over %}
+        <li class="list-row ov-row"><span><strong>Quầy pha chế đang dồn món</strong>
+          <span class="cell-sub">{{ bar.cups }} ly chưa pha, nhiều hơn mức cho phép</span></span><span class="pill pill-warn">Cần thêm người</span></li>
+        {% endif %}
+      </ul>
+      {% else %}
+      <p class="card-body muted">Không có việc gì đang chờ.</p>
+      {% endif %}
+    </section>
+
+    <section class="card" aria-labelledby="ov-people">
+      <div class="card-head"><h2 id="ov-people">Người trong ca</h2></div>
+      {% if people %}
+      <ul class="list">
+        {% for p in people %}
+        <li class="list-row ov-row">
+          <span><strong>{{ p.user }}</strong><span class="cell-sub">{{ p.role }}</span></span>
+          {% if p.absent %}<span class="pill pill-warn">Chưa chấm công</span>{% else %}<span class="muted">vào {{ p.since|date:"H:i" }}</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="card-body muted">Chưa ai chấm công vào ca.</p>
+      {% endif %}
+    </section>
+
+    <section class="card" aria-labelledby="ov-low">
+      <div class="card-head"><div><h2 id="ov-low">Món sắp hết</h2><p class="card-sub">Theo nguyên liệu còn trong kho.</p></div></div>
+      {% if low_items or quick_reports %}
+      <ul class="list">
+        {% for q in quick_reports %}
+        <li class="list-row ov-row"><span><strong>{{ q.ingredient.name }}</strong><span class="cell-sub">Nhân viên báo lúc {{ q.created_at|date:"H:i" }}</span></span>
+          <span class="pill {% if q.level == 'da_het' %}pill-danger{% else %}pill-warn{% endif %}">{{ q.get_level_display }}</span></li>
+        {% endfor %}
+        {% for m in low_items %}
+        <li class="list-row ov-row"><span>{{ m.name }}</span>
+          {% if m.left %}<span class="pill pill-warn">Còn {{ m.left }} ly</span>{% else %}<span class="pill pill-danger">Hết</span>{% endif %}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="card-body muted">Món nào cũng còn đủ.</p>
+      {% endif %}
+    </section>
+  </div>
+</div>

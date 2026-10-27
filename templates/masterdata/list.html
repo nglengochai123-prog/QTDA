@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ r.title }} · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head">
+<header class="page-head md-head">
   <h1>{{ r.title }}</h1>
   <div class="page-tools">
     <form method="get" class="toolbar" role="search">
@@ -14,9 +14,9 @@
 </header>
 {% if r.note %}<p class="page-note">{{ r.note }}</p>{% endif %}
 {% if rows %}
-<div class="table-wrap"><table class="data-table">
+<div class="table-wrap"><table class="data-table table-stack">
   <thead><tr>{% for h in headers %}<th scope="col">{{ h }}</th>{% endfor %}</tr></thead>
-  <tbody>{% for row in rows %}<tr>{% for c in row.cells %}{% if forloop.first %}<th scope="row"><a href="{% url 'masterdata:edit' r.key row.obj.pk %}">{{ c }}</a></th>{% else %}<td>{{ c }}</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody>
+  <tbody>{% for row in rows %}<tr>{% for h, c in row.cells %}{% if forloop.first %}<th scope="row"><a href="{% url 'masterdata:edit' r.key row.obj.pk %}">{{ c }}</a></th>{% else %}<td data-label="{{ h }}">{{ c }}</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody>
 </table></div>
 {% include "partials/pagination.html" %}
 {% else %}

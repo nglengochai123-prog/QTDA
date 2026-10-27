@@ -11,6 +11,7 @@
     <a class="btn btn-quiet btn-sm" href="{% url 'reports:revenue' %}?tu={{ first|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}">Báo cáo doanh thu</a>
   </form>
 </header>
+{% include "shifts/_overrun.html" with shift=ops.shift %}
 {% if fallback_month %}<p class="notice">Tháng này chưa có đơn đã thanh toán, đang hiện tháng {{ fallback_month|date:"m/Y" }} là tháng gần nhất có đơn. Chọn tháng khác ở ô Tháng.</p>{% endif %}
 
 <section class="card" aria-labelledby="ops-title">
@@ -101,10 +102,10 @@
     </div>
     <div class="card-body">
       {% if is_owner %}
-      <h3 class="card-h3">BO-01 · Giá trị kiểm soát tạm tính: {{ control.control_value|intcomma }} đ <span class="pill pill-{% if bo01_met %}ok{% else %}warn{% endif %}">{% if bo01_met %}Đang đạt{% else %}Chưa đạt{% endif %}</span></h3>
+      <h3 class="card-h3">Giá trị kiểm soát tạm tính: {{ control.control_value|intcomma }} đ <span class="pill pill-{% if bo01_met %}ok{% else %}warn{% endif %}">{% if bo01_met %}Đang đạt{% else %}Chưa đạt{% endif %}</span></h3>
       {% if bo01_chart.total %}
       <ul class="chart-legend"><li><span class="key key-1"></span>Tổn thất đã xác minh</li><li><span class="key key-2"></span>Thiếu tiền đang xử lý</li><li><span class="key key-target"></span>Mục tiêu dưới {{ bo01_target|intcomma }} đ</li></ul>
-      {% localize off %}<svg class="chart-svg" viewBox="0 0 {{ bo01_chart.w }} {{ bo01_chart.h }}" role="img" aria-label="Đã xác minh {{ control.verified }} đồng, đang xử lý {{ control.in_process }} đồng, mục tiêu {{ bo01_target }} đồng">
+      {% localize off %}<svg class="chart-svg" viewBox="0 0 {{ bo01_chart.w }} {{ bo01_chart.h }}" role="img" aria-label="Đã xác minh {{ control.verified|intcomma }} đồng, đang xử lý {{ control.in_process|intcomma }} đồng, mục tiêu {{ bo01_target|intcomma }} đồng">
         <rect class="track" x="8" y="12" width="{{ bo01_chart.w|add:'-16' }}" height="22" rx="4"/>
         {% for s in bo01_chart.segs %}<rect class="series-{{ s.slot }}" x="{{ s.x }}" y="12" width="{{ s.w }}" height="22" rx="2" tabindex="0" data-tip="{{ s.tip }}"><title>{{ s.tip }}</title></rect>{% endfor %}
         <line class="target" x1="{{ bo01_chart.target_x }}" x2="{{ bo01_chart.target_x }}" y1="4" y2="42"/>
@@ -112,7 +113,7 @@
       </svg>{% endlocalize %}
       {% else %}<p class="muted">Chưa có tổn thất hay khoản thiếu nào trong tháng này. Mục tiêu dưới {{ bo01_target|intcomma }} đ.</p>{% endif %}
       <p class="note">Đã thu hồi {{ control.recovered|intcomma }} đ · đã xác minh còn lại {{ control.verified_remaining|intcomma }} đ. <a href="{% url 'reports:revenue_control' %}?tu={{ first|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}">Xem vụ việc cấu thành</a></p>
-      <h3 class="card-h3">BO-02 · Trường hợp thiếu nguyên liệu: <a href="{% url 'inventory:report' %}?thang={{ month|date:'Y-m' }}">{{ shortages }}</a> <span class="pill pill-{% if bo02_met %}ok{% else %}warn{% endif %}">{% if bo02_met %}Đang đạt{% else %}Chưa đạt{% endif %}</span></h3>
+      <h3 class="card-h3">Trường hợp thiếu nguyên liệu trong tháng: <a href="{% url 'inventory:report' %}?thang={{ month|date:'Y-m' }}">{{ shortages }}</a> <span class="pill pill-{% if bo02_met %}ok{% else %}warn{% endif %}">{% if bo02_met %}Đang đạt{% else %}Chưa đạt{% endif %}</span></h3>
       <p class="note">Mục tiêu không quá {{ bo02_target }} trường hợp mỗi tháng.</p>
       {% endif %}
       <h3 class="card-h3">Thiếu tiền chưa giải thích theo người phụ trách ca: {{ accumulated|intcomma }} đ</h3>

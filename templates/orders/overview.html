@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Tổng quan ca · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div><h1>Tổng quan ca</h1>
+    <p class="page-sub">{% if shift %}{{ shift.name }} {{ shift.starts_at|date:"H:i" }}–{{ shift.ends_at|date:"H:i" }}{% if shift.starts_at|date:"Ymd" != now|date:"Ymd" or shift.ends_at|date:"Ymd" != shift.starts_at|date:"Ymd" %} ({{ shift.starts_at|date:"d/m" }}){% endif %}{% if shift.approver %} · Phụ trách: {{ shift.approver }}{% endif %}{% else %}{% now "l, d/m/Y" %}{% endif %}</p></div>
+  <div class="page-tools">
+    <a class="btn btn-quiet" href="{% url 'orders:open_orders' %}">Đơn đang mở</a>
+    <a class="btn btn-primary" href="{% url 'orders:create' %}">Tạo đơn</a>
+  </div>
+</header>
+<div id="overview" data-live-url="{% url 'orders:overview' %}?phan=1" data-live-every="15" aria-live="polite">
+{% include "orders/_overview_body.html" %}
+</div>
+{% endblock %}

@@ -9,20 +9,17 @@ from django.utils import timezone
 
 from apps.audit.models import Action
 from apps.audit.services import record
-from apps.core import params
+from apps.core import numbers, params, uploads
 from apps.core.idempotency import run_once
 
 from .models import CashEntry, Discrepancy, ExpenseCategory, Refund, Shift, ShiftReport, ShiftReportCorrection
 
 
 def _money(value, label):
-    try:
-        amount = int(str(value).replace(".", "").replace(",", "").strip())
-    except (TypeError, ValueError):
-        raise ValidationError(f"{label} không hợp lệ.")
-    if amount < 0:
+    """Tiền gõ kiểu Việt Nam ("1.390.000", "1 390 000 đ"); số 0 hợp lệ (ví dụ không có chuyển khoản)."""
+    if str(value if value is not None else "").strip().startswith("-"):
         raise ValidationError(f"{label} không được âm.")
-    return amount
+    return numbers.vnd(value, label, allow_zero=True)
 
 
 def _require_open(shift):
@@ -49,6 +46,7 @@ def add_cash_entry(user, operation_key, shift_id, kind, amount, *, category="", 
         elif kind == CashEntry.Kind.EXPENSE:
             if value == 0:
                 raise ValidationError("Số tiền chi phải lớn hơn 0.")
+            check_cash_on_hand(shift, value, "chi")
             if category not in ExpenseCategory.values or category == ExpenseCategory.MATERIALS:
                 raise ValidationError("Chọn danh mục chi. Chi nguyên vật liệu ghi qua phiếu nhập.")
             if not note.strip():
@@ -56,15 +54,28 @@ def add_cash_entry(user, operation_key, shift_id, kind, amount, *, category="", 
             limit = params.get("receipt_photo_threshold")
             if value >= limit and not receipt:
                 raise ValidationError(f"Khoản chi từ {limit:,} đồng phải có ảnh chứng từ.".replace(",", "."))  # AC-15
-            fields.update(category=category, receipt=receipt or "")
+            fields.update(category=category, receipt=uploads.check_photo(receipt) or "")
         elif kind == CashEntry.Kind.HANDOVER:
             if value == 0:
                 raise ValidationError("Số tiền nộp phải lớn hơn 0.")
             if not receiver_id or int(receiver_id) == user.pk:
                 raise ValidationError("Chọn người nhận tiền khác người nộp.")
-            fields["receiver_id"] = int(receiver_id)
+            from apps.accounts.models import User
+            from apps.accounts.permissions import Cap, user_can
+
+            receiver = User.objects.filter(pk=int(receiver_id), is_active=True).first()
+            if not user_can(receiver, Cap.CASH_FUND):
+                raise ValidationError("Người nhận phải là Chủ quán hoặc thu ngân: chỉ họ bấm xác nhận đã nhận tiền được.")
+            check_cash_on_hand(shift, value, "nộp")
+            fields["receiver_id"] = receiver.pk
         entry = CashEntry.objects.create(store=shift.store, shift=shift, kind=kind, amount=value, note=note[:255],
                                          actor=user, operation_key=operation_key, **fields)
+        if kind == CashEntry.Kind.HANDOVER:
+            from apps.core.push import notify_later
+
+            # Ca không kết được khi khoản nộp chưa được xác nhận, nên báo ngay người nhận.
+            notify_later([entry.receiver_id], f"Xác nhận nhận {numbers.fmt(value)} đ tiền nộp",
+                         f"{user} nộp giữa {shift}. Bấm xác nhận khi đã nhận đủ tiền.", "/ca/")
         record(Action.CREATE, actor=user, obj=entry, object_type="shifts.CashEntry",
                after={"ca": str(shift), "loai": entry.get_kind_display(), "so_tien": value,
                       "danh_muc": entry.get_category_display() if entry.category else "", "noi_dung": note})
@@ -84,6 +95,62 @@ def confirm_handover(user, entry_id):
         CashEntry.objects.filter(pk=entry.pk).update(confirmed_at=entry.confirmed_at)
         record(Action.STATUS_CHANGE, actor=user, obj=entry, object_type="shifts.CashEntry",
                after={"xac_nhan_nhan": entry.amount})
+    return entry
+
+
+@transaction.atomic
+def correct_opening(user, shift_id, amount, reason=""):
+    """Sửa tiền đầu ca gõ nhầm khi ca còn mở (người đã xác nhận hoặc Chủ quán), có lý do và nhật ký.
+
+    Tiền đầu ca sai làm số phải có trong két sai cả ca: chi, nộp giữa ca bị chặn oan hoặc chênh lệch giả lúc kết ca."""
+    shift = Shift.objects.select_for_update().get(pk=shift_id)
+    _require_open(shift)
+    entry = shift.cash_entries.filter(kind=CashEntry.Kind.OPENING).first()
+    if entry is None:
+        raise ValidationError("Ca chưa xác nhận tiền đầu ca.")
+    if user.pk != entry.actor_id and not user.is_owner:
+        raise ValidationError("Chỉ người đã xác nhận tiền đầu ca hoặc Chủ quán sửa được.")
+    reason = str(reason or "").strip()[:255]
+    if not reason:
+        raise ValidationError("Ghi lý do sửa tiền đầu ca (ví dụ gõ thiếu một số 0).")
+    value = _money(amount, "Tiền đầu ca")
+    if value == entry.amount:
+        return entry
+    left = cash_on_hand(shift) - entry.amount + value
+    if left < 0:
+        raise ValidationError(f"Với tiền đầu ca {numbers.fmt(value)} đ, két theo sổ sẽ âm {numbers.fmt(-left)} đ vì đã "
+                              "chi và nộp nhiều hơn; kiểm tra lại số tiền.")
+    before = entry.amount
+    CashEntry.objects.filter(pk=entry.pk).update(amount=value)
+    entry.amount = value
+    record(Action.UPDATE, actor=user, obj=entry, object_type="shifts.CashEntry", reason=reason,
+           before={"ca": str(shift), "tien_dau_ca": before}, after={"tien_dau_ca": value})
+    return entry
+
+
+@transaction.atomic
+def cancel_handover(user, entry_id, reason=""):
+    """Bỏ khoản nộp giữa ca chưa được xác nhận: ghi nhầm người nhận hay số tiền, hoặc người nhận báo không nhận được.
+
+    Khoản chưa xác nhận chưa làm đổi số tiền phải có trong két, nên bỏ đi không làm sai số liệu ca; nội dung khoản
+    được giữ trong nhật ký. Người nhận, người ghi và Chủ quán làm được, khi ca còn mở."""
+    entry = (CashEntry.objects.select_for_update().select_related("shift", "receiver", "actor")
+             .get(pk=entry_id, kind=CashEntry.Kind.HANDOVER))
+    if entry.confirmed_at is not None:
+        raise ValidationError("Khoản nộp đã được người nhận xác nhận; không bỏ được.")
+    if entry.shift.status != Shift.Status.OPEN:
+        raise ValidationError(f"{entry.shift} đã kết; không sửa quỹ ca này.")
+    if user.pk not in (entry.receiver_id, entry.actor_id) and not user.is_owner:
+        raise ValidationError("Chỉ người nộp, người nhận hoặc Chủ quán bỏ được khoản nộp này.")
+    reason = str(reason or "").strip()[:255] or (
+        "Người nhận báo không nhận được" if user.pk == entry.receiver_id else "")
+    if not reason:
+        raise ValidationError("Ghi lý do bỏ khoản nộp (ví dụ ghi nhầm người nhận).")
+    record(Action.DELETE, actor=user, obj=entry, object_type="shifts.CashEntry",
+           before={"ca": str(entry.shift), "loai": entry.get_kind_display(), "so_tien": entry.amount,
+                   "nguoi_nop": str(entry.actor), "nguoi_nhan": str(entry.receiver), "noi_dung": entry.note},
+           reason=reason)
+    entry.delete()
     return entry
 
 
@@ -162,6 +229,22 @@ def figures(shift):
             "net_revenue": revenue_cash + revenue_transfer - refunds_cash - refunds_transfer}
 
 
+def cash_on_hand(shift):
+    """Tiền mặt trong két theo sổ; khoản nộp chưa được xác nhận coi như đã ra khỏi két."""
+    pending = sum(e.amount for e in shift.cash_entries.filter(kind=CashEntry.Kind.HANDOVER, confirmed_at__isnull=True))
+    return figures(shift)["expected_cash"] - pending
+
+
+def check_cash_on_hand(shift, amount, verb):
+    """Không chi hoặc nộp nhiều hơn tiền đang có trong két: thường là gõ thừa số 0."""
+    left = cash_on_hand(shift)
+    if amount > left:
+        tail = ("" if shift.cash_entries.filter(kind=CashEntry.Kind.OPENING).exists()
+                else " Ca chưa xác nhận tiền đầu ca; xác nhận trước nếu két có tiền để sẵn.")
+        raise ValidationError(f"Két của {shift} theo sổ chỉ còn {numbers.fmt(max(left, 0))} đ, ít hơn khoản {verb} "
+                              f"{numbers.fmt(amount)} đ. Kiểm tra lại số tiền đã gõ.{tail}")
+
+
 # ---------------- Kết ca (FR-08, BRU-06) ----------------
 
 def close_blockers(shift):
@@ -178,10 +261,11 @@ def close_blockers(shift):
 
     blockers += backup.close_blockers(shift)  # AC-13
     if not shift.cash_entries.filter(kind=CashEntry.Kind.OPENING).exists():
-        blockers.append("Chưa xác nhận tiền đầu ca.")
+        blockers.append("Chưa xác nhận tiền đầu ca: ghi số tiền nhận bàn giao ở mục Ghi quỹ tiền mặt (két trống thì ghi 0).")
     unconfirmed = shift.cash_entries.filter(kind=CashEntry.Kind.HANDOVER, confirmed_at__isnull=True)
     for e in unconfirmed:
-        blockers.append(f"Khoản nộp {e.amount:,} đ cho {e.receiver} chưa được xác nhận.".replace(",", "."))
+        blockers.append(f"Khoản nộp {numbers.fmt(e.amount, 0)} đ cho {e.receiver} chưa được xác nhận: người nhận cần "
+                        f"bấm xác nhận đã nhận tiền; ghi nhầm thì bỏ khoản này ở mục Bút toán của ca.")
     return blockers
 
 
@@ -192,10 +276,17 @@ def carry_over(user, order_id, to_shift_id, reason):
 
     if not reason.strip():
         raise ValidationError("Ghi lý do chuyển đơn sang ca sau.")
-    order = Order.objects.select_for_update().get(pk=order_id)
+    order = Order.objects.select_for_update().select_related("shift").get(pk=order_id)
     target = Shift.objects.get(pk=to_shift_id, status=Shift.Status.OPEN)
     if order.shift_id == target.pk:
         raise ValidationError("Chọn ca kế tiếp khác ca hiện tại.")
+    # Chỉ chuyển đơn khách chưa trả của một ca chưa kết; đơn đã thu hay đã hủy giữ nguyên ca để số liệu ca cũ không đổi.
+    if order.status in (Order.Status.PAID, Order.Status.CANCELLED):
+        raise ValidationError(f"Đơn {order.code} đã {order.get_status_display().lower()}; không chuyển sang ca khác.")
+    if order.shift_id and order.shift.status != Shift.Status.OPEN:
+        raise ValidationError(f"{order.shift} đã kết; không chuyển đơn của ca này.")
+    if order.shift_id and target.starts_at <= order.shift.starts_at:
+        raise ValidationError("Chỉ chuyển đơn sang ca bắt đầu sau ca hiện tại.")
     before = str(order.shift) if order.shift_id else ""
     order.shift = target
     order.save(update_fields=["shift", "updated_at"])
@@ -429,7 +520,7 @@ def check_accumulated(shift):
         if total > params.get("accumulated_manager_threshold"):
             exc = open_exception(
                 ExceptionCase.Kind.ACCUMULATED_MANAGER, employee=items[0].manager, period=period, store=shift.store,
-                rule=f"Thiếu tiền chưa giải thích tích lũy tháng {period} vượt "
+                rule=f"Thiếu tiền chưa giải thích tích lũy tháng {start:%m/%Y} vượt "
                      f"{params.get('accumulated_manager_threshold'):,} đ".replace(",", "."),
                 amount=total, detail=f"Tích lũy {total:,} đ qua {len(items)} ca.".replace(",", "."))
             exc.shifts.add(*{d.shift for d in items})
@@ -437,7 +528,8 @@ def check_accumulated(shift):
     store_total = sum(-d.difference for d in shortages)
     if store_total > params.get("accumulated_store_threshold"):
         exc = open_exception(ExceptionCase.Kind.ACCUMULATED_STORE, period=period, store=shift.store,
-                             rule=f"Thiếu tiền chưa giải thích của toàn quán tháng {period} vượt ngưỡng",
+                             rule=f"Thiếu tiền chưa giải thích của toàn quán tháng {start:%m/%Y} vượt "
+                                  f"{params.get('accumulated_store_threshold'):,} đ".replace(",", "."),
                              amount=store_total, detail=f"Tích lũy {store_total:,} đ.".replace(",", "."))
         exc.shifts.add(*{d.shift for d in shortages})
         results.append(exc)
@@ -492,5 +584,5 @@ def data_status(shift, now=None):
     count = critical_count_status(day, now) if last_of_day else None
     if count and count["late"]:
         issues.append("Thiếu kiểm kê nhóm trọng yếu: " + ", ".join(count["missing"]))  # BRU-07
-    return {"count": count,"shift": shift, "closed": shift.status == Shift.Status.CLOSED, "has_report": has_report,
-            "deadline": deadline, "issues": issues, "overdue": bool(issues)}
+    return {"count": count, "shift": shift, "closed": shift.status == Shift.Status.CLOSED, "has_report": has_report,
+            "deadline": deadline, "past_deadline": now > deadline, "issues": issues, "overdue": bool(issues)}

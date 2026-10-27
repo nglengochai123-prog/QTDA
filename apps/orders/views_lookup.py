@@ -1,8 +1,8 @@
 """Tra cứu đơn có bộ lọc, phân trang và trang chi tiết đơn (truy vết từ báo cáo tới giao dịch gốc, NFR-19)."""
 
-from datetime import date, datetime, time, timedelta
+from datetime import datetime, time, timedelta
 
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
@@ -10,16 +10,10 @@ from django.views.decorators.http import require_GET
 from apps.accounts.models import User
 from apps.accounts.permissions import Cap, capability_required
 from apps.catalog.models import ItemSize, MenuGroup, Table
+from apps.core.dates import parse_day as _day
 from apps.core.paging import paginate
 
 from .models import Order, Payment
-
-
-def _day(value):
-    try:
-        return date.fromisoformat(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _bounds(start, end):
@@ -27,6 +21,9 @@ def _bounds(start, end):
     lo = timezone.make_aware(datetime.combine(start, time.min), tz) if start else None
     hi = timezone.make_aware(datetime.combine(end + timedelta(days=1), time.min), tz) if end else None
     return lo, hi
+
+
+ADVANCED_FILTERS = ("theo", "tu", "den", "trang_thai", "phuong_thuc", "ban", "nhan_vien", "mon")
 
 
 def filter_orders(params):
@@ -64,13 +61,16 @@ def filter_orders(params):
 def order_lookup(request):
     qs = filter_orders(request.GET)
     page, qs_params = paginate(request, qs)
+    advanced = sum(1 for key in ADVANCED_FILTERS if request.GET.get(key))
+    total = Order.objects.filter(pk__in=qs.values("pk")).aggregate(s=Sum("total"))["s"] or 0
     return render(request, "orders/lookup.html", {
         "page": page, "qs": qs_params, "f": request.GET, "statuses": Order.Status.choices,
+        "advanced": advanced, "filtered": advanced or any(request.GET.get(k) for k in ("q", "ca", "nhom", "gio", "da_thu")),
+        "count_total": total,
         "methods": Payment.Method.choices, "tables": Table.objects.filter(is_active=True),
         "staff": User.objects.filter(is_active=True).order_by("first_name"),
         "sizes": ItemSize.objects.select_related("item").order_by("item__name", "price"),
         "groups": MenuGroup.objects.all(),
-        "page_total": sum(o.total for o in page.object_list),
     })
 
 
@@ -81,9 +81,11 @@ def order_detail(request, order_id):
     from apps.shifts.models import Refund
 
     order = get_object_or_404(Order.objects.select_related("table", "created_by", "payment", "shift"), pk=order_id)
+    requests = [str(pk) for pk in order.adjustment_requests.values_list("pk", flat=True)]
     trail = AuditLog.objects.filter(
         Q(object_type="orders.Order", object_id=str(order.pk)) | Q(reason__contains=order.code)
-        | Q(after__icontains=order.code)).order_by("created_at")[:100]
+        | Q(after__icontains=order.code) | Q(object_repr__contains=order.code)
+        | Q(object_type="orders.AdjustmentRequest", object_id__in=requests)).order_by("created_at")[:100]
     return render(request, "orders/detail.html", {
         "order": order, "lines": order.lines.prefetch_related("options").select_related("recipe_version"),
         "requests": order.adjustment_requests.select_related("reason", "requested_by", "decided_by"),

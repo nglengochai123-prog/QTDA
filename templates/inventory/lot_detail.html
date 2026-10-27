@@ -6,35 +6,35 @@
 <header class="page-head">
   <div><h1>{{ ing.name }} <span class="rule rule-lg" title="{{ ing.rule_label }}">{{ ing.rule_short }}</span></h1>
     <p class="page-sub">{{ ing.rule_label }}.{% if ing.shelf_life_days %} Hạn dùng {{ ing.shelf_life_days }} ngày; lô không ghi hạn được tính theo ngày nhập.{% endif %} Báo sắp hết hạn khi còn {{ data.near_days }} ngày.</p></div>
-  <div class="page-tools"><a class="btn btn-quiet" href="{% url 'inventory:ledger' %}?nvl={{ ing.pk }}">Sổ kho</a><a class="btn btn-quiet" href="{% url 'inventory:waste' %}">Ghi hao hụt</a></div>
+  <div class="page-tools">{% if can_ledger %}<a class="btn btn-quiet" href="{% url 'inventory:ledger' %}?nvl={{ ing.pk }}">Sổ kho</a>{% endif %}<a class="btn btn-quiet" href="{% url 'inventory:waste' %}">Ghi hao hụt</a></div>
 </header>
 
 <div class="stats">
   <div class="stat"><p class="stat-label">Tồn vật lý</p><p class="stat-value">{{ ing.stock.physical|floatformat:"-2g" }} <small>{{ ing.get_unit_display }}</small></p><p class="stat-note">{{ data.lots|length }} lô</p></div>
   <div class="stat"><p class="stat-label">Dùng mỗi ngày</p><p class="stat-value">{{ data.rate|floatformat:"-1g" }} <small>{{ ing.get_unit_display }}</small></p><p class="stat-note">Mức dùng gần đây</p></div>
-  <div class="stat"><p class="stat-label">Đủ dùng</p><p class="stat-value">{% if data.cover_days is not None %}{{ data.cover_days|floatformat:"0" }} <small>ngày</small>{% else %}—{% endif %}</p></div>
+  <div class="stat"><p class="stat-label">Đủ dùng</p><p class="stat-value">{% if data.cover_days is not None %}{{ data.cover_days|floatformat:"0g" }} <small>ngày</small>{% else %}—{% endif %}</p></div>
   {% if show_value %}<div class="stat"><p class="stat-label">Giá trị tồn</p><p class="stat-value">{{ data.value|intcomma }} <small>đ</small></p></div>{% endif %}
-  <div class="stat{% if data.at_risk %} stat-warn{% endif %}"><p class="stat-label">Dự kiến bỏ vì không dùng kịp</p><p class="stat-value">{{ data.at_risk|floatformat:"0" }} <small>{{ ing.get_unit_display }}</small></p>{% if show_value and data.at_risk_value %}<p class="stat-note">khoảng {{ data.at_risk_value|intcomma }} đ</p>{% endif %}</div>
+  <div class="stat{% if data.at_risk %} stat-warn{% endif %}"><p class="stat-label">Dự kiến bỏ vì không dùng kịp</p><p class="stat-value">{{ data.at_risk|floatformat:"0g" }} <small>{{ ing.get_unit_display }}</small></p>{% if show_value and data.at_risk_value %}<p class="stat-note">khoảng {{ data.at_risk_value|intcomma }} đ</p>{% endif %}</div>
 </div>
 
 <section class="card">
   <div class="card-head"><div><h2>Thứ tự lấy lô</h2><p class="card-sub">Lô số 1 là lô nên lấy dùng trước. Lô quá hạn luôn đứng cuối và không được gợi ý.</p></div></div>
   {% if data.lots %}
   <div class="table-wrap">
-  <table class="data-table">
+  <table class="data-table table-stack">
     <thead><tr><th scope="col" class="num">#</th><th scope="col">Mã lô</th><th scope="col">Nhập</th><th scope="col">Hạn sử dụng</th>
       <th scope="col" class="num">Còn lại</th><th scope="col">Dự kiến</th><th scope="col">Trạng thái</th><th scope="col"><span class="visually-hidden">Thao tác</span></th></tr></thead>
     <tbody>
     {% for v in data.lots %}
     <tr{% if forloop.first and v.state != 'qua_han' %} class="row-focus"{% endif %}>
-      <td class="num">{{ v.rank }}</td>
+      <td class="num" data-label="Thứ tự lấy">{{ v.rank }}</td>
       <th scope="row"><span class="mono">{{ v.code }}</span>{% if v.supplier_lot %}<div class="cell-sub">Số lô NSX {{ v.supplier_lot }}</div>{% endif %}</th>
-      <td>{{ v.received_at|date:"d/m/Y" }}<div class="cell-sub">{% if v.supplier %}{{ v.supplier }}{% else %}{{ v.get_source_display }}{% endif %}{% if show_value and v.cost %} · {{ v.cost|intcomma }} đ/{{ ing.get_unit_display }}{% endif %}</div></td>
-      <td>{% if v.expiry_date %}{{ v.expiry_date|date:"d/m/Y" }}{% if v.expiry_estimated %} <span class="muted">(ước tính)</span>{% endif %}<div class="cell-sub">{% if v.overdue %}quá hạn {{ v.overdue }} ngày{% elif v.days_left == 0 %}hết hạn hôm nay{% else %}còn {{ v.days_left }} ngày{% endif %}</div>{% else %}<span class="muted">Chưa rõ</span>{% endif %}</td>
-      <td class="num">{{ v.remaining|floatformat:"-2g" }} / {{ v.quantity|floatformat:"-2g" }} <span class="unit">{{ ing.get_unit_display }}</span><div class="meter"><span style="width:{% widthratio v.remaining v.quantity 100 %}%"></span></div></td>
-      <td>{% if v.state == 'qua_han' %}<span class="muted">Không dùng</span>{% elif v.used_up %}{% if v.start %}{{ v.start|date:"d/m" }} → {% endif %}{{ v.used_up|date:"d/m" }}{% elif v.start %}Từ {{ v.start|date:"d/m" }}{% else %}<span class="muted">Chưa tới lượt</span>{% endif %}
-        {% if v.waste > 0 and v.state != 'qua_han' %}<div class="cell-sub text-danger">Có thể bỏ {{ v.waste|floatformat:"0" }} {{ ing.get_unit_display }}</div>{% endif %}</td>
-      <td><span class="pill pill-{% if v.state == 'qua_han' %}danger{% elif v.state == 'sap_het_han' %}warn{% elif v.state == 'chua_ro_han' %}neutral{% else %}ok{% endif %}">{{ v.state_label }}</span></td>
+      <td data-label="Nhập">{{ v.received_at|date:"d/m/Y" }}<div class="cell-sub">{% if v.supplier %}{{ v.supplier }}{% else %}{{ v.get_source_display }}{% endif %}{% if show_value and v.cost %} · {{ v.cost|intcomma }} đ/{{ ing.get_unit_display }}{% endif %}</div></td>
+      <td data-label="Hạn sử dụng">{% if v.expiry_date %}{{ v.expiry_date|date:"d/m/Y" }}{% if v.expiry_estimated %} <span class="muted">(ước tính)</span>{% endif %}<div class="cell-sub">{% if v.overdue %}quá hạn {{ v.overdue }} ngày{% elif v.days_left == 0 %}hết hạn hôm nay{% else %}còn {{ v.days_left }} ngày{% endif %}</div>{% else %}<span class="muted">Chưa rõ</span>{% endif %}</td>
+      <td class="num" data-label="Còn lại">{{ v.remaining|floatformat:"-2g" }} / {{ v.quantity|floatformat:"-2g" }} <span class="unit">{{ ing.get_unit_display }}</span><div class="meter"><span style="width:{% widthratio v.remaining v.quantity 100 %}%"></span></div></td>
+      <td data-label="Dự kiến">{% if v.state == 'qua_han' %}<span class="muted">Không dùng</span>{% elif v.used_up %}{% if v.start %}{{ v.start|date:"d/m" }} → {% endif %}{{ v.used_up|date:"d/m" }}{% elif v.start %}Từ {{ v.start|date:"d/m" }}{% else %}<span class="muted">Chưa tới lượt</span>{% endif %}
+        {% if v.waste > 0 and v.state != 'qua_han' %}<div class="cell-sub text-danger">Có thể bỏ {{ v.waste|floatformat:"0g" }} {{ ing.get_unit_display }}</div>{% endif %}</td>
+      <td data-label="Trạng thái"><span class="pill pill-{% if v.state == 'qua_han' %}danger{% elif v.state == 'sap_het_han' %}warn{% elif v.state == 'chua_ro_han' %}neutral{% else %}ok{% endif %}">{{ v.state_label }}</span></td>
       <td class="actions">
         {% if v.state == 'qua_han' %}<form method="post" action="{% url 'inventory:lot_dispose' v.pk %}" data-once data-confirm="Hủy toàn bộ {{ v.remaining|floatformat:'-2g' }} {{ ing.get_unit_display }} của lô {{ v.code }}?">{% csrf_token %}<input type="hidden" name="operation_key" value="{{ v.op }}"><input type="hidden" name="next" value="{{ request.path }}"><button class="btn btn-danger btn-sm" type="submit">Hủy lô</button></form>{% endif %}
         <details class="popover"><summary class="btn btn-ghost btn-sm">Sửa</summary>
@@ -62,20 +62,20 @@
 <section class="card">
   <div class="card-head"><h2>Xuất nhập theo lô</h2></div>
   {% if draws %}
-  <div class="table-wrap"><table class="data-table compact">
+  <div class="table-wrap"><table class="data-table compact table-stack">
     <thead><tr><th scope="col">Lúc</th><th scope="col">Lô</th><th scope="col">Nghiệp vụ</th><th scope="col" class="num">Lượng</th></tr></thead>
-    <tbody>{% for d in draws %}<tr><td>{{ d.created_at|date:"d/m H:i" }}</td><td><span class="mono">{{ d.lot.code }}</span></td>
-      <td>{% if d.movement %}{{ d.movement.get_kind_display }}{% if d.movement.actor %} <span class="muted">· {{ d.movement.actor }}</span>{% endif %}{% else %}Chuyển sang theo dõi lô{% endif %}{% if d.note %}<div class="cell-sub">{{ d.note }}</div>{% endif %}</td>
-      <td class="num {% if d.quantity < 0 %}neg{% else %}pos{% endif %}">{% if d.quantity > 0 %}+{% endif %}{{ d.quantity|floatformat:"-2g" }}</td></tr>{% endfor %}</tbody>
+    <tbody>{% for d in draws %}<tr><th scope="row">{{ d.created_at|date:"d/m H:i" }}</th><td data-label="Lô"><span class="mono">{{ d.lot.code }}</span></td>
+      <td data-label="Nghiệp vụ">{% if d.movement %}{{ d.movement.get_kind_display }}{% if d.movement.actor %} <span class="muted">· {{ d.movement.actor }}</span>{% endif %}{% else %}Chuyển sang theo dõi lô{% endif %}{% if d.note %}<div class="cell-sub">{{ d.note }}</div>{% endif %}</td>
+      <td class="num {% if d.quantity < 0 %}neg{% else %}pos{% endif %}" data-label="Lượng">{% if d.quantity > 0 %}+{% endif %}{{ d.quantity|floatformat:"-2g" }}</td></tr>{% endfor %}</tbody>
   </table></div>
   {% else %}<div class="empty-cell">Chưa có xuất nhập.</div>{% endif %}
 </section>
 <section class="card">
   <div class="card-head"><h2>Lô đã dùng hết gần đây</h2></div>
   {% if used %}
-  <div class="table-wrap"><table class="data-table compact">
+  <div class="table-wrap"><table class="data-table compact table-stack">
     <thead><tr><th scope="col">Mã lô</th><th scope="col">Nhập</th><th scope="col" class="num">Số lượng</th><th scope="col">Hạn</th></tr></thead>
-    <tbody>{% for l in used %}<tr><td><span class="mono">{{ l.code }}</span></td><td>{{ l.received_at|date:"d/m/Y" }}</td><td class="num">{{ l.quantity|floatformat:"-2g" }}</td><td>{{ l.expiry_date|date:"d/m/Y"|default:"—" }}</td></tr>{% endfor %}</tbody>
+    <tbody>{% for l in used %}<tr><th scope="row"><span class="mono">{{ l.code }}</span></th><td data-label="Nhập">{{ l.received_at|date:"d/m/Y" }}</td><td class="num" data-label="Số lượng">{{ l.quantity|floatformat:"-2g" }}</td><td data-label="Hạn">{{ l.expiry_date|date:"d/m/Y"|default:"—" }}</td></tr>{% endfor %}</tbody>
   </table></div>
   {% else %}<div class="empty-cell">Chưa có lô nào dùng hết.</div>{% endif %}
 </section>

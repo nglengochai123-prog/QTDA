@@ -1,7 +1,7 @@
-{% if page.paginator.num_pages > 1 %}
+{% load humanize %}{% if page.paginator.num_pages > 1 %}
 <nav class="pager" aria-label="Phân trang">
   {% if page.has_previous %}<a class="btn btn-quiet" href="?{% if qs %}{{ qs }}&amp;{% endif %}trang={{ page.previous_page_number }}">‹ Trang trước</a>{% endif %}
-  <span class="muted">Trang {{ page.number }} / {{ page.paginator.num_pages }} · {{ page.paginator.count }} dòng</span>
+  <span class="muted">Trang {{ page.number }} / {{ page.paginator.num_pages }} · {{ page.paginator.count|intcomma }} dòng</span>
   {% if page.has_next %}<a class="btn btn-quiet" href="?{% if qs %}{{ qs }}&amp;{% endif %}trang={{ page.next_page_number }}">Trang sau ›</a>{% endif %}
 </nav>
-{% elif page.paginator.count %}<p class="muted">{{ page.paginator.count }} dòng</p>{% endif %}
+{% elif page.paginator.count %}<p class="muted">{{ page.paginator.count|intcomma }} dòng</p>{% endif %}

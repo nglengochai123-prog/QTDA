@@ -1,0 +1,70 @@
+{% with s=card.shift %}
+<dialog class="sheet" id="ca-{{ s.pk }}" aria-labelledby="ca-{{ s.pk }}-title">
+  <div class="sheet-body">
+    <header class="sheet-head"><div><p class="sheet-kicker">{{ card.label }}</p><h2 id="ca-{{ s.pk }}-title">{{ s.name }} {{ s.start|time:"H:i" }}–{{ s.end|time:"H:i" }}</h2></div>
+      <button class="btn btn-ghost btn-icon" type="button" data-close aria-label="Đóng"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button></header>
+    <div class="sheet-flash" data-flash></div>
+
+    <section class="sheet-section" aria-labelledby="ca-{{ s.pk }}-need">
+      <h3 id="ca-{{ s.pk }}-need">Số người cần</h3>
+      <form method="post" class="needs-editor" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}"><input type="hidden" name="shift" value="{{ s.pk }}">
+        {% for r in card.details %}
+        <div class="need-row{% if r.suggested is not None and r.suggested != r.needed %} is-changed{% endif %}">
+          <span class="need-label">{{ r.label }}{% if r.suggested is not None %}<small>Gợi ý {{ r.suggested }}</small>{% endif %}</span>
+          <div class="stepper">
+            <button type="button" class="stepper-btn" data-step="-1" aria-label="Bớt một {{ r.label|lower }}"><svg class="icon" aria-hidden="true"><use href="#i-minus"/></svg></button>
+            <input class="input" type="number" min="0" max="20" inputmode="numeric" name="need_{{ r.role }}" value="{{ r.needed }}" aria-label="Số {{ r.label|lower }} cần"{% if r.suggested is not None %} data-suggested="{{ r.suggested }}"{% endif %}>
+            <button type="button" class="stepper-btn" data-step="1" aria-label="Thêm một {{ r.label|lower }}"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
+          </div>
+        </div>
+        {% endfor %}
+        {% with first=card.details.0 %}
+        <div class="field need-reason" data-reason{% if not first.reason and not card.details.1.reason and not card.details.2.reason %} hidden{% endif %}>
+          <label for="ca-{{ s.pk }}-reason">Lý do khác số gợi ý</label>
+          <input class="input" id="ca-{{ s.pk }}-reason" name="reason" maxlength="255" value="{% firstof first.reason card.details.1.reason card.details.2.reason %}" placeholder="Ví dụ: có sự kiện, nhân viên mới đang học việc">
+        </div>
+        {% endwith %}
+        <div class="need-actions">
+          <label class="toggle toggle-sm"><input type="checkbox" name="same_name" value="1"> Áp dụng cho {{ s.name }} cả tuần</label>
+          <button class="btn btn-primary btn-sm" name="action" value="set_needs">Lưu số người cần</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="sheet-section" aria-labelledby="ca-{{ s.pk }}-people">
+      <h3 id="ca-{{ s.pk }}-people">Người làm</h3>
+      {% for r in card.details %}{% if r.needed or r.have or r.waiting %}
+      <div class="role-block">
+        <div class="role-head"><strong>{{ r.label }}</strong>
+          <span class="pill {% if r.state == 'short' %}pill-danger{% elif r.state == 'over' %}pill-warn{% else %}pill-ok{% endif %}">{{ r.have }}/{{ r.needed }}{% if r.short %} · thiếu {{ r.short }}{% elif r.surplus %} · dư {{ r.surplus }}{% endif %}</span></div>
+        <ul class="people-list">
+          {% for x in r.assigned %}
+          <li><span class="avatar-sm" aria-hidden="true">{{ x.a.user.initial }}</span>
+            <span class="person"><strong>{{ x.a.user }}</strong><small>{% if x.manual %}Bạn xếp{% else %}Theo đăng ký{% endif %}</small></span>
+            <form method="post" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}"><input type="hidden" name="assignment" value="{{ x.a.pk }}"><button class="btn btn-ghost btn-xs" name="action" value="unassign">Bỏ ra</button></form></li>
+          {% endfor %}
+          {% for reg in r.waiting %}
+          <li class="is-waiting"><span class="avatar-sm is-ghost" aria-hidden="true">{{ reg.user.initial }}</span>
+            <span class="person"><strong>{{ reg.user }}</strong><small>Đã đăng ký, chưa xếp</small></span>
+            <form method="post" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}"><input type="hidden" name="shift" value="{{ s.pk }}"><input type="hidden" name="role" value="{{ r.role }}"><input type="hidden" name="user" value="{{ reg.user_id }}"><button class="btn btn-quiet btn-xs" name="action" value="assign">Xếp vào ca</button></form></li>
+          {% endfor %}
+          {% if not r.assigned and not r.waiting %}<li class="muted">Chưa có ai đăng ký vị trí này.</li>{% endif %}
+        </ul>
+        {% if r.others %}
+        <form method="post" class="add-person" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}"><input type="hidden" name="shift" value="{{ s.pk }}"><input type="hidden" name="role" value="{{ r.role }}">
+          <select class="input input-sm" name="user" aria-label="Thêm {{ r.label|lower }} khác">{% for o in r.others %}<option value="{{ o.user.pk }}">{{ o.user }} · đã xếp {{ o.hours|floatformat:"-1" }} giờ tuần này</option>{% endfor %}</select>
+          <button class="btn btn-quiet btn-sm" name="action" value="assign">Thêm</button></form>
+        {% endif %}
+      </div>
+      {% endif %}{% empty %}{% endfor %}
+      {% if not card.roles %}<p class="muted">Đặt số người cần ở trên trước, rồi xếp người.</p>{% endif %}
+    </section>
+
+    <footer class="sheet-foot sheet-foot-split">
+      <form method="post" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}"><input type="hidden" name="shift" value="{{ s.pk }}">
+        <button class="btn btn-ghost btn-danger-text" name="action" value="delete_shift" data-confirm="Xóa {{ s.name }} {{ s.date|date:'d/m' }}?">Xóa ca</button></form>
+      <button class="btn btn-quiet" type="button" data-close>Xong</button>
+    </footer>
+  </div>
+</dialog>
+{% endwith %}

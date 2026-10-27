@@ -2,40 +2,47 @@
 {% load humanize %}
 {% block title %}Thu ngân · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><h1>Thu ngân</h1></header>
-<details class="help-tip"><summary>Giải thích</summary><p>Thu tiền theo bàn khi mọi đơn của bàn đã phục vụ và không còn yêu cầu chờ duyệt. Số tiền tính tự động, không nhập tay.</p></details>
+<header class="page-head"><div><h1>Thu ngân</h1><p class="page-sub">Thu tiền theo bàn khi mọi đơn của bàn đã phục vụ và không còn yêu cầu chờ duyệt. Số tiền tính tự động.</p></div>
+  {% if bills %}<p class="count-progress"><strong>{{ bills|length }}</strong> bàn chờ thu · {{ total|intcomma }} đ</p>{% endif %}</header>
+<div class="notice notice-info change-toast" role="status" id="cashier-changed" data-sig="{{ signature }}" data-url="{% url 'orders:cashier_changes' %}" hidden>
+  <svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
+  <div><p>Các bàn vừa có thay đổi (đơn mới, món đã phục vụ hoặc yêu cầu đã duyệt).</p>
+    <a class="btn btn-primary btn-sm" href="{% url 'orders:cashier' %}">Tải lại danh sách</a></div>
+</div>
+{% include "shifts/_overrun.html" with shift=operating_shift %}
+{% include "shifts/_refunds.html" %}
 {% if bills %}
 <div class="bill-grid">
   {% for bill in bills %}
-  <article class="bill" aria-labelledby="b-{{ bill.table.pk }}">
+  <article class="bill{% if bill.blockers %} is-blocked{% endif %}" aria-labelledby="b-{{ bill.table.pk }}">
     <header class="bill-head">
       <h2 id="b-{{ bill.table.pk }}">Bàn {{ bill.table.code }}</h2>
       <strong class="bill-amount">{{ bill.amount|intcomma }} đ</strong>
     </header>
     <ul class="bill-orders">
       {% for order in bill.orders %}
-      <li><span class="bar-code-sm">{{ order.code }}</span> · {{ order.get_status_display }} · {{ order.total|intcomma }} đ</li>
+      <li>{% if can_detail %}<a class="bar-code-sm" href="{% url 'orders:detail' order.pk %}">{{ order.code }}</a>{% else %}<span class="bar-code-sm">{{ order.code }}</span>{% endif %}
+        <span class="pill pill-{% if order.status == 'da_phuc_vu' %}ok{% else %}neutral{% endif %}">{{ order.get_status_display }}</span>
+        <span class="num-cell">{{ order.total|intcomma }} đ</span></li>
       {% endfor %}
     </ul>
     {% if bill.blockers %}
     <div class="notice notice-warn" role="status">
       <svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
-      <ul class="notice-list">{% for b in bill.blockers %}<li>{{ b }}</li>{% endfor %}</ul>
+      <div><ul class="notice-list">{% for b in bill.blockers %}<li>{{ b }}</li>{% endfor %}</ul>
+        {% if bill.can_approve %}<a class="btn btn-quiet btn-sm bill-approve" href="{% url 'orders:approvals' %}">Mở Duyệt</a>{% endif %}</div>
     </div>
     {% endif %}
     {% if not bill.blockers or bill.can_received %}
     <form data-online-only method="post" action="{% url 'orders:pay' bill.table.pk %}" class="pay-form" data-once>
       {% csrf_token %}
       <input type="hidden" name="operation_key" value="{{ bill.operation_key }}">
-      {% if bill.blockers %}<input type="hidden" name="mode" value="received">{% endif %}
-      <fieldset class="option-group">
-        <legend>Phương thức</legend>
-        <div class="choice-row">
-          <label class="pick"><input type="radio" name="method" value="tien_mat" checked><span>Tiền mặt</span></label>
-          <label class="pick"><input type="radio" name="method" value="chuyen_khoan"><span>Chuyển khoản</span></label>
-        </div>
-      </fieldset>
-      <label class="toggle"><input type="checkbox" name="transfer_confirmed" value="1"> Đã thấy tiền chuyển khoản về tài khoản quán</label>
+      {% if bill.blockers %}<input type="hidden" name="mode" value="received">{% else %}<input type="hidden" name="expected" value="{{ bill.amount }}">{% endif %}
+      <div class="seg-pick seg-pick-block" role="radiogroup" aria-label="Phương thức">
+        <label><input type="radio" name="method" value="tien_mat" checked><span>Tiền mặt</span></label>
+        <label><input type="radio" name="method" value="chuyen_khoan"><span>Chuyển khoản</span></label>
+      </div>
+      <label class="toggle transfer-check"><input type="checkbox" name="transfer_confirmed" value="1"> Đã thấy tiền chuyển khoản về tài khoản quán</label>
       <button type="submit" class="btn btn-primary btn-block" data-busy-text="Đang ghi…">
         {% if bill.blockers %}Thanh toán theo món thực nhận{% else %}Thu {{ bill.amount|intcomma }} đ{% endif %}
       </button>
@@ -45,6 +52,6 @@
   {% endfor %}
 </div>
 {% else %}
-<div class="empty"><p><strong>Không có bàn nào chờ thanh toán.</strong></p></div>
+<div class="empty"><p><strong>Không có bàn nào chờ thanh toán.</strong></p><p>Bàn có đơn chưa trả tiền sẽ hiện ở đây.</p></div>
 {% endif %}
 {% endblock %}

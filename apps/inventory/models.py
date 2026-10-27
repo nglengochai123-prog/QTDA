@@ -48,9 +48,9 @@ class PolicyGroup(models.TextChoices):
 class IssueRule(models.TextChoices):
     """Thứ tự lấy lô khi xuất kho (pha chế, hao hụt, thiếu khi kiểm kê)."""
 
-    FEFO = "fefo", "Hết hạn trước, xuất trước (FEFO)"
-    FIFO = "fifo", "Nhập trước, xuất trước (FIFO)"
-    LIFO = "lifo", "Nhập sau, xuất trước (LIFO)"
+    FEFO = "fefo", "Hết hạn trước, xuất trước"
+    FIFO = "fifo", "Nhập trước, xuất trước"
+    LIFO = "lifo", "Nhập sau, xuất trước"
 
 
 class Weekday(models.IntegerChoices):
@@ -80,17 +80,17 @@ class Ingredient(StoreScopedModel):
     safety_stock = models.DecimalField("Mức tồn an toàn", max_digits=12, decimal_places=2, default=0)
     safety_stock_is_provisional = models.BooleanField(
         "Mức tồn an toàn tạm thời", default=True,
-        help_text="Giữ nhãn Tạm thời cho đến khi có dữ liệu để đề xuất (BRU-22, AC-45).",
+        help_text="Giữ nhãn Tạm thời cho đến khi có dữ liệu để đề xuất.",
     )
     is_critical = models.BooleanField("Nhóm trọng yếu", default=False)
     count_accumulated_threshold = models.DecimalField(
         "Ngưỡng thiếu kiểm kê tích lũy tháng", max_digits=12, decimal_places=2, null=True, blank=True,
-        help_text="Theo đơn vị tính. Để trống thì dùng 1 quy cách đóng gói (BRU-25).")
+        help_text="Theo đơn vị tính. Để trống thì dùng 1 quy cách đóng gói.")
     is_active = models.BooleanField("Đang sử dụng", default=True)
     issue_rule = models.CharField(
         "Quy tắc xuất lô", max_length=4, choices=IssueRule.choices, blank=True,
-        help_text="Để trống: hệ thống tự chọn, có hạn dùng thì FEFO, không có thì FIFO. "
-                  "LIFO chỉ dùng cho hàng không có hạn dùng.")
+        help_text="Để trống thì hệ thống tự chọn: hàng có hạn dùng lấy lô gần hết hạn trước, hàng không có hạn lấy lô "
+                  "nhập trước. Nhập sau, xuất trước chỉ dùng cho hàng không có hạn dùng.")
     # Chính sách mua (thiết kế mua nguyên liệu mục 7.4). Để trống thì dùng mặc định theo nhóm và tham số chung.
     policy_group = models.CharField(
         "Nhóm chính sách", max_length=1, choices=PolicyGroup.choices, blank=True,
@@ -153,8 +153,8 @@ class Ingredient(StoreScopedModel):
         if self.review_period_days and self.target_cycle_days and self.target_cycle_days < self.review_period_days:
             raise ValidationError({"target_cycle_days": "T không được nhỏ hơn chu kỳ kiểm tra R."})
         if self.issue_rule == IssueRule.LIFO and self.shelf_life_days:
-            raise ValidationError({"issue_rule": "Hàng có hạn dùng không xuất theo LIFO: lô cũ sẽ nằm lại tới khi hỏng. "
-                                                 "Để trống hoặc chọn FEFO."})
+            raise ValidationError({"issue_rule": "Hàng có hạn dùng không xuất theo kiểu nhập sau, xuất trước: lô cũ sẽ "
+                                                 "nằm lại tới khi hỏng. Để trống hoặc chọn hết hạn trước, xuất trước."})
 
     @property
     def rule(self):
@@ -166,13 +166,13 @@ class Ingredient(StoreScopedModel):
     def rule_label(self):
         if self.issue_rule:
             return IssueRule(self.issue_rule).label
-        return "Tự động: FEFO (có hạn dùng)" if self.shelf_life_days else "Tự động: FIFO (không có hạn dùng)"
+        return "Tự động: hết hạn trước, xuất trước" if self.shelf_life_days else "Tự động: nhập trước, xuất trước"
 
     @property
     def rule_short(self):
-        if self.issue_rule:
-            return self.issue_rule.upper()
-        return "FEFO" if self.shelf_life_days else "FIFO"
+        """Nhãn ngắn trên bảng kho và phiếu lấy hàng."""
+        rule = self.issue_rule or (IssueRule.FEFO if self.shelf_life_days else IssueRule.FIFO)
+        return {IssueRule.FEFO: "Theo hạn", IssueRule.FIFO: "Nhập trước", IssueRule.LIFO: "Nhập sau"}[rule]
 
 
 class RecipeVersionQuerySet(models.QuerySet):
@@ -183,6 +183,15 @@ class RecipeVersionQuerySet(models.QuerySet):
         at = at or timezone.now()
         return (self.published().filter(item=item, effective_from__lte=at)
                 .order_by("-effective_from", "-number").first())
+
+    def current_map(self, at=None):
+        """{item_id: phiên bản hiện hành} cho mọi món, kèm sẵn các dòng định mức để khỏi truy vấn từng món."""
+        at = at or timezone.now()
+        current = {}
+        for pk, item_id in (self.published().filter(effective_from__lte=at)
+                            .order_by("item_id", "-effective_from", "-number").values_list("pk", "item_id")):
+            current.setdefault(item_id, pk)
+        return {v.item_id: v for v in self.model.objects.filter(pk__in=current.values()).prefetch_related("lines")}
 
 
 class RecipeVersion(StoreScopedModel):
@@ -292,7 +301,9 @@ class RecipeLine(TimeStampedModel):
 
     def __str__(self):
         target = self.size.name if self.size_id else self.option.name if self.option_id else "?"
-        return f"{target}: {self.quantity} {self.ingredient.get_unit_display()} {self.ingredient.name}"
+        from apps.core.numbers import fmt
+
+        return f"{target}: {fmt(self.quantity)} {self.ingredient.get_unit_display()} {self.ingredient.name}"
 
     def clean(self):
         if bool(self.size_id) == bool(self.option_id):

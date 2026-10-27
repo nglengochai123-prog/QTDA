@@ -1,0 +1,10 @@
+<button class="wk-shift is-{{ card.state }}{% if card.past %} is-past{% endif %}{% if wide %} is-wide{% endif %}" type="button" data-open="ca-{{ card.shift.pk }}" aria-label="{{ card.label }}, {{ card.shift.name }}{% if card.short %}, thiếu {{ card.short }} người{% endif %}">
+  {% if wide %}<span class="wk-shift-title"><strong>{{ card.shift.name }}</strong> {{ card.shift.start|time:"H:i" }}–{{ card.shift.end|time:"H:i" }}{% if card.short %}<span class="wk-short">Thiếu {{ card.short }}</span>{% endif %}</span>{% endif %}
+  <span class="wk-roles">
+  {% for r in card.roles %}
+  <span class="wk-r"><span class="wk-role"><span class="dot dot-{{ r.state }}"></span><span class="wk-role-name">{{ r.label }}</span><b>{{ r.have }}/{{ r.needed }}</b></span>
+    {% if r.assigned %}<span class="wk-names">{% for x in r.assigned %}{{ x.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}</span>
+  {% empty %}<span class="wk-role muted">Chưa đặt số người</span>
+  {% endfor %}
+  </span>
+</button>

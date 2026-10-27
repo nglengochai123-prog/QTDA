@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load loi_thuong %}
 {% block title %}{{ s.size.item.name }} {{ s.size.name }} · Dự báo · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <header class="page-head">
@@ -10,10 +11,10 @@
   <div><dt>Ngày thiếu hàng không tính</dt><dd>{{ s.flagged_days }}</dd></div>
 </dl>
 {% if s.limitations %}<div class="notice notice-warn" role="status"><div><strong>Lưu ý khi dùng dự báo này</strong><ul class="notice-list">{% for l in s.limitations %}<li>{{ l }}</li>{% endfor %}</ul></div></div>{% endif %}
-<section class="panel"><h2>Từng ngày</h2>
+<section class="panel"><h2>Tổng nhiều ngày</h2>
   <div class="table-wrap"><table class="data-table">
-    <thead><tr><th scope="col">Ngày</th><th scope="col" class="num">Dự kiến (ly)</th><th scope="col" class="num">Thấp – cao</th></tr></thead>
-    <tbody>{% for d in s.daily %}<tr><th scope="row">{{ d.date }}</th><td class="num">{{ d.mean|floatformat:1 }}</td><td class="num">{{ d.q10 }}–{{ d.q90 }}</td></tr>{% endfor %}</tbody>
+    <thead><tr><th scope="col">Khoảng thời gian</th><th scope="col" class="num">Dự kiến (ly)</th><th scope="col" class="num">Thấp – cao</th></tr></thead>
+    <tbody>{% for k, t in s.totals.items %}<tr><th scope="row">{{ k }} ngày tới</th><td class="num">{{ t.mean|floatformat:"0g" }}</td><td class="num">{{ t.q10 }}–{{ t.q90 }}</td></tr>{% endfor %}</tbody>
   </table></div>
 </section>
 {% if check %}
@@ -23,10 +24,15 @@
   <p class="page-note">Nếu các con số này không hợp lý với quán, sửa ở trang <a href="{% url 'masterdata:list' 'nhan-dinh' %}">Nhận định Chủ quán</a>.</p>
 </section>
 {% endif %}
-<section class="panel"><h2>Tổng nhiều ngày</h2>
+<section class="panel"><h2>Từng ngày</h2>
   <div class="table-wrap"><table class="data-table">
-    <thead><tr><th scope="col">Khoảng thời gian</th><th scope="col" class="num">Dự kiến (ly)</th><th scope="col" class="num">Thấp – cao</th></tr></thead>
-    <tbody>{% for k, t in s.totals.items %}<tr><th scope="row">{{ k }} ngày tới</th><td class="num">{{ t.mean|floatformat:0 }}</td><td class="num">{{ t.q10 }}–{{ t.q90 }}</td></tr>{% endfor %}</tbody>
+    <thead><tr><th scope="col">Ngày</th><th scope="col" class="num">Dự kiến (ly)</th><th scope="col" class="num">Thấp – cao</th></tr></thead>
+    <tbody>{% for d in s.daily|slice:":14" %}<tr><th scope="row">{{ d.date|ngay_thu }}</th><td class="num">{{ d.mean|floatformat:"1g" }}</td><td class="num">{{ d.q10 }}–{{ d.q90 }}</td></tr>{% endfor %}</tbody>
   </table></div>
+  {% if s.daily|length > 14 %}<details class="table-more"><summary>Xem thêm {{ s.daily|length|add:"-14" }} ngày</summary>
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr><th scope="col">Ngày</th><th scope="col" class="num">Dự kiến (ly)</th><th scope="col" class="num">Thấp – cao</th></tr></thead>
+    <tbody>{% for d in s.daily|slice:"14:" %}<tr><th scope="row">{{ d.date|ngay_thu }}</th><td class="num">{{ d.mean|floatformat:"1g" }}</td><td class="num">{{ d.q10 }}–{{ d.q90 }}</td></tr>{% endfor %}</tbody>
+  </table></div></details>{% endif %}
 </section>
 {% endblock %}

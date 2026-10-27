@@ -36,6 +36,24 @@ class ParameterHistoryTests(Base):
             params.set_value("cash_threshold", 10000, owner, effective_from=timezone.now() - timedelta(hours=2))
         with self.assertRaises(ValidationError):
             params.set_value("cash_threshold", 10000, self.cashier)
+        params.set_value("cash_threshold", "80,000", owner)  # phẩy ngăn nghìn cũng được
+        self.assertEqual(params.get("cash_threshold"), 80000)
+        for bad in ("2.5", "2,5", "-1", ""):  # trước đây "2.5" bị đọc thành 25
+            with self.assertRaises(ValidationError):
+                params.set_value("approval_level_minutes", bad, owner)
+        # Gõ nhầm ngoài khoảng hợp lệ làm hỏng các phép tính theo giờ, theo thứ.
+        with self.assertRaisesMessage(ValidationError, "Giờ mở cửa (tính trường hợp thiếu nguyên liệu): nhập từ 0 đến 23 giờ."):
+            params.set_value("open_hour", 25, owner)
+        with self.assertRaisesMessage(ValidationError, "nhập từ 2 (thứ Hai) đến 8 (Chủ nhật)."):
+            params.set_value("schedule_deadline_weekday", 9, owner)
+        with self.assertRaisesMessage(ValidationError, "nhập từ 0% đến 100%."):
+            params.set_value("count_threshold_percent", 500, owner)
+        with self.assertRaisesMessage(ValidationError, "Giờ mở cửa (6 giờ) phải trước giờ đóng cửa (5 giờ)."):
+            params.set_value("close_hour", 5, owner)
+        params.set_value("close_hour", 24, owner)  # mở tới nửa đêm
+        from apps.forecast.planning import ensure_daily
+
+        ensure_daily()
         with self.assertRaises(ValueError):  # lịch sử không sửa được
             row = ParameterValue.objects.first()
             row.value = 1

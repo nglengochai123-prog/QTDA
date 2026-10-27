@@ -65,7 +65,7 @@ class CoreTests(TestCase):
         hist = fake_history(self.size.pk, 84, self.today, weekday=24, weekend=36)
         with mock.patch("apps.forecast.services.history", return_value=hist):
             rel = services.release(user=self.owner)
-        self.assertFalse(any("cấu hình đã duyệt" in x for x in rel.series.get().limitations))
+        self.assertFalse(any("đã được Chủ quán duyệt" in x for x in rel.series.get().limitations))
         self.client.login(username=self.owner.username, password=PASSWORD)
         with mock.patch("apps.forecast.evaluate.history", return_value=hist):
             self.client.post(reverse("forecast:choose_method", args=[self.size.pk]),
@@ -77,7 +77,7 @@ class CoreTests(TestCase):
             rel = services.release(user=self.owner)
         s = rel.series.get()
         self.assertEqual(s.method, "bayes")
-        self.assertTrue(any("cấu hình đã duyệt" in x for x in s.limitations))
+        self.assertTrue(any("đã được Chủ quán duyệt" in x for x in s.limitations))
         MethodDecision.objects.create(store=self.d["store"], size=self.size, method="uoc_tinh", decided_by=self.owner)
         self.assertIsNone(services.approved_config(self.size.pk))  # quay về ước tính ban đầu thì bỏ cấu hình
 
@@ -122,5 +122,24 @@ class CoreTests(TestCase):
         sim.active = False
         sim.save()
         self.client.login(username=self.owner.username, password=PASSWORD)
-        self.assertContains(self.client.get(reverse("forecast:history")), "ban.csv")
+        page = self.client.get(reverse("forecast:history"))
+        self.assertContains(page, "ban.csv")
+        self.assertContains(page, f"{start:%d/%m/%Y} →")  # ngày ghi kiểu Việt Nam, không phải 2026-10-06
+        # Tệp lưu bằng bảng mã khác UTF-8: báo cách sửa bằng tiếng Việt, không in lỗi của Python.
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        bad = SimpleUploadedFile("ban.csv", "Ngày;Món\n01/10/2026;Cà phê".encode("cp1258"))
+        r = self.client.post(reverse("forecast:history"), {"file": bad, "kind": HistoryBatch.Kind.REAL}, follow=True)
+        self.assertContains(r, "CSV UTF-8")
+        self.assertNotContains(r, "codec")
+        # Không dòng nào khớp thì báo rõ lý do, không tạo lần nhập rỗng; dòng hỏng hoặc ngày tương lai được kể ra.
+        before = HistoryBatch.objects.count()
+        none = SimpleUploadedFile("sai.csv", f"Ngày;Món;Số ly\n{start:%d/%m/%Y};Món lạ;3\nhôm qua;Cà phê sữa;2".encode())
+        r = self.client.post(reverse("forecast:history"), {"file": none, "kind": HistoryBatch.Kind.REAL}, follow=True)
+        self.assertContains(r, "Không có dòng nào nhập được (1 dòng không đọc được ngày hoặc số ly, món không khớp")
+        self.assertEqual(HistoryBatch.objects.count(), before)
+        mixed = SimpleUploadedFile("mot-phan.csv", f"Ngày;Món;Kích cỡ;Số ly\n{start:%d/%m/%Y};Cà phê sữa;M;5\n"
+                                   f"{self.today:%d/%m/%Y};Cà phê sữa;M;7\nxx;Cà phê sữa;M;1".encode())
+        r = self.client.post(reverse("forecast:history"), {"file": mixed, "kind": HistoryBatch.Kind.REAL}, follow=True)
+        self.assertContains(r, "Đã nhập 5 ly trong 1 ngày")
+        self.assertContains(r, "Đã bỏ qua 1 dòng không đọc được ngày hoặc số ly, 1 dòng từ hôm nay trở đi.")
         _ = Decimal

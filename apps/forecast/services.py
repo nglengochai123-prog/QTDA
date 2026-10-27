@@ -328,15 +328,16 @@ def release(user=None, now=None):
         model, used, flagged = fit(series, dates, status, size_flags(flags, size.pk), prior, s_dl, ds, obs_var=s_v)
         limitations = []
         if prior is None:
-            limitations.append("Chưa có nhận định của Chủ quán; mô hình bắt đầu từ tiên nghiệm rất rộng.")
+            limitations.append("Chưa có nhận định của Chủ quán cho món này; những ngày đầu dự báo còn rộng.")
         elif not prior["independent"]:
-            limitations.append("Nhận định dựa trên chính số bán trong hệ thống nên không dùng làm tiên nghiệm độc lập.")
-        if prior and prior["capped"]:
-            limitations.append(f"Khoảng của nhận định rất hẹp; sức nặng bị giới hạn ở {max_days} ngày tương đương.")
+            limitations.append("Nhận định được lấy từ chính số bán trong hệ thống nên chỉ dùng để tham khảo.")
+        if prior and prior["capped"] and used < min_history:  # đủ số bán rồi thì nhận định không còn ảnh hưởng đáng kể
+            limitations.append("Nhận định của Chủ quán ghi khoảng rất hẹp; hệ thống chỉ tin ở mức vừa phải cho tới khi "
+                               "có thêm số bán.")
         if used < min_history:
-            limitations.append(f"Mới có {used} ngày dữ liệu đủ điều kiện (mốc đánh giá thử là {min_history} ngày).")
+            limitations.append(f"Mới có {used} ngày bán dùng được; dự báo sẽ chắc hơn khi đủ {min_history} ngày.")
         if flagged:
-            limitations.append(f"{flagged} ngày bị loại vì thiếu nguyên liệu; số bán ngày đó không phản ánh đủ nhu cầu.")
+            limitations.append(f"{flagged} ngày bị bỏ qua vì thiếu nguyên liệu; số bán ngày đó thấp hơn nhu cầu thật.")
         model_days = model.ahead(dows)
         daily = []
         for d, (a, b) in zip(days_ahead, model_days):
@@ -355,7 +356,7 @@ def release(user=None, now=None):
         size_paths[size.pk] = paths
         totals = {str(k): _summ([sum(p[:k]) for p in paths]) for k in (1, 3, 7) if k <= horizon}
         if cfg:
-            limitations.append(f"Dùng cấu hình đã duyệt: thích nghi {cfg.delta_level}, nhiễu quan sát {cfg.obs_var}.")
+            limitations.append("Dùng cách tính riêng đã được Chủ quán duyệt cho món này.")
         SeriesForecast.objects.create(
             release=rel, size=size, method=method, eligible_days=used, flagged_days=flagged,
             prior_days=prior["days"] if prior else None, prior_capped=bool(prior and prior["capped"]),
@@ -765,7 +766,8 @@ def import_history(fileobj, file_name, kind, user, note=""):
     for s in ItemSize.objects.select_related("item"):
         sizes[(norm(s.item.name), norm(s.name))] = s
         sizes.setdefault((norm(s.item.name), ""), s)
-    totals, day_map, unmatched, bad_rows = defaultdict(int), {}, defaultdict(int), 0
+    totals, day_map, unmatched, bad_rows, future = defaultdict(int), {}, defaultdict(int), 0, 0
+    today = timezone.localdate()
     for row in reader:
         if not any(str(c).strip() for c in row):
             continue
@@ -776,6 +778,9 @@ def import_history(fileobj, file_name, kind, user, note=""):
         day = _parse_day(get("date"))
         if day is None:
             bad_rows += 1
+            continue
+        if day >= today:
+            future += 1  # từ hôm nay trở đi đã có dữ liệu hệ thống hoặc chưa xảy ra
             continue
         st = norm(get("status"))
         for key, words in STATUS_WORDS.items():
@@ -796,6 +801,12 @@ def import_history(fileobj, file_name, kind, user, note=""):
             continue
         totals[(day, size.pk)] += max(qty, 0)
         day_map.setdefault(day, "mo_cua")
+    if not day_map:
+        reasons = [f"{bad_rows} dòng không đọc được ngày hoặc số ly"] if bad_rows else []
+        reasons += [f"{future} dòng từ hôm nay trở đi"] if future else []
+        reasons += ["món không khớp thực đơn: " + "; ".join(f"{k} ({v} dòng)" for k, v in list(unmatched.items())[:10])
+                    ] if unmatched else []
+        raise ValueError("Không có dòng nào nhập được" + (" (" + ", ".join(reasons) + ")." if reasons else "."))
     batch = HistoryBatch.objects.create(kind=kind, file_name=file_name[:200], note=note[:255], imported_by=user)
     HistoricalSale.objects.bulk_create([HistoricalSale(batch=batch, date=d, size_id=sid, cups=n)
                                         for (d, sid), n in totals.items()])
@@ -803,7 +814,7 @@ def import_history(fileobj, file_name, kind, user, note=""):
     days = sorted(day_map)
     batch.summary = {"cups": sum(totals.values()), "days": len(days), "from": str(days[0]) if days else "",
                      "to": str(days[-1]) if days else "", "sizes": len({sid for _, sid in totals}),
-                     "unmatched": dict(sorted(unmatched.items(), key=lambda x: -x[1])[:30]), "bad_rows": bad_rows,
+                     "unmatched": dict(sorted(unmatched.items(), key=lambda x: -x[1])[:30]), "bad_rows": bad_rows, "future": future,
                      "closed": sum(1 for v in day_map.values() if v == "dong_cua"),
                      "short": sum(1 for v in day_map.values() if v == "thieu_hang"), "sheet": sheet_name}
     batch.save(update_fields=["summary"])

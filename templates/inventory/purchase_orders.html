@@ -1,24 +1,58 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Đặt hàng · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
-<h1>Ghi nhận đặt hàng</h1>
-<form method="post" class="inline-form" data-once>{% csrf_token %}
-  <input type="hidden" name="operation_key" value="{{ operation_key }}">
-  <select class="input input-sm" name="supplier" required aria-label="Nhà cung cấp"><option value="">Nhà cung cấp</option>{% for s in suppliers %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}</select>
-  <select class="input input-sm" name="ingredient" required aria-label="Nguyên liệu"><option value="">Nguyên liệu</option>{% for i in ingredients %}<option value="{{ i.pk }}">{{ i.name }} ({{ i.get_unit_display }})</option>{% endfor %}</select>
-  <input class="input input-sm" name="quantity" inputmode="decimal" placeholder="Số lượng (đơn vị tính)" required>
-  <input class="input input-sm" type="date" name="expected_date" value="{{ today|date:'Y-m-d' }}" required aria-label="Ngày giao dự kiến">
-  <input class="input input-sm" name="note" placeholder="Ghi chú">
-  <button class="btn btn-primary" type="submit">Ghi lần đặt</button>
-</form>
-<div class="table-wrap"><table class="data-table">
-  <thead><tr><th scope="col">Lần đặt</th><th scope="col" class="num">Đã nhận</th><th scope="col">Ngày giao</th><th scope="col">Trạng thái</th><th scope="col">Đổi ngày giao</th></tr></thead>
-  <tbody>{% for po in orders %}
-  <tr><th scope="row">{{ po }}</th><td class="num">{{ po.received_quantity|floatformat:"-2g" }} / {{ po.quantity|floatformat:"-2g" }}</td>
-    <td>{{ po.expected_date|date:"d/m/Y" }}</td>
-    <td>{% if po.current_status == "giao_cham" %}<span class="flag-low">Giao chậm · không tính vào hàng đang về</span>{% else %}{{ po.get_current_status_display }}{% endif %}</td>
-    <td>{% if po.status != "da_giao_du" %}<form method="post" class="inline-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="reschedule"><input type="hidden" name="po" value="{{ po.pk }}"><input class="input input-sm" type="date" name="expected_date" required aria-label="Ngày giao mới"><button class="btn btn-quiet" type="submit">Lưu</button></form>{% endif %}</td></tr>
-  {% empty %}<tr><td colspan="5" class="muted">Chưa có lần đặt nào.</td></tr>{% endfor %}</tbody>
-</table></div>
+<header class="page-head"><div><h1>Đặt hàng</h1><p class="page-sub">Ghi lại lần đặt với nhà cung cấp để hệ thống biết hàng đang về. Hệ thống không tự gửi đơn cho nhà cung cấp.</p></div></header>
+
+{% include "partials/missing_setup.html" %}
+<section class="card" aria-labelledby="new-title">
+  <div class="card-head"><h2 id="new-title">Ghi lần đặt mới</h2></div>
+  <form method="post" class="card-body po-form" data-once>{% csrf_token %}
+    <input type="hidden" name="operation_key" value="{{ operation_key }}">
+    <label class="field"><span>Nguyên liệu</span><select class="input" name="ingredient" required data-po-ingredient>
+      <option value="">Chọn nguyên liệu</option>{% for i in ingredients %}<option value="{{ i.pk }}" data-unit="{{ i.get_unit_display }}" data-supplier="{{ i.main_supplier_id|default:'' }}">{{ i.name }}</option>{% endfor %}</select></label>
+    <label class="field"><span>Nhà cung cấp</span><select class="input" name="supplier" required data-po-supplier>
+      <option value="">Chọn nhà cung cấp</option>{% for s in suppliers %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}</select></label>
+    <label class="field"><span>Số lượng</span><span class="unit-input"><input class="input" name="quantity" inputmode="decimal" autocomplete="off" required><span aria-hidden="true" data-po-unit></span></span></label>
+    <label class="field"><span>Ngày giao dự kiến</span><input class="input" type="date" name="expected_date" value="{{ today|date:'Y-m-d' }}" min="{{ today|date:'Y-m-d' }}" required></label>
+    <label class="field po-note"><span>Ghi chú</span><input class="input" name="note" maxlength="255" placeholder="Không bắt buộc"></label>
+    <button class="btn btn-primary" type="submit">Ghi lần đặt</button>
+  </form>
+</section>
+
+<section class="card{% if late %} card-warn{% endif %}" aria-labelledby="wait-title">
+  <div class="card-head"><div><h2 id="wait-title">Đang chờ giao{% if waiting %} · {{ waiting|length }}{% endif %}</h2>
+    <p class="card-sub">{% if late %}{{ late }} lần quá ngày giao; hàng giao chậm không còn được tính là hàng đang về. Đổi ngày nếu nhà cung cấp hẹn lại.{% else %}Sắp xếp theo ngày giao dự kiến.{% endif %}</p></div></div>
+  {% if waiting %}
+  <ul class="row-list po-list">
+    {% for po in waiting %}
+    <li{% if po.state == 'giao_cham' %} class="is-late"{% endif %}>
+      <span class="po-day"><strong>{{ po.expected_date|date:"d/m" }}</strong><small{% if po.expected_date == today %} class="is-today"{% endif %}>{% if po.expected_date == today %}Hôm nay{% elif po.expected_date < today %}Đã quá{% else %}{{ po.expected_date|date:"l" }}{% endif %}</small></span>
+      <span class="row-main"><strong>{{ po.ingredient.name }}</strong> {{ po.quantity|floatformat:"-2g" }} {{ po.ingredient.get_unit_display }}
+        <small>{{ po.supplier }}{% if po.received_quantity %} · đã nhận {{ po.received_quantity|floatformat:"-2g" }}, còn {{ po.remaining|floatformat:"-2g" }}{% endif %}{% if po.note %} · {{ po.note }}{% endif %}</small></span>
+      <span class="pill pill-{{ po.tone }}">{{ po.state_label }}{% if po.tone == "warn" %} · quá hạn đặt{% endif %}</span>
+      <details class="po-move"><summary class="btn btn-ghost btn-sm">Đổi ngày</summary>
+        <form method="post" class="po-move-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="reschedule"><input type="hidden" name="po" value="{{ po.pk }}">
+          <input class="input input-sm" type="date" name="expected_date" min="{{ today|date:'Y-m-d' }}" value="{% if po.expected_date >= today %}{{ po.expected_date|date:'Y-m-d' }}{% endif %}" required aria-label="Ngày giao mới của {{ po.ingredient.name }}">
+          <button class="btn btn-primary btn-sm" type="submit">Lưu</button></form></details>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="empty-cell">Không có lần đặt nào đang chờ giao.</p>{% endif %}
+</section>
+
+<section class="card" aria-labelledby="done-title">
+  <div class="card-head"><h2 id="done-title">Đã giao, đã hủy</h2>{% if done_total %}<span class="muted">{{ done_total }} lần</span>{% endif %}</div>
+  {% if done %}
+  <ul class="row-list po-list">
+    {% for po in done %}
+    <li class="is-done"><span class="po-day"><strong>{{ po.expected_date|date:"d/m" }}</strong>{% if po.expected_date.year != today.year %}<small>{{ po.expected_date|date:"Y" }}</small>{% endif %}</span>
+      <span class="row-main"><strong>{{ po.ingredient.name }}</strong> {{ po.received_quantity|floatformat:"-2g" }}/{{ po.quantity|floatformat:"-2g" }} {{ po.ingredient.get_unit_display }}<small>{{ po.supplier }}{% if po.note %} · {{ po.note }}{% endif %}</small></span>
+      <span class="pill pill-{% if po.status == 'da_giao_du' %}ok{% else %}neutral{% endif %}">{{ po.get_status_display }}</span></li>
+    {% endfor %}
+  </ul>
+  {% if done_total > done|length %}<p class="table-more card-body"><a href="?tat_ca=1">Xem {{ done_total }} lần đặt</a></p>{% elif show_all %}<p class="table-more card-body"><a href="?">Thu gọn</a></p>{% endif %}
+  {% else %}<p class="empty-cell">Chưa có lần đặt nào được giao.</p>{% endif %}
+</section>
 {% endblock %}
+{% block scripts %}<script src="{% static 'js/kho.js' %}" defer></script>{% endblock %}

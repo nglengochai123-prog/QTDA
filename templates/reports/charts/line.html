@@ -1,4 +1,4 @@
-{% load l10n %}{% if c %}{% include "reports/charts/legend.html" with items=c.legend kind="line" %}<div class="chart-box{% if c.w <= 400 %} chart-box-narrow{% endif %}">{% localize off %}<svg class="chart-svg" viewBox="0 0 {{ c.w }} {{ c.h }}" role="img" aria-label="{{ label }}">
+{% load l10n %}{% if c %}{% include "reports/charts/legend.html" with items=c.legend kind="line" %}<div class="chart-box{% if c.w <= 400 %} chart-box-narrow{% elif c.w > 700 %} chart-box-wide{% endif %}">{% localize off %}<svg class="chart-svg" viewBox="0 0 {{ c.w }} {{ c.h }}" role="img" aria-label="{{ label }}">
   {% for t in c.ticks %}<line class="grid{% if forloop.first %} baseline{% endif %}" x1="{{ c.x0 }}" x2="{{ c.x1 }}" y1="{{ t.y }}" y2="{{ t.y }}"/><text class="axis-text" x="{{ c.x0|add:'-8' }}" y="{{ t.y }}" dy="0.32em" text-anchor="end">{{ t.text }}</text>{% endfor %}
   {% for s in c.series %}{% if s.area %}<path class="area-{{ s.slot }}" d="{{ s.area }}"/>{% endif %}{% endfor %}
   {% for s in c.series %}<path class="l-{{ s.slot }}" d="{{ s.d }}"/>{% endfor %}

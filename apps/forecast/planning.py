@@ -128,9 +128,9 @@ def build_forecasts(now=None, ingredients=None):
                                   "theo cách khởi tạo mới, kết quả đánh giá cũ không còn áp dụng.")
         if rates["recon"]["flag"]:
             fc["warnings"].append(
-                f"Đối soát lệch {rates['recon']['gap'] * 100:.1f}%: tiêu hao tính từ dòng bán và hủy sau pha chế "
-                f"{rates['recon']['sold_plus_voided']:,.0f} khác sổ kho {rates['recon']['ledger']:,.0f}."
-                .replace(",", "."))
+                f"Đối soát lệch {rates['recon']['gap'] * 100:.1f}%".replace(".", ",")
+                + f": tiêu hao tính từ dòng bán và hủy sau pha chế {rates['recon']['sold_plus_voided']:,.0f} khác sổ kho "
+                  f"{rates['recon']['ledger']:,.0f}.".replace(",", "."))
         fc.pop("version", None)
         fc["version"] = _digest(fc)[:16]
         out[ing.pk] = fc
@@ -481,7 +481,7 @@ def ensure_daily(now=None):
     """Tác vụ định kỳ: tính toàn bộ một lần sau mỗi giờ đóng cửa (và lần đầu khi chưa có)."""
     now = now or timezone.now()
     local = timezone.localtime(now)
-    close = timezone.make_aware(datetime.combine(local.date(), time(params.get("close_hour"))),
+    close = timezone.make_aware(datetime.combine(local.date(), time.min) + timedelta(hours=params.get("close_hour")),
                                 timezone.get_current_timezone())
     last_close = close if now >= close else close - timedelta(days=1)
     last = PlanRun.objects.filter(kind__in=[PlanRun.Kind.FULL, PlanRun.Kind.MANUAL]).order_by("-started_at").first()
@@ -586,7 +586,7 @@ def accept(user, plan, quantity, note, expected_date, operation_key):
     decision = OrderSuggestion.Decision.ACCEPT if quantity == suggested else OrderSuggestion.Decision.EDIT
     note = (note or "").strip()
     if decision == OrderSuggestion.Decision.EDIT and not note:
-        raise ValidationError("Số lượng khác đề xuất: ghi lý do (BRU-24, NFR-22).")
+        raise ValidationError("Số lượng khác đề xuất: ghi lý do.")
     if ing.main_supplier_id is None:
         raise ValidationError(f"{ing.name} chưa có nhà cung cấp chính.")
     order_by = plan.order_by if plan.order_by and plan.order_by > plan.calc_date else timezone.localdate()

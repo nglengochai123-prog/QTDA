@@ -113,10 +113,13 @@ def _next_code(store):
     type(store).objects.select_for_update().filter(pk=store.pk).first()
     today = timezone.localdate()
     count = Order.objects.filter(store=store, created_at__date=today).count()
+    # Mã không ghi năm nên sang năm sau cùng ngày đã có mã của năm trước: đọc một lần các mã đã dùng rồi chọn số kế
+    # tiếp còn trống, thay vì hỏi cơ sở dữ liệu từng mã (năm trước 300 đơn thì mỗi đơn mới hỏi 300 lần).
+    used = set(Order.objects.filter(code__startswith=f"{today:%d%m}-").values_list("code", flat=True))
     while True:
         count += 1
         code = f"{today:%d%m}-{count:03d}"
-        if not Order.objects.filter(code=code).exists():
+        if code not in used:
             return code
 
 
@@ -258,20 +261,22 @@ def ready_lines():
             .order_by("done_at"))
 
 
-def availability():
+def availability(versions=None):
     """Số ly còn đáp ứng theo từng kích cỡ (FR-01), tính từ tồn có thể dùng và định mức hiện hành.
 
     Trả {size_id: số ly hoặc None nếu món không dùng nguyên liệu}. Chưa tính tùy chọn.
     """
     result = {}
     available = {k: v[2] for k, v in stock.snapshot_for().items()}
+    versions = RecipeVersion.objects.current_map() if versions is None else versions
     for item in MenuItem.objects.sellable().prefetch_related("sizes"):
+        sizes = [s for s in item.sizes.all() if s.is_active]
         if item.no_ingredients:
-            for size in item.active_sizes():
+            for size in sizes:
                 result[size.pk] = None
             continue
-        version = RecipeVersion.objects.current_for(item)
-        for size in item.active_sizes():
+        version = versions.get(item.pk)
+        for size in sizes:
             usage = ingredient_usage(version, size) if version else {}
             if not usage:
                 result[size.pk] = 0

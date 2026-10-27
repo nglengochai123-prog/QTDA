@@ -2,23 +2,28 @@
 {% load humanize %}
 {% block title %}Vụ việc tổn thất · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><h1>Vụ việc tổn thất</h1></header>
-<form method="post" class="inline-form" data-once>{% csrf_token %}<input type="hidden" name="operation_key" value="{{ operation_key }}">
-  <input class="input input-sm" name="title" placeholder="Tiêu đề vụ việc" required>
+<header class="page-head"><div><h1>Vụ việc tổn thất</h1><p class="page-sub">Gom các ngoại lệ và khoản thiếu tiền gây mất tiền thật vào một vụ việc, xác nhận giá trị mất rồi theo dõi số đã thu hồi. Bằng chứng cùng một giao dịch chỉ tính một lần.</p></div></header>
+
+<form method="post" class="card case-new" data-once>{% csrf_token %}<input type="hidden" name="operation_key" value="{{ operation_key }}">
+  <label class="field"><span>Lập vụ việc mới</span><input class="input" name="title" maxlength="200" placeholder="Ví dụ: Thiếu tiền ca chiều 12/10" required></label>
   <button class="btn btn-primary" type="submit">Lập vụ việc</button>
 </form>
-<nav class="tabs" aria-label="Lọc trạng thái"><a href="?"{% if not status %} aria-current="page"{% endif %}>Tất cả</a>{% for v, l in statuses %}<a href="?trang-thai={{ v }}"{% if status == v %} aria-current="page"{% endif %}>{{ l }}</a>{% endfor %}</nav>
+
+<nav class="seg exc-tabs" aria-label="Trạng thái"><a href="?"{% if not status %} aria-current="page"{% endif %}>Tất cả</a>{% for v, l in statuses %}<a href="?trang-thai={{ v }}"{% if status == v %} aria-current="page"{% endif %}>{{ l }}</a>{% endfor %}</nav>
 {% if cases %}
-<ul class="ruled-list">
-  {% for c in cases %}
-  <li><a href="{% url 'control:case_detail' c.pk %}">
-    <span class="exc-text"><strong>{{ c.code }} · {{ c.title }}</strong><span class="muted">{{ c.get_status_display }} · lập {{ c.created_at|date:"d/m" }}</span></span>
-    <span class="count">Đề xuất {{ c.proposed_amount|intcomma }} đ{% if c.verified_amount is not None %} · xác minh {{ c.verified_amount|intcomma }} đ{% endif %}
-      <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></span></a></li>
-  {% endfor %}
-</ul>
+<section class="card">
+  <ul class="row-list exc-list">
+    {% for c in cases %}
+    <li><a href="{% url 'control:case_detail' c.pk %}">
+      <span class="row-day">{{ c.created_at|date:"d/m" }}<small>{{ c.code }}</small></span>
+      <span class="row-main"><strong>{{ c.title }}</strong><small>{% with v=c.verified_amount %}{% if v is not None %}Xác minh {{ v|intcomma }} đ · đã thu hồi {{ c.recovered_amount|intcomma }} đ{% else %}Đề xuất {{ c.proposed_amount|intcomma }} đ · chưa xác minh{% endif %}{% endwith %}</small></span>
+      <span class="exc-meta"><span class="pill pill-{% if c.status == 'da_ket_luan' %}ok{% else %}warn{% endif %}">{{ c.get_status_display }}</span></span>
+      <svg class="icon row-go" aria-hidden="true"><use href="#i-chevron"/></svg></a></li>
+    {% endfor %}
+  </ul>
+</section>
 {% include "partials/pagination.html" %}
 {% else %}
-<div class="empty"><p><strong>Chưa có vụ việc nào.</strong></p><p>Lập vụ việc khi một ngoại lệ hay khoản thiếu tiền được xác định gây mất tiền, rồi gắn bằng chứng vào.</p></div>
+<div class="empty"><p><strong>Chưa có vụ việc nào.</strong></p><p>Lập vụ việc khi một ngoại lệ hay khoản thiếu tiền được xác định gây mất tiền, rồi gắn bằng chứng vào. Có thể gắn ngay từ trang của ngoại lệ.</p></div>
 {% endif %}
 {% endblock %}

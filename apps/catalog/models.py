@@ -114,7 +114,7 @@ class MenuItem(StoreScopedModel):
     status = models.CharField("Trạng thái", max_length=20, choices=Status.choices, default=Status.DRAFT)
     no_ingredients = models.BooleanField(
         "Không dùng nguyên liệu", default=False,
-        help_text="Chỉ đánh dấu với món không tiêu hao nguyên liệu (BRU-20).",
+        help_text="Chỉ đánh dấu với món không tiêu hao nguyên liệu.",
     )
     option_groups = models.ManyToManyField(OptionGroup, verbose_name="Nhóm tùy chọn áp dụng", blank=True,
                                            related_name="items")
@@ -148,7 +148,9 @@ class MenuItem(StoreScopedModel):
         from apps.inventory.services import recipe_gaps
 
         no_price = [f"giá bán cỡ {s.name}" for s in self.active_sizes() if not s.price]
-        return no_price + recipe_gaps(self)
+        empty = [f"tùy chọn đang dùng cho nhóm bắt buộc {g.name}" for g in self.option_groups.filter(is_required=True)
+                 if not g.options.filter(is_active=True).exists()]
+        return no_price + empty + recipe_gaps(self)
 
     def clean(self):
         if self.status == self.Status.ON_SALE:

@@ -51,13 +51,26 @@ def home(request):
 
         task("Báo nhanh nguyên liệu chưa xử lý", QuickReport.objects.filter(acknowledged_at__isnull=True).count(),
              reverse("inventory:stock"))
+    if can(Cap.PAYMENT):
+        from apps.shifts.models import Refund
+
+        task("Hoàn tiền chờ trả khách", Refund.objects.filter(status=Refund.Status.APPROVED).count(),
+             reverse("orders:cashier"), urgent=True)
+    if can(Cap.CASH_FUND):
+        from apps.shifts.models import CashEntry
+
+        handovers = CashEntry.objects.filter(kind=CashEntry.Kind.HANDOVER, receiver=user, confirmed_at__isnull=True).count()
+        if handovers:  # hiếm khi có, nên chỉ hiện ô khi đang có khoản chờ
+            task("Tiền nộp chờ tôi xác nhận", handovers, reverse("shifts:my_shift"), urgent=True)
     if can(Cap.ORDER_CREATE):
         from apps.orders.models import Order
 
         task("Đơn đang mở", Order.objects.exclude(status__in=["da_thanh_toan", "da_huy"]).count(),
              reverse("orders:open_orders"))
 
-    context = {"tasks": tasks}
+    # Việc đang chờ lên trước; trên điện thoại ô số 0 được ẩn (app.css) để màn hình ngắn lại.
+    tasks.sort(key=lambda t: not t["count"])
+    context = {"tasks": tasks, "tasks_waiting": sum(1 for t in tasks if t["count"])}
     if can(Cap.MASTER_DATA):
         from apps.catalog.models import MenuItem, Table
         from apps.inventory.models import Ingredient, RecipeVersion
@@ -66,13 +79,18 @@ def home(request):
 
         md = lambda key: reverse("masterdata:list", args=[key])  # noqa: E731
         drafts = MenuItem.objects.filter(status=MenuItem.Status.DRAFT).count()
+        staff = Employee.objects.filter(status="dang_lam").count()
+        selling = MenuItem.objects.sellable().count()
+        tables = Table.objects.filter(is_active=True).count()
+        ingredients = Ingredient.objects.filter(is_active=True).count()
+        # Số 0 ở nhân viên, món đang bán, bàn, nguyên vật liệu nghĩa là quán chưa bán được: tô màu để Chủ quán khai báo.
         context["master_data"] = [
             ("Ca làm việc", md("ca"), f"{Shift.objects.filter(status=Shift.Status.OPEN).count()} ca đang mở", False),
-            ("Nhân viên", md("nhan-vien"), f"{Employee.objects.filter(status='dang_lam').count()} đang làm", False),
-            ("Món và giá", md("mon"), f"{MenuItem.objects.sellable().count()} đang bán"
-             + (f", {drafts} đang soạn" if drafts else ""), bool(drafts)),
-            ("Bàn", md("ban"), f"{Table.objects.filter(is_active=True).count()} bàn", False),
-            ("Nguyên vật liệu", md("nguyen-lieu"), f"{Ingredient.objects.filter(is_active=True).count()} loại", False),
+            ("Nhân viên", md("nhan-vien"), f"{staff} đang làm", not staff),
+            ("Món và giá", md("mon"), f"{selling} đang bán" + (f", {drafts} đang soạn" if drafts else ""),
+             bool(drafts) or not selling),
+            ("Bàn", md("ban"), f"{tables} bàn", not tables),
+            ("Nguyên vật liệu", md("nguyen-lieu"), f"{ingredients} loại", not ingredients),
             ("Định mức", md("dinh-muc"), f"{RecipeVersion.objects.filter(status='nhap').count()} bản nháp", False),
         ]
     from .models import DATA_NOTICE_VERSION, DataNoticeAck
@@ -125,6 +143,16 @@ def push_subscribe(request):
                                          "user_agent": request.headers.get("User-Agent", "")[:200], "is_active": True})
     except (ValueError, KeyError, TypeError):
         return JsonResponse({"ok": False, "error": "Đăng ký không hợp lệ."}, status=400)
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+def push_unsubscribe(request):
+    """Đăng xuất trên một thiết bị: thôi gửi thông báo của người này tới thiết bị đó (máy dùng chung ở quầy)."""
+    from .models import PushSubscription
+
+    PushSubscription.objects.filter(endpoint=request.POST.get("endpoint", ""), user=request.user).update(is_active=False)
     return JsonResponse({"ok": True})
 
 

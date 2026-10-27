@@ -28,7 +28,7 @@ def run_once(key, kind, payload, action, actor=None):
     nên gửi lại sau lỗi vẫn được xử lý một lần.
     """
     if not key or not KEY_PATTERN.match(key):
-        raise OperationKeyError("Thiếu mã nghiệp vụ hoặc mã không hợp lệ.")
+        raise OperationKeyError("Trang đã cũ hoặc gửi thiếu dữ liệu. Tải lại trang rồi thử lại.")
     digest = payload_hash(payload)
     with transaction.atomic():
         try:
@@ -40,7 +40,8 @@ def run_once(key, kind, payload, action, actor=None):
         except IntegrityError:
             existing = OperationRecord.objects.select_for_update().get(key=key)
             if existing.kind != kind or existing.payload_hash != digest:
-                raise OperationKeyError("Mã nghiệp vụ này đã được dùng cho một yêu cầu khác.")
+                raise OperationKeyError("Biểu mẫu này đã được gửi trước đó với nội dung khác (có thể do bấm Quay lại). "
+                                        "Tải lại trang rồi nhập lại.")
             return existing.result, True
         result = action()
         record.result = result

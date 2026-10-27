@@ -1,29 +1,63 @@
 {% extends "base.html" %}
+{% load static %}
 {% block title %}Phiếu nhập · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
-<h1>Lập phiếu nhập</h1>
-<details class="help-tip"><summary>Giải thích</summary><p>Nhập số lượng thực nhận theo đơn vị tính và đơn giá trên mỗi đơn vị tính. Chọn lần đặt nếu hàng giao theo lần đặt. Mỗi dòng thành một lô có mã riêng (mã phiếu / số dòng). Không ghi hạn thì hệ thống tính bằng ngày nhập cộng thời hạn sử dụng khai ở nguyên liệu và đánh dấu là ước tính.</p></details>
-<form data-draft="phieu-nhap" method="post" enctype="multipart/form-data" class="mini-form narrow" data-once>{% csrf_token %}
+<header class="page-head"><div><h1>Lập phiếu nhập</h1><p class="page-sub">Ghi hàng thực nhận theo hóa đơn. Mỗi dòng thành một lô có mã riêng; không ghi hạn sử dụng thì hệ thống ước tính theo thời hạn khai ở nguyên liệu.</p></div></header>
+
+{% include "partials/missing_setup.html" %}
+<form data-draft="phieu-nhap" method="post" enctype="multipart/form-data" class="rc-form" data-once>{% csrf_token %}
   <input type="hidden" name="operation_key" value="{{ operation_key }}"><input type="hidden" name="rows" value="{{ rows|length }}">
-  <div class="field"><label for="r-sup">Nhà cung cấp</label><select class="input" id="r-sup" name="supplier" required>
-    <option value="">Chọn nhà cung cấp</option>{% for s in suppliers %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}</select></div>
-  {% for n in rows %}
-  <fieldset class="receipt-line"><legend>Dòng {{ forloop.counter }}</legend>
-    <select class="input" name="ingredient_{{ n }}" aria-label="Nguyên liệu dòng {{ forloop.counter }}"><option value="">Nguyên liệu</option>{% for i in ingredients %}<option value="{{ i.pk }}">{{ i.name }} ({{ i.get_unit_display }})</option>{% endfor %}</select>
-    <input class="input" name="quantity_{{ n }}" inputmode="decimal" placeholder="Số lượng thực nhận" aria-label="Số lượng dòng {{ forloop.counter }}">
-    <input class="input" name="price_{{ n }}" inputmode="numeric" placeholder="Đơn giá (đ / đơn vị tính)" aria-label="Đơn giá dòng {{ forloop.counter }}">
-    <div class="field-pair"><label class="field"><span>Hạn sử dụng in trên bao bì</span><input class="input" type="date" name="expiry_{{ n }}"></label>
-      <label class="field"><span>Số lô của nhà sản xuất</span><input class="input" name="lot_{{ n }}" maxlength="40" placeholder="Không bắt buộc"></label></div>
-    <select class="input" name="po_{{ n }}" aria-label="Lần đặt dòng {{ forloop.counter }}"><option value="">Không theo lần đặt</option>{% for po in open_pos %}<option value="{{ po.pk }}">{{ po }} · còn {{ po.remaining|floatformat:"-2g" }} · {{ po.get_status_display }}</option>{% endfor %}</select>
-  </fieldset>
-  {% endfor %}
-  <fieldset class="option-group"><legend>Thanh toán</legend><div class="choice-row">
-    <label class="pick"><input type="radio" name="payment_type" value="tra_ngay" required><span>Trả ngay</span></label>
-    <label class="pick"><input type="radio" name="payment_type" value="tra_sau"><span>Trả sau</span></label></div></fieldset>
-  <div class="field"><label for="r-src">Nguồn tiền khi trả ngay</label><select class="input" id="r-src" name="source">{% for v, l in sources %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></div>
-  <div class="field"><label for="r-due">Hạn trả khi trả sau (ngày)</label><input class="input" id="r-due" name="due_days" inputmode="numeric" value="7"></div>
-  <div class="field"><label for="r-photo">Ảnh hóa đơn</label><input class="input" id="r-photo" type="file" name="invoice_photo" accept="image/*" capture="environment" required><span class="hint">Bắt buộc với mọi phiếu nhập.</span></div>
-  <button class="btn btn-primary btn-block" type="submit">Lưu phiếu nhập</button>
+
+  <section class="card" aria-labelledby="rc-goods">
+    <div class="card-head"><h2 id="rc-goods">Hàng nhận</h2></div>
+    <div class="card-body">
+      <label class="field rc-supplier"><span>Nhà cung cấp</span><select class="input" name="supplier" required data-rc-supplier>
+        <option value="">Chọn nhà cung cấp</option>{% for s in suppliers %}<option value="{{ s.pk }}">{{ s.name }}</option>{% endfor %}</select></label>
+      <div class="rc-pos" data-rc-pos hidden><p class="rc-pos-label">Hàng đang chờ giao từ nhà cung cấp này, bấm để thêm vào phiếu:</p><div class="chip-row" data-rc-pos-list></div></div>
+
+      <div class="rc-lines">
+        <div class="rc-head" aria-hidden="true"><span>Nguyên liệu</span><span>Số lượng thực nhận</span><span>Đơn giá</span><span class="rc-sum">Thành tiền</span><span></span></div>
+        {% for n in rows %}
+        <fieldset class="rc-line" data-rc-line>
+          <legend class="visually-hidden">Dòng {{ forloop.counter }}</legend>
+          <div class="rc-main">
+            <label class="rc-cell"><span class="rc-label">Nguyên liệu</span><select class="input" name="ingredient_{{ n }}" data-rc-ingredient>
+              <option value="">Chọn nguyên liệu</option>{% for i in ingredients %}<option value="{{ i.pk }}" data-unit="{{ i.get_unit_display }}"{% if i.last_price is not None %} data-last-price="{{ i.last_price|stringformat:'d' }}"{% endif %}>{{ i.name }}</option>{% endfor %}</select></label>
+            <label class="rc-cell"><span class="rc-label">Số lượng thực nhận</span><span class="unit-input"><input class="input" name="quantity_{{ n }}" inputmode="decimal" autocomplete="off" data-rc-qty><span aria-hidden="true" data-rc-unit></span></span></label>
+            <label class="rc-cell"><span class="rc-label">Đơn giá</span><span class="unit-input"><input class="input" name="price_{{ n }}" inputmode="numeric" autocomplete="off" data-money data-rc-price><span aria-hidden="true" data-rc-price-unit>đ</span></span></label>
+            <output class="rc-sum" data-rc-sum></output>
+            <button class="btn btn-ghost btn-sm rc-remove" type="button" data-rc-remove aria-label="Xóa dòng {{ forloop.counter }}">Xóa</button>
+          </div>
+          <p class="rc-price-hint" data-rc-hint hidden></p>
+          <div class="rc-extra">
+            <label class="rc-cell"><span class="rc-label">Hạn sử dụng trên bao bì</span><input class="input input-sm" type="date" name="expiry_{{ n }}"></label>
+            <label class="rc-cell"><span class="rc-label">Số lô nhà sản xuất</span><input class="input input-sm" name="lot_{{ n }}" maxlength="40" placeholder="Không bắt buộc"></label>
+            <label class="rc-cell"><span class="rc-label">Theo lần đặt</span><select class="input input-sm" name="po_{{ n }}" data-rc-po>
+              <option value="">Không theo lần đặt</option>{% for po in open_pos %}<option value="{{ po.pk }}" data-ingredient="{{ po.ingredient_id }}" data-supplier="{{ po.supplier_id }}" data-remaining="{{ po.remaining|stringformat:'s' }}">{{ po.ingredient.name }} · còn {{ po.remaining|floatformat:"-2g" }} {{ po.ingredient.get_unit_display }} · giao {{ po.expected_date|date:"d/m" }}</option>{% endfor %}</select></label>
+          </div>
+        </fieldset>
+        {% endfor %}
+      </div>
+      <div class="rc-foot"><button class="btn btn-quiet btn-sm" type="button" data-rc-add hidden>Thêm dòng</button>
+        <p class="rc-total">Tổng giá trị phiếu <strong data-rc-total>0 đ</strong></p></div>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="rc-pay">
+    <div class="card-head"><h2 id="rc-pay">Thanh toán và hóa đơn</h2></div>
+    <div class="card-body rc-pay">
+      <fieldset class="field"><legend class="rc-legend">Thanh toán</legend>
+        <div class="seg-pick" role="radiogroup">
+          <label><input type="radio" name="payment_type" value="tra_ngay" required data-rc-paytype><span>Trả ngay</span></label>
+          <label><input type="radio" name="payment_type" value="tra_sau" data-rc-paytype><span>Trả sau</span></label></div></fieldset>
+      <label class="field" data-rc-now><span>Nguồn tiền khi trả ngay</span><select class="input" name="source">{% for v, l in sources %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
+        <span class="hint">Tiền mặt quỹ ca được ghi thành khoản chi Nguyên vật liệu của ca đang mở.</span></label>
+      <label class="field" data-rc-later><span>Hạn trả sau</span><span class="unit-input"><input class="input" name="due_days" inputmode="numeric" value="7"><span aria-hidden="true">ngày</span></span></label>
+      <label class="field rc-photo"><span>Ảnh hóa đơn</span><input class="input" type="file" name="invoice_photo" accept="image/*" capture="environment" required><span class="hint">Bắt buộc với mọi phiếu nhập.</span></label>
+    </div>
+  </section>
+
+  <div class="form-actions rc-bar"><p class="rc-bar-total">Tổng <strong data-rc-total>0 đ</strong></p><button class="btn btn-primary" type="submit">Lưu phiếu nhập</button></div>
 </form>
 {% endblock %}
+{% block scripts %}<script src="{% static 'js/kho.js' %}" defer></script>{% endblock %}

@@ -2,9 +2,14 @@
 {% load humanize %}
 {% block title %}Tra cứu đơn · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><h1>Tra cứu đơn</h1></header>
-<form method="get" class="filter-bar" aria-label="Bộ lọc đơn">
-  <div class="field"><label for="f-q">Mã đơn, bàn, ghi chú</label><input class="input" id="f-q" name="q" value="{{ f.q }}" placeholder="Ví dụ 1210-001"></div>
+<header class="page-head"><div><h1>Tra cứu đơn</h1><p class="page-sub">Tìm theo mã đơn, số bàn hoặc ghi chú; bấm một đơn để xem món, thanh toán và lịch sử điều chỉnh.</p></div></header>
+<form method="get" class="lookup-form" aria-label="Bộ lọc đơn">
+  <div class="lookup-search"><label class="search-field"><span class="visually-hidden">Mã đơn, bàn, ghi chú</span>
+    <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    <input type="search" id="f-q" name="q" value="{{ f.q }}" placeholder="Mã đơn, bàn hoặc ghi chú" autocomplete="off"></label>
+    <button class="btn btn-primary" type="submit">Tìm</button></div>
+  <details class="filter-more"{% if advanced %} open{% endif %}><summary>Lọc thêm{% if advanced %} · {{ advanced }} điều kiện đang dùng{% endif %}</summary>
+  <div class="filter-bar">
   <div class="field"><label for="f-theo">Lọc ngày theo</label><select class="input" id="f-theo" name="theo"><option value="">Giờ tạo đơn</option><option value="thanh_toan"{% if f.theo == "thanh_toan" %} selected{% endif %}>Giờ thanh toán</option></select></div>
   <div class="field"><label for="f-tu">Từ ngày</label><input class="input" id="f-tu" type="date" name="tu" value="{{ f.tu }}"></div>
   <div class="field"><label for="f-den">Đến ngày</label><input class="input" id="f-den" type="date" name="den" value="{{ f.den }}"></div>
@@ -14,18 +19,22 @@
   <div class="field"><label for="f-nv">Nhân viên tạo đơn</label><select class="input" id="f-nv" name="nhan_vien"><option value="">Tất cả</option>{% for u in staff %}<option value="{{ u.pk }}"{% if f.nhan_vien == u.pk|stringformat:"d" %} selected{% endif %}>{{ u }}</option>{% endfor %}</select></div>
   <div class="field"><label for="f-mon">Món</label><select class="input" id="f-mon" name="mon"><option value="">Tất cả</option>{% for s in sizes %}<option value="{{ s.pk }}"{% if f.mon == s.pk|stringformat:"d" %} selected{% endif %}>{{ s.item.name }} {{ s.name }}</option>{% endfor %}</select></div>
   <div class="filter-actions"><button class="btn btn-primary" type="submit">Lọc</button><a class="btn btn-quiet" href="{% url 'orders:lookup' %}">Xóa lọc</a></div>
+  </div></details>
   {% if f.ca %}<input type="hidden" name="ca" value="{{ f.ca }}">{% endif %}{% if f.nhom %}<input type="hidden" name="nhom" value="{{ f.nhom }}">{% endif %}{% if f.gio %}<input type="hidden" name="gio" value="{{ f.gio }}">{% endif %}{% if f.da_thu %}<input type="hidden" name="da_thu" value="{{ f.da_thu }}">{% endif %}
 </form>
 {% if f.ca or f.nhom or f.gio or f.da_thu %}<p class="muted">Đang lọc thêm từ báo cáo:{% if f.da_thu %} chỉ đơn đã thu tiền;{% endif %}{% if f.ca %} theo ca;{% endif %}{% if f.nhom %} theo nhóm món;{% endif %}{% if f.gio %} khung {{ f.gio }} giờ;{% endif %} <a href="{% url 'orders:lookup' %}">bỏ lọc</a></p>{% endif %}
 {% if page.object_list %}
-<div class="table-wrap"><table class="data-table">
-  <thead><tr><th scope="col">Mã đơn</th><th scope="col">Bàn</th><th scope="col">Tạo lúc</th><th scope="col">Người tạo</th><th scope="col">Trạng thái</th><th scope="col">Thanh toán</th><th scope="col" class="num">Tổng tiền</th></tr></thead>
+<p class="lookup-count">{{ page.paginator.count|intcomma }} đơn{% if filtered %} khớp bộ lọc{% endif %} · tổng tiền {{ count_total|intcomma }} đ</p>
+<div class="table-wrap"><table class="data-table table-stack">
+  <thead><tr><th scope="col">Đơn</th><th scope="col">Tạo lúc</th><th scope="col">Người tạo</th><th scope="col">Trạng thái</th><th scope="col">Thanh toán</th><th scope="col" class="num">Tổng tiền</th></tr></thead>
   <tbody>{% for o in page.object_list %}
-  <tr><th scope="row"><a href="{% url 'orders:detail' o.pk %}">{{ o.code }}</a></th><td>{{ o.table.code }}</td><td>{{ o.created_at|date:"H:i d/m/Y" }}</td><td>{{ o.created_by }}</td><td>{{ o.get_status_display }}</td>
-    <td>{% if o.payment %}{{ o.payment.get_method_display }} {{ o.payment.created_at|date:"H:i d/m" }}{% else %}–{% endif %}</td><td class="num">{{ o.total|intcomma }} đ</td></tr>
+  <tr><th scope="row"><a href="{% url 'orders:detail' o.pk %}">{{ o.code }}</a><span class="cell-sub">Bàn {{ o.table.code }}</span></th>
+    <td data-label="Tạo lúc" class="nowrap">{{ o.created_at|date:"H:i d/m/Y" }}</td><td data-label="Người tạo">{{ o.created_by }}</td>
+    <td data-label="Trạng thái"><span class="pill {% if o.status == 'da_huy' %}pill-danger{% elif o.status == 'da_thanh_toan' %}pill-ok{% else %}pill-neutral{% endif %}">{{ o.get_status_display }}</span></td>
+    <td data-label="Thanh toán">{% if o.payment %}{{ o.payment.get_method_display }} <span class="muted">{{ o.payment.created_at|date:"H:i d/m" }}</span>{% else %}<span class="muted">Chưa thu</span>{% endif %}</td>
+    <td class="num" data-label="Tổng tiền"><strong>{{ o.total|intcomma }} đ</strong></td></tr>
   {% endfor %}</tbody>
 </table></div>
-<p class="muted">Tổng tiền các đơn trên trang này: {{ page_total|intcomma }} đ.</p>
 {% include "partials/pagination.html" %}
 {% else %}<div class="empty"><p><strong>Không có đơn nào khớp bộ lọc.</strong></p><p>Đổi khoảng ngày hoặc bấm Xóa lọc.</p></div>{% endif %}
 {% endblock %}

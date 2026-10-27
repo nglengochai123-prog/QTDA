@@ -1,0 +1,10 @@
+{# Thẻ bật thông báo đẩy trên thiết bị đang dùng. with log=True: kèm bảng các lần gửi gần đây (trang Cảnh báo). #}
+<section class="card" aria-labelledby="push-title" data-push data-status-url="{% url 'core:push_status' %}" data-subscribe-url="{% url 'core:push_subscribe' %}" data-test-url="{% url 'core:push_test' %}" data-log-url="{% url 'core:push_log' %}" data-csrf="{{ csrf_token }}">
+  <div class="card-head"><div><h2 id="push-title">Thông báo trên điện thoại</h2><p class="card-sub" data-push-text>Đang kiểm tra…</p></div>
+    <div class="card-tools"><button class="btn btn-primary btn-sm" type="button" data-push-enable hidden>Bật trên thiết bị này</button>
+      <button class="btn btn-quiet btn-sm" type="button" data-push-test hidden>Gửi thử</button></div></div>
+  {% if log %}<div class="table-wrap" data-push-log hidden><table class="data-table">
+    <thead><tr><th scope="col">Thông báo</th><th scope="col">Máy chủ gửi lúc</th><th scope="col">Dịch vụ đẩy đã nhận</th><th scope="col">Điện thoại đã hiện</th><th scope="col">Đã chạm mở</th></tr></thead>
+    <tbody></tbody></table>
+    <p class="card-body hint">"Dịch vụ đẩy đã nhận" nghĩa là máy chủ đã gửi tới dịch vụ của Google hoặc Apple; "Điện thoại đã hiện" do chính điện thoại báo về khi thông báo xuất hiện.</p></div>{% endif %}
+</section>

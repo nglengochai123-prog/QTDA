@@ -1,22 +1,15 @@
 """Tra cứu nhật ký thao tác (FR-61): chỉ xem, lọc theo người, thao tác, loại dữ liệu và ngày."""
 
-from datetime import date
-
 from django.db.models import Q
 from django.shortcuts import render
 from django.views.decorators.http import require_GET
 
 from apps.accounts.models import User
 from apps.accounts.permissions import Cap, capability_required
+from apps.audit import display
 from apps.audit.models import Action, AuditLog
+from apps.core.dates import parse_day as _day
 from apps.core.paging import paginate
-
-
-def _day(value):
-    try:
-        return date.fromisoformat(value)
-    except (TypeError, ValueError):
-        return None
 
 
 @capability_required(Cap.AUDIT_LOG)
@@ -39,8 +32,9 @@ def audit_log(request):
     if _day(g.get("den")):
         qs = qs.filter(created_at__date__lte=_day(g["den"]))
     page, qs_params = paginate(request, qs, per_page=50)
+    types = AuditLog.objects.order_by().values_list("object_type", flat=True).distinct()
     return render(request, "masterdata/audit_log.html", {
-        "page": page, "qs": qs_params, "f": g, "actions": Action.choices,
+        "page": page, "qs": qs_params, "f": g, "actions": Action.choices, "logs": display.describe(page.object_list),
         "people": User.objects.order_by("first_name"),
-        "types": AuditLog.objects.order_by().values_list("object_type", flat=True).distinct(),
+        "types": sorted(((t, display.type_label(t)) for t in types if t), key=lambda x: x[1]),
     })

@@ -19,16 +19,16 @@ from apps.core.idempotency import OperationKeyError
 from apps.inventory.stock import InsufficientStock
 
 from . import services
-from .models import Order, OrderLine
+from .models import AdjustmentRequest, Order, OrderLine
 
 
 def _usage_map(version, size=None, option=None):
     if version is None:
         return {}
-    lines = version.lines.filter(size=size) if size is not None else version.lines.filter(option=option)
     usage = {}
-    for line in lines:
-        usage[str(line.ingredient_id)] = float(Decimal(usage.get(str(line.ingredient_id), 0)) + line.quantity)
+    for line in version.lines.all():
+        if (size is not None and line.size_id == size.pk) or (size is None and line.option_id == option.pk):
+            usage[str(line.ingredient_id)] = float(Decimal(usage.get(str(line.ingredient_id), 0)) + line.quantity)
     return usage
 
 
@@ -37,17 +37,23 @@ def _available_map():
 
 
 def _menu_data():
-    availability = services.availability()
+    versions = RecipeVersion.objects.current_map()
+    availability = services.availability(versions)
+    by_group = {}
+    for item in MenuItem.objects.sellable().prefetch_related("sizes", "option_groups__options"):
+        by_group.setdefault(item.group_id, []).append(item)
     groups = []
     for group in MenuGroup.objects.filter(is_active=True):
         items = []
-        for item in MenuItem.objects.sellable().filter(group=group).prefetch_related("sizes", "option_groups__options"):
-            version = None if item.no_ingredients else RecipeVersion.objects.current_for(item)
+        for item in by_group.get(group.pk, []):
+            if any(g.is_required and not any(o.is_active for o in g.options.all()) for g in item.option_groups.all()):
+                continue  # nhóm tùy chọn bắt buộc không còn lựa chọn nào thì không gọi được món
+            version = None if item.no_ingredients else versions.get(item.pk)
             items.append({
                 "id": item.pk, "name": item.name,
                 "sizes": [{"id": s.pk, "name": s.name, "price": s.price, "left": availability.get(s.pk),
                            "usage": _usage_map(version, size=s)}
-                          for s in item.active_sizes()],
+                          for s in item.sizes.all() if s.is_active],
                 "optionGroups": [{
                     "id": g.pk, "name": g.name, "multiple": g.selection == g.Selection.MULTIPLE,
                     "required": g.is_required,
@@ -103,9 +109,12 @@ def _bar_context():
         line.op_one = uuid.uuid4().hex
         line.op_all = uuid.uuid4().hex
         ticket["lines"].append(line)
+    pending = {r.order_id: r for r in AdjustmentRequest.objects.filter(
+        order_id__in=tickets, status=AdjustmentRequest.Status.PENDING).select_related("line", "order__table", "target_table")}
     now = timezone.now()
     result = []
-    for ticket in tickets.values():
+    for order_id, ticket in tickets.items():
+        ticket["pending"] = pending.get(order_id)  # quầy biết món đang chờ duyệt đổi, hủy hay chuyển bàn
         age = now - ticket["order"].created_at
         ticket["minutes"] = int(age.total_seconds() // 60)
         ticket["is_new"] = age.total_seconds() < 60
@@ -145,8 +154,11 @@ def bar_complete(request):
 def print_ticket(request, order_id):
     """Phiếu pha chế in bằng máy in hiện có qua trình duyệt (FR-02, AC-05)."""
     order = get_object_or_404(Order.objects.select_related("table", "created_by"), pk=order_id)
-    lines = order.lines.exclude(status=OrderLine.Status.CANCELLED).prefetch_related("options")
+    lines = list(order.lines.exclude(status=OrderLine.Status.CANCELLED).prefetch_related("options"))
+    for line in lines:  # in lại sau khi hủy bớt ly thì phiếu ghi số ly còn phải pha
+        line.to_make = line.quantity - line.cancelled_quantity
     return render(request, "orders/print_ticket.html", {"order": order, "lines": lines,
+                                                        "cups": sum(line.to_make for line in lines),
                                                         "auto": request.GET.get("in") == "1"})
 
 

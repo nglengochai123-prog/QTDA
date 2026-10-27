@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<header class="page-head"><div><h1>Xin chào, {{ user.given_name|default:user.username }}</h1><p class="page-sub">{% now "l, d/m/Y" %} · {{ user.get_role_display }}</p></div></header>
+<header class="page-head"><div><h1>Xin chào, {{ user.given_name|default:user.username }}</h1><p class="page-sub">{% now "l, d/m/Y" %} · {{ user.roles_display }}</p></div></header>
 
 {% if notice_pending %}
 <div class="notice notice-info" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
@@ -13,6 +13,7 @@
   <div class="task-grid">{% for t in tasks %}
     <a class="task-tile{% if t.urgent %} is-urgent{% elif not t.count %} is-zero{% endif %}" href="{{ t.url }}"><span class="task-count">{{ t.count }}</span><span class="task-label">{{ t.label }}</span></a>
   {% endfor %}</div>
+  {% if not tasks_waiting %}<p class="task-none muted">Không có việc nào đang chờ.</p>{% endif %}
 </section>
 {% endif %}
 
@@ -20,7 +21,7 @@
   <h2 class="section-title" id="h-apps">Chức năng</h2>
   <div class="apps-bar">
     <nav class="seg" aria-label="Lọc theo phân hệ" data-app-filter>
-      <a href="#chuc-nang" aria-current="true" data-group="">Tất cả</a>{% for g in NAV_GROUPS %}<a href="#chuc-nang" data-group="{{ g.label }}">{{ g.short }}</a>{% endfor %}
+      <a href="#chuc-nang" aria-current="true" data-group="">Tất cả</a>{% for g in NAV_GROUPS %}{% if g.items|length > 1 or g.items.0.key != "home" %}<a href="#chuc-nang" data-group="{{ g.label }}">{% if g.label == "Tổng quan" %}Tổng quan{% else %}{{ g.short }}{% endif %}</a>{% endif %}{% endfor %}
     </nav>
     <label class="search-field"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><span class="visually-hidden">Tìm chức năng</span><input type="search" placeholder="Tìm chức năng" autocomplete="off" data-app-search></label>
   </div>
@@ -35,7 +36,7 @@
 
 {% if master_data %}
 <section class="card home-section">
-  <div class="card-head"><h2>Dữ liệu nền</h2></div>
+  <div class="card-head"><h2>Quản trị</h2></div>
   <ul class="list">{% for label, url, count, attention in master_data %}
     <li class="list-row"><a href="{{ url }}">{{ label }}</a><span class="{% if attention %}status-warn{% else %}muted{% endif %}">{{ count }}</span></li>
   {% endfor %}</ul>

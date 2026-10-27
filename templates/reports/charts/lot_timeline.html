@@ -1,5 +1,5 @@
 {% load l10n %}{% if c %}<ul class="chart-legend"><li><span class="key s-1" aria-hidden="true"></span>Dự kiến đang dùng lô</li><li><span class="key key-line key-exp" aria-hidden="true"></span>Hạn sử dụng</li><li><span class="key st-critical" aria-hidden="true"></span>Phần dự kiến phải bỏ</li></ul>
-<div class="chart-box{% if c.w <= 400 %} chart-box-narrow{% endif %}">{% localize off %}<svg class="chart-svg" viewBox="0 0 {{ c.w }} {{ c.h }}" role="img" aria-label="{{ label }}">
+<div class="chart-box{% if c.w <= 400 %} chart-box-narrow{% elif c.w > 700 %} chart-box-wide{% endif %}">{% localize off %}<svg class="chart-svg" viewBox="0 0 {{ c.w }} {{ c.h }}" role="img" aria-label="{{ label }}">
   {% for t in c.ticks %}<line class="grid" x1="{{ t.x }}" x2="{{ t.x }}" y1="18" y2="{{ c.h|add:'-6' }}"/><text class="axis-text" x="{{ t.x }}" y="12" text-anchor="middle">{{ t.text }}</text>{% endfor %}
   {% for r in c.rows %}<g class="hit" tabindex="0" data-tip="{{ r.tip }}">
   <text class="axis-text label-text" x="{{ c.label_x }}" y="{{ r.ty }}" dy="0.32em" text-anchor="end">{{ r.rank }}. {{ r.label }}</text>

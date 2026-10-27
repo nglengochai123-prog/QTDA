@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.accounts.permissions import Cap, capability_required, user_can
+from apps.core import links
 from apps.reports import charts
 
 from . import lots, operations as ops
@@ -79,6 +80,7 @@ def lot_detail(request, ingredient_id):
         "ing": ing, "data": data, "draws": draws, "used": used, "today": timezone.localdate(),
         "timeline": charts.lot_timeline(data["lots"], ing.get_unit_display(), timezone.localdate()),
         "show_value": user_can(request.user, Cap.STOCK_CONFIRM_ORDERING), "rules": ing._meta.get_field("issue_rule"),
+        "can_ledger": user_can(request.user, Cap.VIEW_DASHBOARD),
     })
 
 
@@ -113,7 +115,7 @@ def dispose(request, lot_id):
     if result:
         lot = StockLot.objects.get(pk=lot_id)
         messages.success(request, f"Đã hủy lô {lot.code} và ghi hao hụt; tồn vật lý đã giảm.")
-    return redirect(p.get("next") or "inventory:lots")
+    return links.back(request, "inventory:lots")
 
 
 @capability_required(Cap.STOCK_OPERATIONS)

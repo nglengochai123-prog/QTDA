@@ -43,7 +43,7 @@ class EndToEndTests(Base):
         self.once(shift_services.add_cash_entry, self.manager, self.shift.pk, "dau_ca", 500000)
 
         # 1. Nhập 1.000 ml sữa đặc, 30 đ/ml, trả ngay bằng quỹ ca (có ảnh hóa đơn theo AC-55).
-        photo = SimpleUploadedFile("hd.jpg", b"jpeg", content_type="image/jpeg")
+        photo = SimpleUploadedFile("hd.jpg", b"\xff\xd8\xffjpeg", content_type="image/jpeg")
         receipt = self.once(ops.create_receipt, barista, supplier.pk,
                             [{"ingredient": d["milk"].pk, "quantity": "1000", "unit_price": 30}], "tra_ngay",
                             invoice_photo=photo, paid_source=SupplierPayment.Source.SHIFT_CASH)

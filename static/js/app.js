@@ -2,9 +2,79 @@
 (function () {
   "use strict";
 
+  // --- Hết phiên đăng nhập khi trang đang mở: máy chủ trả 401 kèm đường đăng nhập; hiện một dải báo có nút ---
+  if (window.fetch) {
+    var plainFetch = window.fetch;
+    var expiredShown = false;
+    window.fetch = function () {
+      return plainFetch.apply(this, arguments).then(function (r) {
+        if (r.status === 401 && !expiredShown) {
+          r.clone().json().then(function (d) {
+            if (!d || !d.login || expiredShown) return;
+            expiredShown = true;
+            var bar = document.createElement("div");
+            bar.className = "notice notice-warn session-expired";
+            bar.setAttribute("role", "alert");
+            var text = document.createElement("div");
+            text.textContent = "Phiên đăng nhập đã hết hạn. Nội dung đang soạn trên máy này vẫn còn. ";
+            var link = document.createElement("a");
+            link.href = d.login;
+            link.textContent = "Đăng nhập lại";
+            text.appendChild(link);
+            bar.appendChild(text);
+            var main = document.querySelector("main") || document.body;
+            main.insertBefore(bar, main.firstChild);
+          }).catch(function () {});
+        }
+        return r;
+      });
+    };
+  }
+
   // --- Service worker (cài lên màn hình chính) ---
   if ("serviceWorker" in navigator && document.body.dataset.swUrl) {
     navigator.serviceWorker.register(document.body.dataset.swUrl, { scope: "/" }).catch(function () {});
+  }
+
+  // --- Máy dùng chung: thông báo đẩy của thiết bị đi theo người đang đăng nhập, không theo người bật trước ---
+  var me = document.body.dataset.user, pushUrl = document.body.dataset.pushUrl;
+  if (me && pushUrl && "serviceWorker" in navigator && window.Notification && Notification.permission === "granted") {
+    var pushOwner = null;
+    try { pushOwner = localStorage.getItem("lam-push-user"); } catch (e) {}
+    if (pushOwner !== me) {
+      navigator.serviceWorker.ready.then(function (reg) { return reg.pushManager.getSubscription(); }).then(function (sub) {
+        if (!sub) return;
+        var token = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+        return fetch(pushUrl, { method: "POST", credentials: "same-origin", body: JSON.stringify(sub.toJSON()),
+                                headers: { "Content-Type": "application/json", "X-CSRFToken": token ? decodeURIComponent(token[1]) : "" } })
+          .then(function (r) { if (r.ok) { try { localStorage.setItem("lam-push-user", me); } catch (e) {} } });
+      }).catch(function () {});
+    }
+  }
+  var logout = document.querySelector("form[data-logout]");
+  if (logout && me && document.body.dataset.pushOffUrl && "serviceWorker" in navigator && navigator.sendBeacon) {
+    logout.addEventListener("submit", function (event) {
+      if (logout.dataset.sent) return;
+      event.preventDefault();
+      logout.dataset.sent = "1";
+      var left = false;
+      var done = function () {
+        if (left) return;
+        left = true;
+        try { localStorage.removeItem("lam-push-user"); } catch (e) {}
+        logout.submit();
+      };
+      var timer = setTimeout(done, 1500);  // không chờ lâu nếu trình duyệt chậm trả lời
+      navigator.serviceWorker.getRegistration().then(function (reg) { return reg && reg.pushManager.getSubscription(); })
+        .then(function (sub) {
+          if (sub) {
+            var data = new FormData();
+            data.append("endpoint", sub.endpoint);
+            data.append("csrfmiddlewaretoken", logout.querySelector("[name=csrfmiddlewaretoken]").value);
+            navigator.sendBeacon(document.body.dataset.pushOffUrl, data);
+          }
+        }).catch(function () {}).then(function () { clearTimeout(timer); done(); });
+    });
   }
 
   // --- Thẻ trang cuộn ngang trên điện thoại: đưa thẻ đang mở vào tầm nhìn ---
@@ -77,6 +147,17 @@
   if (!navigator.onLine) setOffline(true);
   setInterval(probe, 5000);
 
+  // --- Thu ngân: báo khi các bàn thay đổi; không tự tải lại để nút Thu tiền không đổi chỗ dưới tay ---
+  var changed = document.getElementById("cashier-changed");
+  function pollCashier() {
+    if (!changed || !changed.hidden || document.hidden || offline) return;
+    fetch(changed.dataset.url, { credentials: "same-origin", cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) { if (data && data.sig && data.sig !== changed.dataset.sig) changed.hidden = false; })
+      .catch(function () {});
+  }
+  if (changed) setInterval(pollCashier, 8000);
+
   // --- Báo món đã pha xong cho phục vụ, kèm số bàn (AC-06) ---
   var readyUrl = document.body.dataset.readyCountUrl;
   var readyBanner = document.getElementById("ready-banner");
@@ -128,6 +209,20 @@
   }
   if (stockUrl) { pollStock(); setInterval(pollStock, 5000); }
 
+  // --- Trang tự làm mới phần thân (Tổng quan ca); hết phiên đăng nhập thì giữ nguyên nội dung cũ ---
+  document.querySelectorAll("[data-live-url]").forEach(function (box) {
+    var every = (parseInt(box.dataset.liveEvery, 10) || 15) * 1000;
+    function refresh() {
+      if (document.hidden || offline) return;
+      fetch(box.dataset.liveUrl, { credentials: "same-origin", cache: "no-store" })
+        .then(function (r) { return r.ok && !r.redirected ? r.text() : null; })
+        .then(function (html) { if (html !== null) box.innerHTML = html; })
+        .catch(function () {});
+    }
+    setInterval(refresh, every);
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
+  });
+
   // --- Hiện/ẩn mật khẩu ---
   document.querySelectorAll("[data-toggle-password]").forEach(function (button) {
     var input = document.getElementById(button.getAttribute("aria-controls"));
@@ -147,7 +242,7 @@
   // vẫn là cùng một yêu cầu và máy chủ không ghi trùng. Nháp được xóa khi trang báo đã lưu thành công.
   var savedOk = document.querySelector(".notice-ok");
   document.querySelectorAll("form[data-draft]").forEach(function (form) {
-    var key = "nhap:" + location.pathname + ":" + form.dataset.draft;
+    var key = "nhap:" + (document.body.dataset.user || "") + ":" + location.pathname + ":" + form.dataset.draft;
     var fields = function () {
       return Array.prototype.filter.call(form.elements, function (el) {
         return el.name && el.type !== "file" && el.type !== "submit" && el.name !== "csrfmiddlewaretoken";

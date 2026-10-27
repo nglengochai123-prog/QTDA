@@ -66,12 +66,32 @@ class Shift(StoreScopedModel):
     def clean(self):
         if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
             raise ValidationError({"ends_at": "Giờ kết thúc phải sau giờ bắt đầu."})
+        if self.starts_at and self.ends_at and (self.ends_at - self.starts_at).total_seconds() > 24 * 3600:
+            raise ValidationError({"ends_at": "Một ca dài quá 24 giờ; kiểm tra lại ngày kết thúc."})
+
+    OVERRUN_HOURS = 2
+
+    @property
+    def overrun(self):
+        """Ca còn mở đã quá giờ kết thúc dự kiến hơn 2 giờ: thường là quên kết ca hôm trước và chưa mở ca mới, nên tiền
+        thu bây giờ vẫn vào ca cũ. Khách trả muộn ít phút sau giờ đóng cửa thì không tính (BRU-06)."""
+        return (self.status == self.Status.OPEN
+                and (timezone.now() - self.ends_at).total_seconds() > self.OVERRUN_HOURS * 3600)
+
+    @property
+    def authorizer(self):
+        """Người được ủy quyền còn dùng được: người đã nghỉ việc (tài khoản khóa) hay không còn vai trò thu tiền thì coi
+        như chưa có, Chủ quán làm thay."""
+        from apps.accounts.permissions import Cap, user_can
+
+        person = self.payment_authorizer if self.payment_authorizer_id else None
+        return person if person is not None and person.is_active and user_can(person, Cap.PAYMENT) else None
 
     @property
     def missing_roles(self):
         """Nhắc Chủ quán khi ca chưa đủ người theo BRU-09 (AC-113)."""
         missing = []
-        if not self.payment_authorizer_id:
+        if self.authorizer is None:
             missing.append("người được ủy quyền thanh toán theo món thực nhận")
         return missing
 
@@ -266,7 +286,9 @@ class Discrepancy(StoreScopedModel):
                                                name="one_current_discrepancy_per_method")]
 
     def __str__(self):
-        return f"{self.shift} · {self.get_method_display()} {self.difference:+,} đ".replace(",", ".")
+        from apps.core.numbers import fmt
+
+        return f"{self.shift} · {self.get_method_display()} {'+' if self.difference > 0 else ''}{fmt(self.difference, 0)} đ"
 
     @property
     def is_shortage(self):

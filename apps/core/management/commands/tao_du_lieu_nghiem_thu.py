@@ -88,7 +88,6 @@ class Command(BaseCommand):
         from apps.catalog.models import ItemSize, MenuItem, Table
         from apps.core import periodic
         from apps.catalog.models import Option
-        from apps.inventory import lots as lot_rules
         from apps.inventory import operations as ops
         from apps.inventory.models import Ingredient, StockLot, Supplier
         from apps.orders import adjustments, backup, payments, services
@@ -144,7 +143,7 @@ class Command(BaseCommand):
                     clock.tick(5)
                     ops.create_receipt(u["phache"], key(), suppliers[sup].pk, lines,
                                        "tra_ngay" if offset % 2 else "tra_sau",
-                                       invoice_photo=SimpleUploadedFile("hd.jpg", b"jpeg", content_type="image/jpeg"),
+                                       invoice_photo=SimpleUploadedFile("hd.jpg", b"\xff\xd8\xffjpeg", content_type="image/jpeg"),
                                        paid_source="chuyen_khoan")
             if offset in SPILLS:
                 name, qty, reason, note = SPILLS[offset]
@@ -208,7 +207,10 @@ class Command(BaseCommand):
             clock.at(day, 21, 30)
             for ing in critical:  # kiểm kê nhóm trọng yếu cuối ngày, khớp sổ
                 ing.stock.refresh_from_db()
-                ops.submit_count(u["phache"], key(), ing.pk, str(ing.stock.physical))
+                if ing.stock.physical >= 0:
+                    ops.submit_count(u["phache"], key(), ing.pk, str(ing.stock.physical))
+                else:  # sổ âm (ví dụ nhập bù phiếu dự phòng bán lúc mất mạng): đếm thật được 0
+                    ops.submit_count(u["phache"], key(), ing.pk, "0", "Sổ âm sau khi nhập bù phiếu dự phòng; đếm thật được 0")
             for att in Attendance.objects.filter(clock_out__isnull=True):
                 att.clock_out = clock.tick(1)
                 att.save(update_fields=["clock_out"])

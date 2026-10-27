@@ -1,8 +1,8 @@
 {% extends "base.html" %}
+{% load humanize %}
 {% block title %}Phiếu dự phòng · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><h1>Phiếu dự phòng và nhập bù</h1></header>
-<details class="help-tip"><summary>Giải thích</summary><p>Khi mất kết nối, quán bán bằng phiếu đánh số. Có mạng lại thì nhập bù từng phiếu trong thời hạn ở trang Tham số (mặc định 1 giờ), ghi mã nghiệp vụ nếu phiếu có. Số phiếu thiếu, trùng, quá hạn hoặc khai báo hủy đều tạo ngoại lệ.</p></details>
+<header class="page-head"><div><h1>Phiếu dự phòng và nhập bù</h1><p class="page-sub">Khi mất kết nối, quán bán bằng phiếu giấy đánh số. Có mạng lại thì nhập bù từng phiếu trong thời hạn ở trang Tham số (mặc định 1 giờ). Số phiếu thiếu, trùng, quá hạn hoặc khai báo hủy đều tạo ngoại lệ.</p></div></header>
 
 <section class="panel" aria-labelledby="enter-title">
   <h2 id="enter-title">Nhập bù một phiếu</h2>
@@ -18,16 +18,15 @@
       <div class="field"><label for="b-method">Khách trả bằng</label><select class="input" id="b-method" name="method" required>{% for v, l in methods %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
         <label class="check"><input type="checkbox" name="transfer_confirmed" value="1"> Đã thấy tiền chuyển khoản về</label></div>
     </div>
-    <h3>Món trên phiếu <span class="muted">(bỏ trống nếu phiếu có mã nghiệp vụ của đơn đã lưu: đơn đó giữ giá và định mức của nó)</span></h3>
-    <details class="help-tip"><summary>Giải thích</summary><p>Giá và định mức lấy theo thời điểm bán ghi trên phiếu. Nếu hệ thống chưa có lịch sử giá hoặc định mức của thời điểm đó, phiếu chờ Chủ quán xác nhận, chưa ghi đơn.</p></details>
+    <h3>Món trên phiếu</h3>
+    <p class="hint">Giá và định mức lấy theo thời điểm bán ghi trên phiếu; chưa có lịch sử của thời điểm đó thì phiếu chờ Chủ quán xác nhận. Bỏ trống nếu phiếu có mã nghiệp vụ của đơn đã lưu: đơn đó giữ giá và định mức của nó.</p>
     {% for i in rows %}
-    <div class="slip-line">
+    <fieldset class="slip-line"><legend class="visually-hidden">Dòng {{ forloop.counter }}</legend>
       <select class="input input-sm" name="item_{{ i }}" aria-label="Món và kích cỡ dòng {{ forloop.counter }}"><option value="">Món, kích cỡ</option>{% for s in sizes %}<option value="{{ s.item_id }}:{{ s.pk }}">{{ s.item.name }} {{ s.name }}</option>{% endfor %}</select>
       <input class="input input-sm slip-qty" name="qty_{{ i }}" inputmode="numeric" value="1" aria-label="Số ly dòng {{ forloop.counter }}">
-      <select class="input input-sm slip-opts" name="opt_{{ i }}" multiple size="3" aria-label="Tùy chọn dòng {{ forloop.counter }} (giữ Ctrl để chọn nhiều)">{% for o in options %}<option value="{{ o.pk }}">{{ o.group.name }}: {{ o.name }}{% if o.extra_price %} (+{{ o.extra_price }} đ){% endif %}</option>{% endfor %}</select>
-    </div>
+      <div class="slip-opts" role="group" aria-label="Tùy chọn dòng {{ forloop.counter }}">{% for o in options %}{% ifchanged o.group_id %}<span class="opt-group">{{ o.group.name }}</span>{% endifchanged %}<label class="opt-chip"><input type="checkbox" name="opt_{{ i }}" value="{{ o.pk }}"><span>{{ o.name }}{% if o.extra_price %} +{{ o.extra_price|intcomma }}{% endif %}</span></label>{% endfor %}</div>
+    </fieldset>
     {% endfor %}
-    <p class="hint">Tùy chọn: giữ phím Ctrl để chọn nhiều tùy chọn trong một dòng.</p>
     <button class="btn btn-primary" type="submit">Lưu phiếu nhập bù</button>
   </form>
 </section>
@@ -43,7 +42,7 @@
     {% for r in p.rows %}
     <div class="inline-form">
       <span><strong>{{ r.quantity }} × {{ r.size.item.name }} {{ r.size.name }}</strong>{% for o in r.options %} · {{ o.name }}{% endfor %}</span>
-      {% if r.need_price %}<label class="visually-hidden" for="pr-{{ p.slip.pk }}-{{ r.index }}">Đơn giá đã bán dòng {{ r.index }}</label><input class="input input-sm" id="pr-{{ p.slip.pk }}-{{ r.index }}" name="price_{{ r.index }}" inputmode="numeric" placeholder="Đơn giá đã bán (giá hiện tại {{ r.current_price }} đ)" {% if is_owner %}required{% else %}disabled{% endif %}>{% endif %}
+      {% if r.need_price %}<label class="visually-hidden" for="pr-{{ p.slip.pk }}-{{ r.index }}">Đơn giá đã bán dòng {{ r.index }}</label><input class="input input-sm" id="pr-{{ p.slip.pk }}-{{ r.index }}" name="price_{{ r.index }}" inputmode="numeric" placeholder="Đơn giá đã bán (giá hiện tại {{ r.current_price|intcomma }} đ)" {% if is_owner %}required{% else %}disabled{% endif %}>{% endif %}
       {% if r.need_version %}<label class="visually-hidden" for="ve-{{ p.slip.pk }}-{{ r.index }}">Phiên bản định mức dòng {{ r.index }}</label><select class="input input-sm" id="ve-{{ p.slip.pk }}-{{ r.index }}" name="version_{{ r.index }}" {% if is_owner %}required{% else %}disabled{% endif %}><option value="">Chọn phiên bản định mức</option>{% for v in r.versions %}<option value="{{ v.pk }}">Bản {{ v.number }} từ {{ v.effective_from|date:"d/m/Y" }}</option>{% endfor %}</select>{% endif %}
     </div>
     {% endfor %}
@@ -76,7 +75,7 @@
   {% else %}<p class="muted">Chưa cấp dãy phiếu nào.</p>{% endif %}
 </section>
 
-<div class="form-grid">
+<div class="grid-2">
   <section class="panel" aria-labelledby="void-title">
     <h2 id="void-title">Khai báo phiếu hủy</h2>
     <form method="post" class="mini-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="void">
@@ -86,12 +85,13 @@
   </section>
   <section class="panel" aria-labelledby="issue-title">
     <h2 id="issue-title">Cấp dãy phiếu cho ca</h2>
-    <form method="post" class="mini-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="issue">
-      <div class="field"><label for="i-shift">Ca</label><select class="input" id="i-shift" name="shift" required>{% for s in shifts %}<option value="{{ s.pk }}">{{ s }} {{ s.starts_at|date:"H:i" }}</option>{% endfor %}</select></div>
-      <div class="field"><label for="i-first">Từ số</label><input class="input" id="i-first" name="first" inputmode="numeric" required></div>
-      <div class="field"><label for="i-last">Đến số</label><input class="input" id="i-last" name="last" inputmode="numeric" required></div>
-      <div class="field"><label for="i-recv">Người nhận</label><select class="input" id="i-recv" name="receiver" required>{% for u in users %}<option value="{{ u.pk }}">{{ u }}</option>{% endfor %}</select></div>
-      <button class="btn btn-primary" type="submit">Cấp dãy</button></form>
+    {% if not shifts %}<p class="muted">Chưa có ca đang mở. {% if is_owner %}Mở ca ở <a href="{% url 'masterdata:list' 'ca' %}">Quản trị, mục Ca làm việc</a>{% else %}Chủ quán mở ca ở Quản trị, mục Ca làm việc{% endif %} rồi cấp dãy phiếu cho ca đó.</p>
+    {% else %}<form method="post" class="mini-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="issue">
+      <div class="field"><label for="issue-shift">Ca</label><select class="input" id="issue-shift" name="shift" required>{% for s in shifts %}<option value="{{ s.pk }}">{{ s }} {{ s.starts_at|date:"H:i" }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="issue-first">Từ số</label><input class="input" id="issue-first" name="first" inputmode="numeric" required></div>
+      <div class="field"><label for="issue-last">Đến số</label><input class="input" id="issue-last" name="last" inputmode="numeric" required></div>
+      <div class="field"><label for="issue-recv">Người nhận</label><select class="input" id="issue-recv" name="receiver" required>{% for u in users %}<option value="{{ u.pk }}">{{ u }}</option>{% endfor %}</select></div>
+      <button class="btn btn-primary" type="submit">Cấp dãy</button></form>{% endif %}
   </section>
 </div>
 {% endblock %}

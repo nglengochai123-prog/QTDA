@@ -1,8 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Duyệt điều chỉnh · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><h1>Yêu cầu chờ bạn duyệt</h1></header>
-<details class="help-tip"><summary>Giải thích</summary><p>Chủ quán duyệt mọi yêu cầu. Quá {{ deadline }} phút chưa duyệt thì yêu cầu được đánh dấu quá hạn; thu ngân thu tiền theo món khách thực nhận và yêu cầu chuyển sang chờ hậu kiểm.</p></details>
+<header class="page-head"><div><h1>Yêu cầu chờ bạn duyệt</h1><p class="page-sub">Chủ quán duyệt mọi yêu cầu. Quá {{ deadline }} phút chưa duyệt thì yêu cầu được đánh dấu quá hạn; thu ngân thu tiền theo món khách thực nhận và yêu cầu chuyển sang chờ hậu kiểm.</p></div></header>
 {% if pending %}
 <ul class="approval-list">
   {% for req in pending %}
@@ -28,6 +27,6 @@
   {% endfor %}
 </ul>
 {% else %}
-<div class="empty"><p><strong>Không có yêu cầu nào chờ bạn.</strong></p><p>Yêu cầu do chính bạn tạo không hiện ở đây; nó được chuyển cho người duyệt khác.</p></div>
+<div class="empty"><p><strong>Không có yêu cầu nào chờ bạn.</strong></p><p>Khi nhân viên gửi yêu cầu hủy món, đổi món hay chuyển bàn, yêu cầu hiện ở đây và trên thanh báo đầu trang.</p></div>
 {% endif %}
 {% endblock %}

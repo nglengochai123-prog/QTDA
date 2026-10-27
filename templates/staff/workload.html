@@ -3,7 +3,7 @@
 {% block title %}Tải và thời gian chờ · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <header class="page-head">
-  <div><h1>Tải và thời gian chờ</h1><p class="page-sub">{{ day|date:"l, d/m/Y" }}. Tải = số ly × hệ số tải của nhóm món; chờ tính từ lúc gửi pha chế đến lúc mang ra.</p></div>
+  <div><h1>Tải và thời gian chờ</h1><p class="page-sub">{{ day|date:"l, d/m/Y" }}. Số ly, thời gian khách chờ món và số người có mặt trong từng giờ.</p></div>
   <form method="get" class="page-tools" aria-label="Chọn ngày">
     <a class="btn btn-quiet btn-sm" href="?ngay={{ prev_day|date:'Y-m-d' }}" aria-label="Ngày trước">‹</a>
     <input class="input input-sm" id="w-day" type="date" name="ngay" value="{{ day|date:'Y-m-d' }}" aria-label="Ngày">
@@ -12,15 +12,15 @@
   </form>
 </header>
 {% if frames %}
-{% if overloaded %}<p class="notice notice-warn">Quá tải {{ overloaded|length }} khung: {{ overloaded|join:", " }}. Quá tải khi chờ trung vị vượt {{ standard }} phút hoặc còn hơn {{ backlog_limit }} ly tồn quầy cuối khung.</p>{% endif %}
+{% if overloaded %}<p class="notice notice-warn">Quá tải {{ overloaded|length }} khung: {{ overloaded|join:", " }}. Đó là các khung khách chờ món quá {{ standard }} phút, hoặc cuối khung quầy còn hơn {{ backlog_limit }} ly chưa pha.</p>{% endif %}
 <section class="card">
   <div class="card-head"><div><h2>Số ly theo khung giờ</h2><p class="card-sub">Cột đỏ là khung quá tải. So với số người có mặt bên dưới để xem có cần thêm người không.</p></div></div>
   <div class="card-body">{% if cups_chart %}{% include "reports/charts/stacked_columns.html" with c=cups_chart label="Số ly theo khung giờ" %}{% else %}<p class="chart-empty">Chưa có ly nào được tính tải.</p>{% endif %}</div>
 </section>
 <div class="grid-2">
   <section class="card">
-    <div class="card-head"><div><h2>Thời gian chờ trung vị</h2><p class="card-sub">Đường xám là chuẩn {{ standard }} phút.</p></div></div>
-    <div class="card-body">{% if wait_chart %}{% include "reports/charts/line.html" with c=wait_chart label="Thời gian chờ trung vị theo khung giờ" %}{% else %}<p class="chart-empty">Chưa có món mang ra trong ngày.</p>{% endif %}</div>
+    <div class="card-head"><div><h2>Thời gian khách chờ món</h2><p class="card-sub">Đường xám là chuẩn {{ standard }} phút.</p></div></div>
+    <div class="card-body">{% if wait_chart %}{% include "reports/charts/line.html" with c=wait_chart label="Thời gian khách chờ món theo khung giờ" %}{% else %}<p class="chart-empty">Chưa có món mang ra trong ngày.</p>{% endif %}</div>
   </section>
   <section class="card">
     <div class="card-head"><div><h2>Người có mặt theo vai trò</h2><p class="card-sub">Theo chấm công vào ra trong từng khung.</p></div><a class="btn btn-ghost btn-sm" href="{% url 'schedule:board' %}">Lịch làm tuần</a></div>
@@ -29,14 +29,14 @@
 </div>
 <section class="card">
   <div class="card-head"><h2>Bảng số liệu</h2></div>
-  <div class="table-wrap"><table class="data-table">
-    <thead><tr><th scope="col">Khung giờ</th><th scope="col" class="num">Đơn</th><th scope="col" class="num">Ly</th><th scope="col" class="num">Tải</th><th scope="col" class="num">Chờ trung vị</th><th scope="col" class="num">Tồn quầy</th>{% for label in role_headers %}<th scope="col" class="num">{{ label }} có mặt</th>{% endfor %}<th scope="col">Đánh giá</th></tr></thead>
+  <div class="table-wrap"><table class="data-table table-stack">
+    <thead><tr><th scope="col">Khung giờ</th><th scope="col" class="num">Đơn</th><th scope="col" class="num">Ly</th><th scope="col" class="num">Tải</th><th scope="col" class="num">Chờ món</th><th scope="col" class="num">Tồn quầy</th>{% for label in role_headers %}<th scope="col" class="num">{{ label }} có mặt</th>{% endfor %}<th scope="col">Đánh giá</th></tr></thead>
     <tbody>{% for f in frames %}
-    <tr><th scope="row">{{ f.start|date:"H" }}–{{ f.end|date:"H" }} giờ</th><td class="num">{{ f.orders }}</td><td class="num">{{ f.cups }}</td><td class="num">{{ f.load }}</td>
-      <td class="num">{% if f.median_wait is not None %}{{ f.median_wait }} phút{% else %}–{% endif %}</td><td class="num">{{ f.backlog }}</td>
-      {% for n in f.presence_list %}<td class="num">{{ n }}</td>{% endfor %}
-      <td>{% if f.overloaded %}<span class="pill pill-danger">Quá tải</span>{% else %}<span class="pill pill-ok">Đạt chuẩn</span>{% endif %}</td></tr>
+    <tr><th scope="row" class="nowrap">{{ f.start|date:"H" }}–{{ f.end|date:"H" }} giờ</th><td class="num" data-label="Đơn">{{ f.orders }}</td><td class="num" data-label="Ly">{{ f.cups }}</td><td class="num" data-label="Tải">{{ f.load }}</td>
+      <td class="num" data-label="Chờ món">{% if f.median_wait is not None %}{{ f.median_wait }} phút{% else %}–{% endif %}</td><td class="num" data-label="Tồn quầy">{{ f.backlog }}</td>
+      {% for p in f.presence_cells %}<td class="num" data-label="{{ p.label }} có mặt">{{ p.n }}</td>{% endfor %}
+      <td data-label="Đánh giá">{% if f.overloaded %}<span class="pill pill-danger">Quá tải</span>{% elif f.cups %}<span class="pill pill-ok">Đạt chuẩn</span>{% else %}<span class="muted">Không có đơn</span>{% endif %}</td></tr>
     {% endfor %}</tbody></table></div>
 </section>
-{% else %}<div class="empty"><p><strong>Chưa có đơn trong ngày này.</strong></p></div>{% endif %}
+{% else %}<div class="empty"><p><strong>Chưa có đơn trong ngày này.</strong></p><p><a href="?ngay={{ prev_day|date:'Y-m-d' }}">Xem ngày {{ prev_day|date:"d/m" }}</a></p></div>{% endif %}
 {% endblock %}

@@ -30,8 +30,8 @@
   </div>
   <div class="table-wrap"><table class="data-table">
     <thead><tr><th scope="col">{{ dim_label }}</th><th scope="col" class="num">Số đơn</th><th scope="col" class="num">Số ly</th><th scope="col" class="num">Doanh thu</th></tr></thead>
-    <tbody>{% for r in rows %}<tr><th scope="row">{{ r.key }}</th><td class="num">{% if r.link %}<a href="{% url 'orders:lookup' %}?{{ r.link }}" title="Xem các đơn của dòng này">{{ r.orders }}</a>{% else %}{{ r.orders }}{% endif %}</td><td class="num">{{ r.cups }}</td><td class="num">{{ r.revenue|intcomma }} đ</td></tr>{% endfor %}</tbody>
-    <tfoot><tr><th scope="row">Tổng</th><td class="num">{{ orders }}</td><td class="num"></td><td class="num">{{ total|intcomma }} đ</td></tr></tfoot>
+    <tbody>{% for r in rows %}<tr><th scope="row">{{ r.key }}</th><td class="num">{% if r.link %}<a href="{% url 'orders:lookup' %}?{{ r.link }}" title="Xem các đơn của dòng này">{{ r.orders|intcomma }}</a>{% else %}{{ r.orders|intcomma }}{% endif %}</td><td class="num">{{ r.cups|intcomma }}</td><td class="num">{{ r.revenue|intcomma }} đ</td></tr>{% endfor %}</tbody>
+    <tfoot><tr><th scope="row">Tổng</th><td class="num">{{ orders|intcomma }}</td><td class="num">{{ cups|intcomma }}</td><td class="num">{{ total|intcomma }} đ</td></tr></tfoot>
   </table></div>
 </section>
 

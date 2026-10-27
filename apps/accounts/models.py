@@ -51,6 +51,11 @@ class User(AbstractUser):
     def get_short_name(self):
         return self.given_name
 
+    @property
+    def initial(self):
+        """Chữ cái đầu của tên gọi, dùng cho ảnh đại diện (Nguyễn Văn An → A)."""
+        return (self.given_name or self.username or "?")[:1].upper()
+
     # --- Vai trò ---------------------------------------------------------------
 
     @property
@@ -58,9 +63,13 @@ class User(AbstractUser):
         """Tập vai trò của tài khoản: vai trò chính và các vai trò ghi trong hồ sơ nhân viên."""
         if self.is_superuser:
             return {Role.CHU_QUAN}
-        result = {self.role}
         employee = getattr(self, "employee", None)
-        if employee is not None and employee.is_working:
+        if employee is None:
+            return {self.role}
+        # Có hồ sơ nhân viên thì hồ sơ quyết định: bỏ một vai trò ở hồ sơ là mất quyền của vai trò đó, kể cả vai trò
+        # chọn lúc tạo tài khoản. Riêng Chủ quán tạo tài khoản với vai trò chính Chủ quán thì vẫn là Chủ quán.
+        result = {Role.CHU_QUAN} if self.role == Role.CHU_QUAN else set()
+        if employee.is_working:
             result.update(employee.roles or [])
         return result
 
@@ -73,6 +82,11 @@ class User(AbstractUser):
 
     def role_labels(self):
         return [label for value, label in Role.choices if value in self.roles]
+
+    @property
+    def roles_display(self):
+        """Mọi vị trí đang làm, ví dụ "Phục vụ, Thu ngân" (role chỉ là vị trí chính)."""
+        return ", ".join(self.role_labels())
 
     # --- Tạm khóa khi sai mật khẩu nhiều lần ------------------------------------
 

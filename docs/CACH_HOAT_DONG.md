@@ -86,6 +86,19 @@ Màn hình **Ca của tôi** (`/ca/`) mở ca đang giữ quỹ; nếu không c�
 
 ## 4. Bán hàng: tạo đơn, pha chế, phục vụ
 
+### 4.0. Tổng quan ca (Chủ quán, Thu ngân, Phục vụ) — `/ban-hang/tong-quan/`
+
+Mục đầu tiên của nhóm Bán hàng, bấm thẻ Bán hàng ở thanh trên là mở trang này. Trang tự làm mới mỗi 15 giây và chỉ đọc, không ghi gì.
+
+- **Năm ô trên cùng:** bàn có khách trên tổng số bàn (kèm số tiền chưa thu), yêu cầu điều chỉnh chờ duyệt, số ly chờ pha và phiếu cũ nhất, số ly pha xong chờ mang ra kèm số bàn, số bàn đã phục vụ xong chờ thu tiền. Bấm ô để sang màn xử lý (Duyệt, Quầy pha chế, Món sẵn sàng, Thu ngân) nếu có quyền.
+- **Ca này đến giờ:** số đơn, số ly đã bán, thời gian khách chờ món thường gặp (trung vị từ lúc gửi đến lúc mang ra, giống màn Tải và thời gian chờ). Chủ quán và Thu ngân thấy thêm doanh thu ca và tiền mặt phải có; Phục vụ không thấy số tiền ca.
+- **Bàn:** mỗi bàn một ô theo khu vực, có chấm trạng thái: *Chờ duyệt* (có yêu cầu điều chỉnh), *Có món chờ mang ra*, *Đang pha*, *Chờ thanh toán* (đã phục vụ hết), *Trống*. Bàn có nhiều tình trạng thì hiện tình trạng đứng trước trong danh sách này. Số phút tính từ đơn đầu tiên của bàn; chuyển đỏ khi bàn còn món chưa mang ra mà đã chờ quá chuẩn thời gian chờ (tham số `wait_standard_minutes`). Bấm ô bàn để mở đơn của bàn trong Đơn đang mở.
+- **Cần xử lý:** yêu cầu chờ duyệt (ai gửi, bao lâu, đang chờ cấp nào; nút Duyệt nếu đang chờ chính người xem), bàn chờ món lâu, quầy dồn món quá mức cho phép (tham số `bar_backlog_limit`).
+- **Người trong ca:** người đang chấm công vào, kèm người có lịch ca này (lịch tuần đã công bố) mà chưa chấm công.
+- **Món sắp hết:** báo nhanh nguyên liệu chưa xử lý và món còn đáp ứng từ 10 ly trở xuống (`LOW_CUPS` trong `apps/orders/overview.py`).
+
+Muốn thử trên dữ liệu mô phỏng: `manage.py tao_ban_co_khach` cho sáu bàn trống có khách ngay lúc chạy lệnh (hai bàn chờ pha, một bàn chờ lâu, một bàn có món chờ mang ra, hai bàn chờ thu tiền, một bàn có yêu cầu đổi món chờ duyệt), đi qua chính các hàm nghiệp vụ. Chưa có ca trong giờ hiện tại thì lệnh mở "Ca ngày" và cho nhân viên demo chấm công. Chạy lại lúc nào cũng được.
+
 ### 4.1. Tạo đơn (Phục vụ, trên điện thoại) — `/don/moi/`
 
 1. Chọn bàn, chọn món, kích cỡ, tùy chọn (đá, đường, topping...), số ly, ghi chú.
@@ -188,6 +201,10 @@ Hai bước tách biệt: Chủ quán duyệt hủy → khoản hoàn "chờ ho�
 
 Chủ quán thấy ca chưa kết sau giờ kết thúc, ca thiếu báo cáo quá 2 giờ (AC-18), phiếu dự phòng chưa nhập bù, kiểm kê nhóm trọng yếu chưa làm trước giờ mở cửa hôm sau (chỉ xét ở ca cuối cùng của ngày, tính theo giờ Việt Nam), các chênh lệch chờ quyết định.
 
+Chênh lệch chờ quyết định hiện mỗi khoản một dòng (ca, cách thu, người phụ trách, số tiền) với hai nút Không chấp nhận, Chấp nhận ngay trên dòng. Bảng các ca gần đây hiện 10 ca, bấm "Xem 50 ca trước đó" để xem thêm.
+
+Trang Ca của tôi gộp các việc còn thiếu (chưa kết ca, thiếu báo cáo cuối ca…) vào một thông báo kèm hạn báo cáo; số liệu quỹ chia hai khối Tiền mặt (từ tiền đầu ca tới tiền mặt phải có trong két) và Chuyển khoản.
+
 ## 8. Bán hàng dự phòng khi mất mạng — `/du-phong/`
 
 1. Chủ quán cấp cho mỗi ca một **dãy số phiếu** in sẵn, ghi người nhận. Hai dãy không được trùng số.
@@ -231,15 +248,15 @@ Pha chế báo *Sắp hết* hoặc *Đã hết* kèm lượng còn lại ước
 
 ### 9.4. Phiếu nhập (FR-24) — `/kho/phieu-nhap/`
 
-Chọn nhà cung cấp, từng dòng nguyên liệu, số lượng thực nhận, đơn giá, hạn sử dụng in trên bao bì, số lô của nhà sản xuất (không bắt buộc), lần đặt liên quan. **Luôn phải có ảnh hóa đơn** (AC-55). Không nhập được lô đã quá hạn. Mỗi dòng tạo một lô mã `<mã phiếu>/<số dòng>`; dòng để trống hạn mà nguyên liệu có thời hạn sử dụng thì hạn được ước tính bằng ngày nhập cộng thời hạn. Lưu phiếu thì tăng tồn vật lý và tạo khoản phải trả:
+Chọn nhà cung cấp thì màn hiện các lần đặt đang chờ giao của nhà cung cấp đó; bấm một lần đặt là điền sẵn dòng (nguyên liệu, số còn chờ giao, lần đặt). Mỗi dòng: nguyên liệu, số lượng thực nhận, đơn giá theo đơn vị tính, thành tiền tự tính; bên dưới là hạn sử dụng trên bao bì, số lô nhà sản xuất (không bắt buộc), lần đặt liên quan. Phiếu có tối đa 8 dòng, hiện dần bằng nút Thêm dòng; tổng giá trị phiếu luôn hiện ở thanh dưới. Dòng điền dở (có đơn giá mà thiếu nguyên liệu hoặc số lượng) thì không lưu cả phiếu và báo dòng nào thiếu. Trả ngay thì hỏi nguồn tiền, trả sau thì hỏi hạn trả. **Luôn phải có ảnh hóa đơn** (AC-55). Không nhập được lô đã quá hạn. Mỗi dòng tạo một lô mã `<mã phiếu>/<số dòng>`; dòng để trống hạn mà nguyên liệu có thời hạn sử dụng thì hạn được ước tính bằng ngày nhập cộng thời hạn. Lưu phiếu thì tăng tồn vật lý và tạo khoản phải trả:
 
-- *Trả sau*: hạn trả theo số ngày chọn; Chủ quán ghi thanh toán từng phần ở `/kho/phai-tra/`.
+- *Trả sau*: hạn trả theo số ngày chọn; Chủ quán ghi thanh toán từng phần ở `/kho/phai-tra/`. Màn Phải trả có tổng còn nợ, phần quá hạn, phần đến hạn trong 7 ngày; khoản quá hạn tô đỏ; số tiền gõ có dấu chấm ("2.982.000") được hiểu đúng. Trả bằng *Tiền mặt quỹ ca* thì ghi luôn một khoản chi Nguyên vật liệu vào ca đang mở (không có ca đang mở thì không cho chọn nguồn này).
 - *Trả ngay bằng quỹ ca*: tự ghi một khoản chi "Nguyên vật liệu" vào quỹ ca đang giữ (GD-09).
 - Gắn lần đặt: cập nhật Đã giao đủ / Giao một phần; nhận vượt số đặt vẫn ghi nhưng báo cho Chủ quán.
 
 ### 9.5. Kiểm kê (FR-25) — `/kho/kiem-ke/`
 
-Nhập số đếm được. Hệ thống so với tồn vật lý **lúc đếm**:
+Nguyên liệu chia hai nhóm: Trọng yếu (kiểm mỗi ngày) và Nguyên liệu khác. Đầu trang có số đã kiểm hôm nay và số trọng yếu còn thiếu. Mỗi dòng hiện tồn trên sổ, lần kiểm trước, và nhãn Đã kiểm, Chờ xác nhận hoặc Được đề nghị kiểm lại (khi phục vụ đề nghị từ màn Tạo đơn). Gõ số đếm được thì màn báo ngay lệch bao nhiêu; ô lý do chỉ hiện và bắt buộc khi lệch vượt ngưỡng. Nháp đang gõ được lưu riêng cho từng nguyên liệu. Hệ thống so với tồn vật lý **lúc đếm**:
 
 - Chênh lệch trong ngưỡng 5%: điều chỉnh ngay.
 - Vượt ngưỡng: bắt buộc ghi lý do, chờ Chủ quán xác nhận. Khi xác nhận, hệ thống điều chỉnh đúng phần chênh lúc đếm, nên các biến động phát sinh trong lúc chờ không bị xóa.
@@ -250,15 +267,15 @@ Nhập số đếm được. Hệ thống so với tồn vật lý **lúc đếm
 
 ### 9.6. Hao hụt (FR-26) — `/kho/hao-hut/`
 
-Chọn lý do bắt buộc (hư hỏng, hết hạn, đổ vỡ, pha hỏng, khác), số lượng, và lô bị hỏng nếu biết. Để trống lô thì hệ thống trừ theo thứ tự lấy lô; lý do Hết hạn thì trừ lô quá hạn trước. Giảm tồn vật lý. Không được ghi vượt tồn vật lý trên sổ; sổ sai thì kiểm kê trước. Chủ quán có thể đánh dấu *sự cố đơn lẻ* để không làm lệch tỷ lệ hao hụt khi dự báo.
+Chọn nguyên liệu (màn hiện tồn trên sổ và đơn vị), số lượng bỏ đi, lý do bắt buộc (hư hỏng, hết hạn, đổ vỡ, pha hỏng, khác), và lô bị hỏng nếu biết; cột bên phải là các lần ghi gần đây. Để trống lô thì hệ thống trừ theo thứ tự lấy lô; lý do Hết hạn thì trừ lô quá hạn trước. Giảm tồn vật lý. Không được ghi vượt tồn vật lý trên sổ; sổ sai thì kiểm kê trước. Chủ quán có thể đánh dấu *sự cố đơn lẻ* để không làm lệch tỷ lệ hao hụt khi dự báo.
 
 ### 9.7. Đặt hàng (FR-30) — `/kho/dat-hang/`
 
-Ghi lần đặt: nhà cung cấp, nguyên liệu, số lượng, ngày giao dự kiến. Trạng thái Nháp → Đã đặt → Giao một phần → Đã giao đủ, hoặc Đã hủy (có lý do). Quá ngày giao mà chưa nhận đủ thì thành **Giao chậm** và không còn tính là hàng đang về cho đến khi có ngày giao mới (AC-69).
+Ghi lần đặt: chọn nguyên liệu thì nhà cung cấp chính của nguyên liệu được chọn sẵn và đơn vị hiện cạnh ô số lượng; ngày giao không được trước hôm nay. Màn chia hai phần: **Đang chờ giao** xếp theo ngày giao, dòng giao chậm tô đỏ, mỗi dòng có nút Đổi ngày (chỉ đổi sang hôm nay trở đi, không đổi lần đặt đã giao đủ hay đã hủy); **Đã giao, đã hủy** hiện 15 lần gần nhất, bấm để xem hết. Trạng thái Nháp → Đã đặt → Giao một phần → Đã giao đủ, hoặc Đã hủy (có lý do). Quá ngày giao mà chưa nhận đủ thì thành **Giao chậm** và không còn tính là hàng đang về cho đến khi có ngày giao mới (AC-69).
 
 ### 9.8. Sổ kho và báo cáo — `/kho/so-kho/`, `/kho/bao-cao/`
 
-Sổ kho lọc theo nguyên liệu, loại, ngày, có tổng và liên kết sang đơn. Báo cáo kho tháng: hao hụt theo lý do, hủy sau pha chế, kiểm kê, trường hợp thiếu. Báo cáo kho có biểu đồ cho Chủ quán ở `/bao-cao/kho/` (mục 14).
+Sổ kho lọc theo nguyên liệu, loại, ngày, có tổng và liên kết sang đơn; trên điện thoại mỗi biến động thành một khối gọn (nguyên liệu, lượng, giờ, loại, người làm, tồn sau). Báo cáo kho tháng: hao hụt theo lý do, hủy sau pha chế, kiểm kê, trường hợp thiếu. Báo cáo kho có biểu đồ cho Chủ quán ở `/bao-cao/kho/` (mục 14).
 
 ### 9.9. Lô hàng, hạn dùng và thứ tự lấy hàng — `/kho/lo/`, `/kho/lay-hang/`
 
@@ -287,9 +304,11 @@ Chi tiết ở `docs/QUAN_LY_KHO_THEO_LO.md`. Tóm tắt:
 | Kiểm kê tích lũy, tiêu hao vượt mức | Mục 9.5 |
 | Phiếu dự phòng hủy, trùng, ngoài dãy, quá hạn | Mục 8 |
 
-**Xem xét (chỉ Chủ quán, FR-17):** chọn Hợp lệ, Nhắc nhở hoặc Vi phạm, ghi biện pháp. Có tổn thất tiền thì phải gắn vào một vụ việc trước. Kết quả không sửa; muốn đổi phải lập bản đính chính có lý do. Ngoại lệ chưa xem xét quá 3 ngày được nhắc lại. Trang chi tiết hiện chuỗi thao tác của đơn và lịch sử của nhân viên.
+**Danh sách ngoại lệ:** đầu trang có ba ô số (chờ xem xét và số mục quá hạn xem xét, tổng giá trị liên quan, số mục đã xem xét 30 ngày qua), ba thẻ Chờ xem xét, Đã xem xét, Tất cả, và hàng nút lọc theo loại kèm số mục. Lọc theo nhân viên và ngày nằm trong "Lọc theo nhân viên hoặc ngày". Mỗi dòng ghi loại, ngoại lệ nói về ai hoặc cái gì (nguyên liệu, nhân viên, mã đơn), giá trị, và nhãn Quá hạn hoặc kết luận đã ghi. Nút **Xem lần lượt** mở mục mới nhất.
 
-**Vụ việc tổn thất** (`/kiem-soat/vu-viec/`, mã `VV-001`…): bằng chứng là ngoại lệ hoặc khoản chênh lệch tiền; mỗi bằng chứng thuộc tối đa một vụ việc; cùng một giao dịch chỉ tính một lần. Ghi xác minh, đính chính có lý do, thu hồi; hệ thống tính phần còn lại.
+**Xem xét (chỉ Chủ quán, FR-17):** trang chi tiết chia hai cột: bên trái là chứng cứ (nguyên liệu, nhân viên, ca, giá trị, các món của đơn, yêu cầu điều chỉnh liên quan, diễn biến của đơn theo tên nhân viên, ngoại lệ khác của cùng nhân viên); bên phải là ô kết luận Hợp lệ, Nhắc nhở hoặc Vi phạm kèm biện pháp. Nút **Lưu, xem mục kế tiếp** ghi kết quả rồi mở ngay ngoại lệ chờ kế tiếp, để xem hết danh sách mà không phải quay lại. Có tổn thất tiền thì gắn vào một vụ việc trước (ô "Có mất tiền?"); ô "Có tổn thất tiền" chỉ hiện khi ngoại lệ đã thuộc một vụ việc. Kết quả không sửa; muốn đổi phải lập bản đính chính có lý do. Ngoại lệ chưa xem xét quá 3 ngày được nhắc lại.
+
+**Vụ việc tổn thất** (`/kiem-soat/vu-viec/`, mã `VV-001`…): bằng chứng là ngoại lệ hoặc khoản chênh lệch tiền; mỗi bằng chứng thuộc tối đa một vụ việc; cùng một giao dịch chỉ tính một lần. Trang chi tiết có bốn ô số (đề xuất từ bằng chứng, đã xác minh, đã thu hồi, còn phải thu hồi), danh sách bằng chứng, lịch sử xác minh và thu hồi; bên phải là ô xác nhận hoặc đính chính giá trị và ô ghi thu hồi. Số tiền gõ được "82.000". Thu hồi chỉ ghi được sau khi đã xác nhận giá trị, phải lớn hơn 0 và không vượt phần còn lại.
 
 **Giá trị kiểm soát tạm tính của tháng** so với mục tiêu 200.000 đ (BRU-16) hiện ở bảng điều khiển và báo cáo kiểm soát doanh thu, cộng các nhóm không trùng nhau.
 
@@ -302,11 +321,16 @@ Mỗi lần tác vụ định kỳ chạy, hệ thống quét các điều kiệ
 - quá hạn → chuyển cấp lên Chủ quán hoặc nhắc lại;
 - đóng tay phải ghi kết quả; đối tượng đã đóng tay không tự mở lại (GD-22).
 
+**Giao diện:** đầu trang có số việc đang chờ và số việc quá hạn, việc Khẩn, thống kê 7 ngày (với Chủ quán). Việc được gom theo loại, loại có việc quá hạn đứng trước; mỗi loại hiện 5 việc đầu, phần còn lại mở bằng "Xem thêm". Mỗi việc có nút **Xử lý** (mở đúng màn hình xử lý), **Nhận** (báo mình đang làm) và **Đóng** (mở ô ghi kết quả). Nhóm ngoại lệ có nút mở thẳng danh sách ngoại lệ. Phần bật thông báo trên điện thoại nằm cuối trang.
+
 Loại cảnh báo: Nguyên liệu Đã hết (Khẩn), phiếu dự phòng chưa nhập bù hoặc chờ xác nhận, dữ liệu ca trễ hạn, chênh lệch tiền vượt ngưỡng, ngoại lệ chờ xem xét, giao chậm, chênh lệch kiểm kê chờ xác nhận, khoản phải trả đến hạn, cần kiểm kê lại (giao Pha chế), kiểm kê trọng yếu trễ, **Cần đặt hàng** (từ kế hoạch mua), **Lô quá hạn còn trong kho** (mỗi lô một cảnh báo, giao Pha chế, Quan trọng, hạn cuối ngày, quá hạn chuyển Chủ quán, tự đóng khi lô được hủy hoặc dùng hết). Cảnh báo Khẩn và Quan trọng gửi thông báo đẩy tới điện thoại (NFR-17). Trang có thống kê tuần (NFR-23).
 
 ## 12. Chấm công, tải công việc, lịch làm
 
 **Chấm công** (`/cham-cong/`): nhân viên vào ca chọn vai trò mình đảm nhận, ra ca khi về. Lượt thiếu giờ ra không được tính giờ công; tác vụ định kỳ nhắc Chủ quán một lần, Chủ quán bổ sung giờ ra kèm lý do (AC-77, AC-78). Một người được tính có mặt trong khung giờ khi làm ít nhất nửa khung (GD-20).
+
+- Nhân viên thấy một thẻ lớn: chưa vào ca thì thẻ ghi ca hôm nay trong lịch và chọn sẵn vị trí của ca đó; đang làm thì thẻ ghi đã làm bao lâu, ca kết thúc lúc mấy giờ và nút Ra ca. Lượt còn mở từ hôm trước hiện "Quên bấm Ra ca?" và nhắc báo Chủ quán bổ sung giờ ra; bổ sung xong mới vào ca mới được. Bên cạnh là các lượt gần đây kèm số giờ công, tổng giờ tuần này và tuần trước.
+- Chủ quán thấy bốn ô: đang làm, theo lịch hôm nay, đi trễ, chưa vào ca; khối Thiếu giờ ra ca với giờ ra điền sẵn theo giờ kết thúc ca trong lịch (không có lịch thì 8 tiếng sau giờ vào, không quá hiện tại) và lý do chọn nhanh; danh sách hôm nay đối chiếu từng người trong lịch với giờ vào thật: đúng giờ, trễ bao nhiêu phút, chưa vào ca, không chấm công, ngoài lịch. Một lượt chấm công thuộc một ca khi giờ vào nằm từ hai tiếng trước giờ bắt đầu tới trước giờ kết thúc ca. Mức tính đi trễ là tham số `late_minutes` (mặc định 5 phút, Chủ quán đổi ở Kiểm soát › Tham số).
 
 **Tải và thời gian chờ** (`/tai/`, Chủ quán): theo từng khung một giờ:
 
@@ -316,7 +340,7 @@ Loại cảnh báo: Nguyên liệu Đã hết (Khẩn), phiếu dự phòng chư
 - **Quá tải** khi thời gian chờ trung vị vượt 10 phút hoặc tồn quầy vượt 15 ly;
 - số người có mặt theo vai trò.
 
-Trang có ba biểu đồ: số ly theo khung giờ (cột đỏ là khung quá tải), thời gian chờ trung vị so với đường chuẩn, và người có mặt theo vai trò; nút chuyển ngày trước, ngày sau.
+Trang có ba biểu đồ: số ly theo khung giờ (cột đỏ là khung quá tải), thời gian chờ trung vị so với đường chuẩn, và người có mặt theo vai trò; nút chuyển ngày trước, ngày sau. Khung giờ chưa tới không hiện; khung không có đơn ghi "Không có đơn" thay vì "Đạt chuẩn". Dòng mô tả đầu trang không ghi cách tính tải.
 
 **Lịch làm tuần** (`/lich/`, FR-38, FR-39):
 
@@ -329,6 +353,22 @@ Trang có ba biểu đồ: số ly theo khung giờ (cột đỏ là khung quá 
   5. Khối "Số người cần từng giờ" cuối trang chỉ ghi kết quả (số ly dự kiến, số người cần từng giờ), không ghi cách tính. Chủ quán sửa số người cần được, khác gợi ý phải ghi lý do.
 - **Gợi ý xếp lịch** theo đăng ký, giữ các ô Chủ quán đã xếp tay; không xếp một người vào hai ca trùng giờ (AC-87); thiếu, dư tính riêng từng vị trí (AC-86); gợi ý người thay thế.
 - **Công bố** lịch; nhân viên xem ở `/lich/cua-toi/`. Có chép tuần trước sang tuần mới.
+
+Màn Lịch làm tuần (làm lại 27/10/2026):
+
+- Đầu trang: chuyển tuần, Thêm ca, Công bố (hoặc Công bố lại), nhãn Bản nháp, Đã công bố hay Có thay đổi chưa công bố.
+- Năm bước lập lịch: Tạo ca, Số người cần, Nhân viên đăng ký (số người đã đăng ký, hạn), Xếp người (còn thiếu bao nhiêu chỗ), Công bố. Bước đang làm có viền xanh; nút việc tiếp theo nằm ngay trong bước (Chép ca tuần trước, Điền theo gợi ý, Xếp theo đăng ký).
+- Thẻ "Theo ca": lưới ca mẫu × 7 ngày; mỗi ô là thẻ ca có vạch màu (đỏ thiếu, xanh đủ, cam dư), từng vị trí đã xếp trên số cần và tên người. Ô trống có nút + để thêm ca đúng ngày đó. Trên đầu thẻ là tổng đã xếp theo vị trí. Điện thoại và màn hẹp hiện danh sách theo ngày.
+- Bấm một ca mở hộp chi tiết: đặt số người cần bằng nút cộng trừ (hiện "Gợi ý N"; khác gợi ý thì ô lý do tự hiện và bắt buộc), tick "Áp dụng cho Ca … cả tuần" để đặt cùng lúc mọi ca cùng tên trong tuần; danh sách người theo vị trí: người đã xếp (Bỏ ra), người đã đăng ký chưa xếp (Xếp vào ca), chọn thêm người khác kèm số giờ đã xếp trong tuần; Xóa ca. Lưu xong hộp mở lại kèm thông báo.
+- Thẻ "Theo nhân viên": mỗi người một dòng, ca từng ngày, tổng giờ xếp, số ca đã đăng ký mà chưa xếp.
+- Thẻ "Người cần theo giờ": số ly dự kiến và số người mỗi vị trí cần từng giờ của từng ngày, giờ quán mở mà chưa có ca phủ.
+- Hộp Thêm ca: ca hay dùng bấm một lần, chọn ngày (cả tuần, thứ Hai tới thứ Sáu, cuối tuần), số người cần ban đầu (có thể để trống).
+- Hộp Công bố: liệt kê ca còn thiếu người và phải tick xác nhận.
+- Lỗi cũ "không cập nhật được số người cần": số khác gợi ý bắt buộc lý do nhưng ô lý do chỉ hiện khi số đang lưu đã khác gợi ý, nên lần sửa đầu luôn bị từ chối. Nay ô lý do hiện ngay khi sửa khác gợi ý, và lưu nhiều ca một lần là tất cả hoặc không ca nào.
+
+Đăng ký ca (`/lich/dang-ky/`): ô đếm ngược tới hạn (dưới 24 giờ thì đổi màu cam); chọn nhanh "Ca sáng cả tuần", "Ca chiều cả tuần", "Bỏ chọn hết" (chọn sẵn vị trí đang thiếu nhiều nhất); mỗi ngày một khối, mỗi ca một dòng với nút chọn Không / từng vị trí mình đảm nhận và dòng "Còn thiếu …" của các vị trí đó; báo ngay khi chọn hai ca trùng giờ trong ngày (Chủ quán chỉ xếp được một); thanh dưới ghi tổng số ca, số giờ đang chọn và "Có thay đổi chưa gửi". Sau hạn trang chỉ liệt kê ca đã đăng ký và kết quả xếp (Được xếp, Không được xếp, Chờ công bố).
+
+Lịch của tôi (`/lich/cua-toi/`): thẻ ca sắp tới (hoặc đang làm) với thời gian còn lại; nhắc đăng ký tuần sau khi chưa đăng ký và còn hạn; ca theo từng tuần kèm số ca và số giờ.
 
 ## 13. Dự báo nhu cầu và kế hoạch mua nguyên liệu
 
@@ -460,3 +500,228 @@ Cách tính tốc độ dùng nguyên liệu cũng được sửa: nguyên liệ
 | Giao diện | Theo Apple Business Manager: nền trắng; thanh trên có các phân hệ, phân hệ đang mở là viên xám; thanh trái chỉ chữ, tiêu đề là tên phân hệ; thông báo, dải báo và cờ trạng thái nền trắng hoặc xám với chấm màu, bỏ hết khối nền màu nhạt. Trang chủ là lưới thẻ chức năng có ô biểu tượng màu theo phân hệ, mô tả một dòng, lọc theo phân hệ và tìm kiếm. Điện thoại giữ thanh dưới và thẻ gạch chân. Quy tắc ở `DESIGN.md`. |
 | Ẩn cách tính | Kế hoạch mua, dự báo, lịch tuần, báo cáo chỉ hiện kết quả (mục 13). Tham số mô hình chỉ sửa trong `apps/core/params.py` (mục 15). |
 | Dữ liệu mô phỏng | `manage.py tao_du_lieu_mo_phong [--ngay 56] [--hat-giong 2026]` trên cơ sở dữ liệu trống (đã `migrate`): tạo dữ liệu mẫu rồi cho quán chạy từng ngày tới hôm nay bằng chính các hàm nghiệp vụ (gửi đơn, pha, phục vụ, thu tiền, đổi món, chuyển bàn, hủy sau pha, hủy hóa đơn và hoàn tiền, nhập hàng theo lần đặt có giao thiếu và giao bù, trả nhà cung cấp, kiểm kê, hao hụt, hủy lô quá hạn, quỹ ca, báo cáo cuối ca có ngày thiếu tiền, phiếu dự phòng). 10 món, 9 nguyên liệu, 4 nhà cung cấp, 7 nhân viên chia ca sáng và chiều; khách tăng nhẹ theo thời gian, cuối tuần đông hơn, có ngày mưa vắng. Tác vụ định kỳ chạy mỗi đêm của 2 tuần cuối (để tệp dữ liệu dưới 25 MB) nên có dự báo, kế hoạch mua, cảnh báo, ngoại lệ. Hôm nay dừng ở giờ chạy lệnh: còn đơn đang pha, chờ thu tiền, một yêu cầu đổi món chờ Chủ quán duyệt, một lần kiểm kê Sữa đặc lệch 12% chờ xác nhận, lịch tuần này đã công bố và tuần sau đã có đăng ký. Kết quả không phụ thuộc giờ chạy ngoài phần hôm nay; cùng hạt giống cho cùng dữ liệu. |
+| Tổng quan ca | Trang đầu nhóm Bán hàng cho ca đang mở: bàn có khách, chờ duyệt, chờ pha, chờ mang ra, chờ thu tiền, người trong ca, món sắp hết; tự làm mới 15 giây (mục 4.0). Lệnh `tao_ban_co_khach` tạo bàn đang có khách để thử. |
+
+## 22. Làm lại Ca và nhân sự (27/10/2026)
+
+| Màn | Đã làm |
+|---|---|
+| Lịch làm tuần | Lưới 7 ngày, bấm ca mở hộp đặt số người cần và xếp người, năm bước lập lịch, xem theo nhân viên, người cần theo giờ; sửa lỗi không lưu được số người cần (mục 12). |
+| Đăng ký ca | Đếm ngược hạn, chọn nhanh cả tuần, tổng ca và giờ, báo hai ca trùng giờ, thanh gửi không che nội dung (mục 12). |
+| Lịch của tôi | Thẻ ca sắp tới, giờ mỗi tuần, nhắc đăng ký tuần sau (mục 12). |
+| Chấm công | Thẻ vào ra ca chọn sẵn vị trí theo lịch; Chủ quán xem ai đi trễ, chưa vào ca, ngoài lịch; bổ sung giờ ra điền sẵn; tham số mới `late_minutes` (mục 12). |
+| Tình trạng ca, Ca của tôi | Chênh lệch chờ quyết định mỗi khoản một dòng, các ca gần đây 10 dòng; quỹ ca chia Tiền mặt và Chuyển khoản (mục 7.5). |
+| Tải và thời gian chờ | Bỏ cách tính ở dòng mô tả, không hiện giờ chưa tới (mục 12). |
+
+## 23. Rà soát nhóm Kho (27/10/2026)
+
+| Việc | Trước | Sau |
+|---|---|---|
+| Gõ số lượng có dấu chấm | Màn hiển thị "1.866 gram" nhưng gõ lại "1.866" bị hiểu là 1,866 gram (kiểm kê, phiếu nhập, hao hụt, đặt hàng) | Dấu chấm theo sau đúng ba chữ số là phân cách hàng nghìn; dấu phẩy là phần lẻ ("1,5") |
+| Gõ đơn giá, số tiền có dấu chấm | "25.000" bị hiểu là 25 đ ở phiếu nhập; "2.982.000" bị báo không hợp lệ ở Phải trả | Hiểu đúng; đơn giá lẻ theo gram ("31,5") làm tròn về đồng |
+| Trả khoản phải trả bằng tiền mặt quỹ ca | Không ghi khoản chi vào quỹ ca, cuối ca két lệch | Ghi khoản chi Nguyên vật liệu vào ca đang mở |
+| Nháp ở Kiểm kê | Mọi nguyên liệu dùng chung một nháp: gõ dở một dòng rồi tải lại trang thì mọi dòng bị điền cùng nguyên liệu | Mỗi nguyên liệu một nháp |
+| Đổi ngày giao | Đổi được cả lần đặt đã giao đủ, và đổi về ngày đã qua | Chặn cả hai |
+| Số quá lớn | "1e999" hay số quá dài có thể làm lỗi máy chủ trên PostgreSQL | Báo "quá lớn"; lớp bắt lỗi chung nhận cả lỗi tràn số của CSDL |
+| Giao diện | Kiểm kê, Đặt hàng (hiện cả trăm lần đặt cũ), Phải trả, Phiếu nhập, Hao hụt, Sổ kho trên điện thoại | Làm lại theo mục 9.4 đến 9.8 |
+
+
+## 24. Rà soát Thu ngân, Dự báo và các dòng mô tả (27/10/2026)
+
+| Việc | Trước | Sau |
+|---|---|---|
+| Thu ngân, yêu cầu quá hạn mọi cấp | Chỉ báo "quá hạn mọi cấp", không nói ai được thu | Nói rõ người được thu theo món khách thực nhận (người được giao thu ở ca, nếu không có thì Chủ quán); Chủ quán thấy nút "Mở Duyệt" |
+| Thu ngân, giao diện | Mã đơn dẫn tới trang chi tiết mà thu ngân không mở được; ô "đã thấy tiền chuyển khoản" luôn hiện | Mã đơn chỉ là liên kết với Chủ quán; ô xác nhận chỉ hiện khi chọn Chuyển khoản; đầu trang ghi số bàn chờ thu và tổng tiền |
+| Nhãn việc cần làm ở Kế hoạch mua | "Không cần mua" nằm trong nhóm "Đặt trong 2 ngày", đọc như mâu thuẫn | Đổi thành "Chưa cần mua" (nhãn trong CSDL đổi bằng migration `forecast 0006`) |
+| Lưu ý của dự báo | Viết bằng thuật ngữ mô hình ("tiên nghiệm", "nhiễu quan sát" kèm số) | Viết lời thường; lưu ý "khoảng nhận định rất hẹp" chỉ hiện khi chưa đủ số bán |
+| Báo cáo nguyên vật liệu | Liên kết sang trang đặt hàng cũ có số khác Kế hoạch mua | Dẫn sang Kế hoạch mua |
+| Dòng mô tả trang | Một số trang (Đơn đang mở, Duyệt, Cảnh báo, Tham số, Dự báo, Kế hoạch mua) giấu mô tả trong nút "Giải thích" | Mô tả ngắn hiện ngay dưới tiêu đề |
+
+## 25. Rà soát nhóm Kiểm soát (27/10/2026)
+
+| Việc | Trước | Sau |
+|---|---|---|
+| Chữ người dùng đọc có mã yêu cầu nội bộ | Ngoại lệ, cảnh báo, hướng dẫn trong form ghi "(BRU-12)", "(BRU-17)", "(BRU-25)", "(AC-45)"; thông báo lỗi ghi "(BRU-24, NFR-22)" | Bỏ mã ở nơi tạo; dữ liệu đã lưu trước đó được lọc khi hiển thị (bộ lọc `loi_thuong`) |
+| Số và tháng trong ngoại lệ | "(8.33%)", "12.00%", "tháng 2026-10", số lượng không có dấu chấm ngăn nghìn | "8,33%", "12%", "tháng 10/2026", "1.094 gram" |
+| Ngoại lệ thanh toán theo món thực nhận | Chi tiết in nguyên cấu trúc dữ liệu `{'table': ..., 'total': ...}` | "Tiền đơn 37.000 đ, thu theo món thực nhận 25.000 đ." |
+| Danh sách ngoại lệ | Dòng tiêu hao vượt mức không ghi nguyên liệu nào; nhãn "Quá hạn xem xét" dài lặp ở mọi dòng | Ghi nguyên liệu, nhân viên, mã đơn; lọc theo loại kèm số mục; xem lần lượt (mục 10) |
+| Chi tiết ngoại lệ | Ô "Quy tắc kích hoạt" cắt chữ, tràn ngang trên điện thoại; chuỗi thao tác ghi tên đăng nhập | Quy tắc là dòng mô tả dưới tiêu đề; diễn biến ghi tên nhân viên |
+| Cảnh báo | Hơn 30 thẻ liền nhau, mỗi thẻ ba nút và một ô nhập | Gom theo loại, nút Đóng gọn lại (mục 11) |
+| Thu hồi tổn thất | Ghi được số âm, vượt giá trị đã xác minh, hoặc trước khi xác minh; gõ "82.000" báo lỗi | Chặn cả ba; đọc số kiểu Việt Nam |
+| Đọc số | Hai bản riêng ở Kho và các màn khác | Dùng chung `apps/core/numbers.py` |
+
+Migration `catalog 0004` và `inventory 0012` chỉ đổi chữ hướng dẫn của trường, không đổi dữ liệu.
+
+
+## 26. Rà soát Báo cáo, Dữ liệu nền, Tham số và Nhật ký (27/10/2026)
+
+| Việc | Trước | Sau |
+|---|---|---|
+| Ô số trong Dữ liệu nền | Ô kiểu số của trình duyệt: gõ "25.000" vào giá món, giá tùy chọn hay lương giờ thì lưu thành 25 đ; gõ "1.000" vào quy cách hay tồn an toàn thì báo lỗi; giá hiện "29000" | Ô chữ đọc số kiểu Việt Nam ("25.000", "25,000", "1.000,5"), hiện lại có dấu chấm ngăn nghìn; gõ sai thì báo "Nhập số nguyên, ví dụ 25.000" (`numbers.SoNguyenField`, `numbers.SoThapPhanField`, dùng cho mọi form Dữ liệu nền, form Nhân viên và ô Tồn đầu kỳ) |
+| Bảng Dữ liệu nền | Số lẻ hiện "1000,00"; ô chọn để trống hiện "---------" | "1.000", "1.500,5"; ô chọn để trống ghi "Chưa chọn" |
+| Quy tắc xuất lô | Ghi tắt FEFO, FIFO, LIFO trên bảng kho, phiếu lấy hàng, form nguyên liệu | "Theo hạn", "Nhập trước", "Nhập sau"; tên đầy đủ "Hết hạn trước, xuất trước"…; ô để trống ghi "Tự chọn theo hạn dùng". Giá trị lưu trong CSDL giữ nguyên (`fefo`, `fifo`, `lifo`); migration `inventory 0013` chỉ đổi nhãn |
+| Dữ liệu nền trên điện thoại | Bảng 8 cột co lại, chữ xuống dòng từng từ, phải kéo ngang | Mỗi dòng thành một thẻ "nhãn: giá trị", chạm cả thẻ để mở; nút Mới cạnh tiêu đề |
+| Tham số | Gõ "2.5" bị hiểu thành 25, "50,000" báo lỗi; giá trị hiện "50000"; chữ đơn vị "% hạn dùng" đè lên "hiệu lực từ"; trên điện thoại mỗi tham số chiếm năm hàng | Chỉ nhận số nguyên ("50.000", "50,000"), số lẻ báo lỗi thay vì đoán; hiện "50.000"; đơn vị không đè; điện thoại: giá trị, đơn vị và nút Lưu cùng một hàng |
+| Nhật ký thao tác | Cột Thay đổi in nguyên cấu trúc dữ liệu (`{'so_tien': 82000, 'cung_giao_dich': ...}`, `{'pack_size': '1000.00'}`); bộ lọc loại dữ liệu ghi `inventory.Ingredient` | Mỗi thay đổi một dòng "Số tiền: 82.000", "Quy cách đóng gói: ~~50~~ → 1.000"; mã liên kết đổi thành tên; lựa chọn đổi thành nhãn; loại dữ liệu ghi bằng chữ ("Nguyên vật liệu") (`apps/audit/display.py`). Dữ liệu nhật ký không đổi |
+| Báo cáo | Mã chỉ tiêu "BO-01", "BO-02" trên trang; chú giải biểu đồ hiện "theo=ngay"; điểm hôm nay chưa hết ngày kéo đường doanh thu xuống 0 | Ghi "Mục tiêu tháng"; chú giải đúng; điểm hôm nay ghi "(hôm nay, tính đến giờ)" và bỏ khi chưa có doanh thu; trang Kiểm soát doanh thu và Nguyên vật liệu có chọn kỳ nhanh |
+
+Nhớ chạy `python manage.py migrate` sau khi cập nhật (migration `inventory 0013`).
+
+## 27. Rà soát Kế hoạch mua, Dự báo, Hao hụt và kiểm kê, Quầy (27/10/2026)
+
+| Việc | Trước | Sau |
+|---|---|---|
+| Số lượng đặt ở Kế hoạch mua và Đặt theo dự báo | Gõ "1.000" (như màn hình hiển thị) thì lưu thành 1; ô hiện "5900" không có dấu chấm | Đọc số kiểu Việt Nam qua `numbers.qty`; ô hiện "5.900"; thông báo "Đã tạo đơn Nháp 5.900 ml" |
+| Dự báo từng món | Cột ngày ghi "2026-10-26"; bảng 60 ngày dài trước, tổng nhiều ngày ở cuối | Ghi "T2 26/10"; tổng 1, 3, 7 ngày lên đầu; bảng từng ngày hiện 14 ngày, phần còn lại gập trong "Xem thêm" |
+| Hao hụt và kiểm kê tháng (trước tên "Báo cáo nguyên vật liệu") | Hai bảng thô hơn 200 dòng; bảng kiểm kê chỉ lấy 50 lần đầu mà không báo; đơn vị "g" lẫn "gram" | Ô tóm tắt (thiếu nguyên liệu so mục tiêu, số kỳ tiêu hao vượt mức, số lần kiểm kê chờ xác nhận); mỗi nguyên liệu một dòng, chi tiết từng kỳ, từng lần gập lại và không cắt; chuyển tháng trước, sau; trên điện thoại bảng thành thẻ |
+| Thời gian chờ | "546 phút · trễ" ở Quầy pha chế, Tổng quan ca, Cảnh báo | "9 giờ 6 phút · trễ" (bộ lọc `phut`) |
+| Thông báo dữ liệu cá nhân | "Phiên bản 2026-10-12" | "Phiên bản ngày 12/10/2026" |
+
+## 28. Rà soát Phiếu dự phòng, Quỹ ca và quay lại trang sau khi gửi (27/10/2026)
+
+| Việc | Trước | Sau |
+|---|---|---|
+| Tiền ở Quỹ ca (tiền mặt đếm được, chi, chuyển khoản) | "1 390 000 đ" hoặc "1.390.000 đ" báo lỗi; "2.5" thành 25 đồng | Đọc số kiểu Việt Nam qua `numbers.vnd`; số 0 hợp lệ, số âm báo "không được âm" |
+| Đơn giá ở Phiếu dự phòng | "25,000" báo lỗi tiếng Anh của Python | Đọc số kiểu Việt Nam; lỗi báo bằng câu "Đơn giá dòng … " |
+| Lỗi nhập ở Phiếu dự phòng, Kho, Lịch ca | Có chỗ in nguyên câu lỗi tiếng Anh ("invalid literal for int()…") | Câu lỗi tiếng Anh đổi thành "Dữ liệu nhập không hợp lệ; kiểm tra lại các ô số và ngày giờ." (`apps/core/errors.py`) |
+| Tùy chọn món ở Phiếu dự phòng | Danh sách ô đánh dấu dài, không nhóm, không ghi giá thêm | Mỗi nhóm một hàng, tùy chọn là nút bấm ghi giá thêm ("+5.000") |
+| Quay lại sau khi gửi (Hủy lô, Kho, Quỹ ca, Chấm công) | Ô `next` gửi lên được dùng nguyên: chữ lạ như "-5" gây trang lỗi máy chủ, địa chỉ trang ngoài thì đưa người dùng sang trang đó | Chỉ quay lại đường dẫn của chính trang web; khác đi thì về trang mặc định (`apps/core/links.py`) |
+
+## 29. Rà soát Tra cứu đơn, Quầy, Thu ngân, Tồn kho và Tải theo giờ (27/10/2026)
+
+| Việc | Trước | Sau |
+|---|---|---|
+| Tra cứu đơn | Chín ô lọc chiếm cả màn hình điện thoại; bảng 7 cột bị bóp, trạng thái cắt chữ; tổng tiền chỉ tính trang đang xem | Ô tìm và nút Tìm một hàng, các bộ lọc khác gập trong "Lọc thêm" (tự mở và ghi số điều kiện khi đang dùng); trên điện thoại mỗi đơn một thẻ, trạng thái có màu; dòng "3.779 đơn · tổng tiền …" tính trên mọi đơn khớp bộ lọc |
+| Quầy pha chế | Đơn có yêu cầu đổi món, hủy món hay chuyển bàn đang chờ duyệt vẫn hiện như đơn thường, quầy có thể pha món sắp bị đổi | Phiếu ghi "Đang chờ duyệt: Đổi 1 × Trà sữa L sang 1 × Cà phê đen L" |
+| Thu ngân | Câu báo quá hạn duyệt gọi người đang xem bằng tên ở ngôi thứ ba; danh sách một lý do vẫn có dấu chấm đầu dòng | "Người được ủy quyền thu tiền của ca (tên) thu tiền theo món khách thực nhận…"; một lý do thì không có dấu đầu dòng |
+| Tồn kho trên điện thoại | Bảng 8 cột phải kéo ngang | Mỗi nguyên liệu một thẻ: có thể dùng, đủ dùng mấy ngày, lô lấy trước, giá trị, tình trạng |
+| Kiểm kê | "Đếm 3.771, sổ 4.285 ml" | "Đếm được 3.771, trên sổ 4.285 ml" |
+| Quỹ ca | Sau hạn vẫn ghi "Hạn báo cáo cuối ca 00:00 27/10" như chưa tới hạn | "Đã quá hạn báo cáo cuối ca (00:00 27/10)"; trước hạn ghi "Cần xong trước hạn …" |
+| Tải và thời gian chờ | Ly còn chờ từ tối hôm trước tạo các khung 0–1 giờ, 1–2 giờ… toàn số 0; ngày chưa có đơn chỉ báo trống | Ngoài giờ mở cửa chỉ hiện khung có đơn thật; ngày trống có liên kết xem ngày trước |
+| Số đếm ở phân trang | "18708 dòng" | "18.708 dòng" |
+
+## 30. Rà soát tải tệp, chi tiết đơn, kết ca và dữ liệu mẫu (27/10/2026)
+
+| Việc | Trước | Sau |
+|---|---|---|
+| Ảnh hóa đơn nhập hàng, ảnh chứng từ khoản chi | Nhận mọi tệp, kể cả tệp HTML hay SVG; tệp được phục vụ lại cùng tên miền nên người mở "chứng từ" có thể chạy mã lạ trong phiên của mình | Chỉ nhận ảnh JPG, PNG, WEBP, HEIC hoặc PDF, xét cả đuôi tệp lẫn những byte đầu tệp, tối đa 10 MB (`apps/core/uploads.py`) |
+| Nhập lịch sử bán | Tệp lưu bảng mã khác in lỗi Python ("'utf-8' codec can't decode…"); ngày ghi "2026-08-01"; ô chọn tệp chỉ cho chọn CSV dù hệ thống đọc được Excel | Báo "Trong Excel chọn Lưu thành CSV UTF-8 rồi nhập lại, hoặc nhập thẳng tệp .xlsx"; ngày dd/mm/yyyy; chọn được cả .xlsx |
+| Câu báo gửi trùng biểu mẫu | "Mã nghiệp vụ này đã được dùng cho một yêu cầu khác" | "Biểu mẫu này đã được gửi trước đó với nội dung khác (có thể do bấm Quay lại). Tải lại trang rồi nhập lại." |
+| Chi tiết đơn | Nhật ký thiếu lúc gửi và lúc duyệt yêu cầu điều chỉnh; bảng món 8 cột bóp chữ trên điện thoại | Có đủ; mỗi món một thẻ, cột hủy chỉ hiện khi có hủy, trạng thái có màu |
+| Kết ca | Còn đơn chưa thu hay yêu cầu chờ duyệt vẫn hiện nút Kết ca, bấm mới báo lỗi | Nút mờ kèm câu nói cần làm gì: thu tiền ở Thu ngân, chờ Chủ quán duyệt, hoặc chuyển đơn sang ca sau |
+| Báo cáo điều chỉnh của ca | Bảng 7 cột bóp chữ trên điện thoại; không dẫn tới đơn | Mỗi yêu cầu một thẻ, bấm để mở đơn |
+| Nhật ký thao tác | Tỷ lệ hiện "8.33%", "0.00%" | "8,33%", "0%" |
+| Trang chủ của Phục vụ | Thẻ lọc "Trang chủ" trong Chức năng bấm vào không có gì | Ẩn khi không có chức năng nào; nhóm ghi là "Tổng quan" |
+| Lệnh `tao_du_lieu_nghiem_thu` | Dừng giữa chừng với lỗi "Số lượng đếm được phải lớn hơn 0" khi nhập bù phiếu dự phòng làm sổ kho âm | Chạy hết 14 ngày; lần kiểm kê đó ghi đếm được 0 kèm lý do |
+
+## 31. Rà soát bảng trên điện thoại, ngày lạ trên địa chỉ trang và tốc độ (27/10/2026)
+
+| Việc | Trước | Sau |
+|---|---|---|
+| Chuyển đơn sang ca khác | Chuyển được cả đơn đã thu tiền, đơn đã hủy, đơn của ca đã kết, và chuyển ngược sang ca bắt đầu sớm hơn | Chỉ chuyển đơn chưa thu tiền của ca đang mở sang ca bắt đầu sau ca đó |
+| Bảng trên điện thoại | Báo cáo nguyên liệu, kiểm soát doanh thu, kế hoạch mua, danh sách lô và chi tiết lô, ca gần đây, dự báo, ma trận thực đơn, nhật ký thao tác, báo cáo kho phải kéo ngang | Mỗi dòng một thẻ "nhãn: giá trị"; bảng còn lại có lề ô hẹp hơn để vừa màn hình |
+| Bảng kích cỡ, tùy chọn, định mức trong Quản trị | Ô nhập xếp ngang, phải kéo ngang | Mỗi dòng một thẻ, nhãn bên trái, ô nhập bên phải |
+| Ngoại lệ theo loại (Kiểm soát doanh thu) | Trên điện thoại có cột trống bên trái | Tên loại sát lề trái |
+| Ngày lạ trên địa chỉ trang | `?tu=9999-12-31` ở báo cáo, tra cứu đơn, sổ kho, lịch làm, tải theo giờ báo lỗi máy chủ | Ngày sai định dạng hoặc ngoài năm 2000–2099 bị bỏ qua, trang dùng ngày mặc định (`apps/core/dates.py`) |
+| Màn tạo đơn và số ly còn đáp ứng | Mỗi kích cỡ, mỗi tùy chọn đọc định mức riêng: 180 truy vấn mỗi lần mở, tăng theo số món | Đọc định mức hiện hành của mọi món một lần: 24 truy vấn, không đổi khi thêm món |
+| Lịch làm tuần | Mỗi ca, mỗi vị trí đọc lại người thay thế và ca trùng giờ: 299 truy vấn | Đọc một lần cho cả tuần: 21 truy vấn |
+| Báo cáo doanh thu, bảng điều khiển, xuất Excel doanh thu | Đọc lại toàn bộ dòng món của kỳ cho từng phần (xuất Excel đọc 14 lần) | Đọc một lần dùng chung; tổng kỳ trước tính trong cơ sở dữ liệu. Với 56 ngày dữ liệu mô phỏng: xuất Excel 4,7 giây còn 1,1 giây |
+
+## 32. Rà soát trợ năng và trang Tải (27/10/2026)
+
+| Việc | Trước | Sau |
+|---|---|---|
+| Phiếu dự phòng | Ô chọn ca có mã `i-shift` trùng mã biểu tượng Ca, biểu tượng Ca trên thanh điều hướng biến mất ở trang này | Đổi mã ô nhập; có kiểm thử chặn mã trùng biểu tượng |
+| Bảng kích cỡ, tùy chọn, định mức trong Quản trị | Ô nhập không có nhãn, trình đọc màn hình chỉ đọc "ô nhập" | Mỗi ô có nhãn theo tiêu đề cột (bộ lọc `nhan`) |
+| Trang Tải và thời gian chờ | Chữ thống kê "trung vị"; bảng 9 cột phải kéo ngang trên điện thoại | "Thời gian khách chờ món", câu quá tải nói bằng lời thường; mỗi khung giờ một thẻ |
+| Biểu đồ rộng trên điện thoại | Biểu đồ cả hàng (doanh thu theo ngày, số ly theo giờ) thu nhỏ còn chữ khoảng 5 px | Giữ bề rộng tối thiểu lớn hơn, chữ khoảng 9 px, vuốt ngang để xem hết |
+
+## 33. Rà soát cài mới: đi từ cơ sở dữ liệu trống tới một ca trọn vẹn (27/10/2026)
+
+Đi thử như một quán vừa cài: chỉ có tài khoản Chủ quán, khai báo bàn, món, công thức, nguyên liệu, tồn đầu kỳ, nhân viên, mở ca, gọi món, pha, mang ra, thu tiền, kết ca và báo cáo cuối ca.
+
+| Việc | Trước | Sau |
+|---|---|---|
+| Trang chủ khi chưa khai báo gì | Thẻ "Dữ liệu nền" đếm 0 mà không nhắc; tên thẻ khác tên mục "Quản trị" trên thanh điều hướng | Thẻ "Quản trị"; số 0 bàn, 0 món đang bán, 0 nhân viên, 0 nguyên liệu tô màu cảnh báo |
+| Màn gọi món chưa có bàn hoặc món | Nói chung chung "chưa có dữ liệu" | Nói rõ nơi khai báo: "Chủ quán khai báo bàn ở Quản trị, mục Bàn", "Chủ quán mở bán ở Quản trị, mục Món và giá" |
+| Tạo mới nhân viên, nguyên liệu, món | Lưu xong về danh sách, phải tìm lại để đặt mật khẩu, ghi tồn đầu kỳ hay thêm kích cỡ | Lưu xong mở luôn trang của bản ghi để làm tiếp bước đó |
+| Ghi tồn đầu kỳ | Chỉ có số lượng; lô luôn "chưa rõ hạn"; giá trị tồn bằng 0 cho tới lần nhập hàng đầu | Thêm hạn sử dụng trên bao bì và giá mua mỗi đơn vị (không bắt buộc); câu xác nhận ghi rõ số lượng và đơn vị |
+| Trang Tồn kho | Nguyên liệu chưa ghi tồn đầu kỳ hoặc đã hết sạch vẫn ghi "Ổn" | "Chưa ghi tồn đầu kỳ" kèm đường dẫn ghi ngay; "Hết hàng" khi đã dùng hết; cả hai tính vào "Dưới mức tồn an toàn" |
+| Thu tiền một đơn | "Đã thu … cho các đơn 2710-001" | "… cho đơn 2710-001" |
+| Kết ca còn vướng | Câu nhắc chung "thu tiền các bàn, chờ Chủ quán duyệt" cả khi vướng chỉ là chưa xác nhận tiền đầu ca | Mỗi mục vướng nói cách gỡ (ví dụ "ghi số tiền nhận bàn giao ở mục Ghi quỹ tiền mặt, két trống thì ghi 0"); câu thu tiền chỉ hiện khi còn đơn chưa thu |
+| Đối soát cuối ca, đính chính | Số tiền không có "đ"; viết tắt "CK" | Có đơn vị; ghi đủ "chuyển khoản" |
+| Kế hoạch mua một nguyên liệu | Bảng đơn đặt, các kỳ dự kiến và quyết định phải kéo ngang trên điện thoại | Mỗi dòng một thẻ |
+| Kho khi chưa khai báo | Phiếu nhập, đặt hàng, hao hụt, kiểm kê, báo nhanh hiện ô chọn trống, không biết phải làm gì | Câu "Chưa có nguyên liệu nào đang dùng" hoặc "Chưa có nhà cung cấp nào" kèm đường dẫn thêm (Chủ quán) |
+| Phiếu dự phòng khi chưa mở ca | Ô chọn ca trống, bấm Cấp dãy báo lỗi | Nói chưa có ca đang mở và chỉ chỗ mở ca |
+| Tình trạng ca, báo cáo nguyên liệu khi chưa có dữ liệu | Bảng chỉ có hàng tiêu đề | Câu "Chưa có ca nào", "Chưa có nguyên liệu nào đang dùng" |
+| Lịch của tôi | Nhắc "Bạn chưa đăng ký ca tuần sau" cả khi Chủ quán chưa tạo ca nào cho tuần sau | Chỉ nhắc khi tuần sau đã có ca để đăng ký |
+| Người làm nhiều vị trí | Lời chào và trình đơn tài khoản chỉ ghi vị trí chính; vào ca chọn sẵn vị trí đầu danh sách | Ghi đủ, ví dụ "Thu ngân, Phục vụ"; vào ca chọn sẵn vị trí của ca trong lịch, không có thì vị trí chính |
+| Ảnh đại diện chữ cái | Lấy chữ đầu của họ ("Nguyễn Văn An" thành N) | Lấy chữ đầu của tên gọi (A), giống góc trên màn hình |
+| Tổng quan ca khi chưa mở ca | Câu "Chưa có ca nào đang mở" lặp hai lần | Một lần, tiêu đề ghi ngày |
+| Việc chờ xử lý trên trang chủ (điện thoại) | Bảy ô số 0 chiếm nửa màn hình | Ô có việc lên trước; ô số 0 ẩn trên điện thoại, không có việc nào thì ghi "Không có việc nào đang chờ" |
+| Chênh lệch tiền nhỏ khi đối soát | Chỉ hiện "-2.000 đ", không nói có cần làm gì | "Trong mức cho phép nên không phải giải trình; vẫn được cộng vào thiếu tiền tích lũy của tháng" |
+| Ô đính chính báo cáo cuối ca | Số điền sẵn "48000" | "48.000" như các ô tiền khác |
+| Ca của tôi khi chưa có ca | Bảo Chủ quán "chỉ định người duyệt, người duyệt dự phòng" (đã bỏ từ 12/10) và dẫn tới danh sách ca | Nút "Mở ca mới" mở thẳng biểu mẫu, tên ca và giờ điền sẵn theo ca gần nhất |
+| Phiếu pha chế in ra | Đầu phiếu đếm số dòng ("2 món" dù một dòng 3 ly); in lại sau khi hủy bớt ly vẫn ghi số ly cũ | Đếm số ly; mỗi dòng ghi số ly còn phải pha |
+| Hoàn tiền đã duyệt | Chỉ hiện ở Ca của tôi, thu ngân ở màn Thu ngân không thấy; chưa mở ca vẫn bấm được "Đã hoàn tiền" rồi mới báo lỗi | Hiện cả ở Thu ngân và trong Việc chờ xử lý trên trang chủ; chưa có ca đang mở thì nút mờ kèm câu giải thích |
+| Tên yêu cầu hủy hóa đơn | "… 50.000 đồng" | "… 50.000 đ" như mọi chỗ khác |
+| Cảnh báo ngoại lệ (hủy hóa đơn đã thanh toán, điều chỉnh bị từ chối…) | Chỉ ghi tên loại, không biết đơn nào; ngoại lệ gộp nhiều lần ghi lặp cả đoạn | Ghi mã đơn và nội dung lần mới nhất, ví dụ "Đơn 2710-001 · Hủy hóa đơn đã thanh toán 50.000 đ · duyệt bởi Lâm"; cảnh báo đang mở được cập nhật theo |
+| Số lượng trong câu báo kho | "Tổng thiếu 1311 ml", "cần 2000 gram" | "1.311 ml", "2.000 gram" |
+| Báo cáo kho khi chưa có dữ liệu | Vẽ đường giá trị tồn nằm ở 0 với trục 0–4; nút "Bảng số liệu" mở ra toàn số 0 | Câu "Chưa có dữ liệu trong kỳ"; bảng số liệu chỉ hiện khi có biểu đồ |
+| Lịch làm tuần trống | "Tuần này chưa có ca" khi đang xem tuần sau | Ghi đúng tuần đang xem, ví dụ "Tuần 02/11 – 08/11 chưa có ca" |
+| Trang lỗi khi chạy thật (`DJANGO_DEBUG=false`) | Trang 404 và 500 mặc định của Django bằng tiếng Anh | Trang tiếng Việt: "Không tìm thấy trang này", "Có lỗi xảy ra" kèm cách làm tiếp |
+| Đổi mật khẩu | Nhân viên không tự đổi được, phải nhờ Chủ quán đặt lại | Mục "Đổi mật khẩu" trong trình đơn tài khoản: nhập mật khẩu đang dùng và mật khẩu mới, vẫn giữ đăng nhập trên máy đang dùng, các máy khác phải đăng nhập lại; có ghi nhật ký |
+| Mật khẩu quá ngắn | Câu báo tiếng Anh "This password is too short…" (bản dịch của Django thiếu câu này) | "Mật khẩu quá ngắn, cần ít nhất 8 ký tự." ở cả trang đổi mật khẩu và trang Chủ quán đặt lại |
+| Số trong chú thích biểu đồ và nhãn đọc màn hình | "tải 2.0", "khoảng 10%–90%: 27160–33950", "đang xử lý 20000 đồng" | "tải 2", "mức thấp 27.160, mức cao 33.950", "20.000 đồng" |
+| Số lượng lớn ở trang lô hàng, tồn kho, dự báo, lịch tuần | "Có thể bỏ 1946 ml" | "Có thể bỏ 1.946 ml" |
+| Nhập lịch sử bán không có dòng nào khớp | Vẫn tạo một lần nhập rỗng, báo "Đã nhập 0 ly trong 0 ngày ( đến )" | Báo "Không nhập được tệp: Không có dòng nào nhập được (…)" kèm lý do, không tạo lần nhập; nhập được một phần thì kể số dòng bị bỏ qua (ngày hỏng, ngày từ hôm nay trở đi); bảng các lần nhập mở ra xem được tên món không khớp |
+| Trả nhà cung cấp bằng tiền mặt quỹ ca khi chưa mở ca | Chọn được, bấm rồi mới báo lỗi | Lựa chọn bị làm mờ, ghi "(chưa mở ca)" |
+| Ghi chú Điều chỉnh theo mùa | Nhắc tới "mô hình" và cách trừ phần đã học | Chỉ ghi khi nào dùng và phải có căn cứ |
+| Dấu phẩy trong tên khi ghi số tiền | Câu ngoại lệ "Đổi … sang Trà đào M (Ít đá. Ít đường)": mọi dấu phẩy trong câu bị đổi thành dấu chấm cùng với số tiền | Chỉ số tiền được định dạng, chữ giữ nguyên "(Ít đá, Ít đường)"; sửa ở câu ngoại lệ, khoản nộp chờ xác nhận, nhãn món ở màn duyệt, chú thích biểu đồ |
+| Hạn sử dụng gõ nhầm năm | Nhập "2062" thay vì "2026" vẫn lưu, lô coi như không bao giờ hết hạn | Báo "Hạn sử dụng (27/10/2062) quá xa so với hôm nay; kiểm tra lại năm." ở phiếu nhập, tồn đầu kỳ và sửa lô (chấp nhận trong khoảng 2 năm trước tới 5 năm sau) |
+| Ngày giao dự kiến khi đặt hàng | Để trống báo lỗi chung; gõ nhầm năm (2062) vẫn lưu, lần đặt không bao giờ bị coi là giao chậm | "Chọn ngày giao dự kiến.", "Ngày giao không được trước hôm nay.", hơn một năm thì "kiểm tra lại năm"; áp dụng ở màn Đặt hàng, đổi ngày giao, chấp nhận kế hoạch mua và Đã báo nhà cung cấp |
+| Hạn trả sau ở phiếu nhập | Gõ chữ hay số rất lớn thì lỗi chung hoặc hạn trả tới năm 2300 | "Hạn trả sau là số ngày, từ 0 tới 365." |
+| Ca tiền dài bất thường | Gõ nhầm tháng kết thúc (27/11 thay vì 27/10) vẫn lưu ca dài 31 ngày | "Một ca dài quá 24 giờ; kiểm tra lại ngày kết thúc." |
+| Bổ sung giờ ra chọn nhầm ngày | Giờ ra rơi vào ngày hôm sau vẫn lưu, lượt làm 29 giờ được tính lương | Lượt làm dài hơn 18 giờ thì báo "kiểm tra lại ngày giờ ra" kèm giờ vào ca |
+| Đơn giá ở phiếu nhập | Gõ giá theo kg hay theo hộp (65.000 thay vì 65 đ/gram) vẫn lưu, giá vốn và giá trị tồn sai gấp nghìn lần mà không ai biết | Dưới mỗi dòng hiện "Lần nhập trước 65 đ/gram"; lệch quá 3 lần thì chuyển màu cảnh báo "kiểm tra đơn vị tính"; lưu xong vẫn báo lại dòng có giá lệch |
+| Hết phiên đăng nhập khi đang soạn đơn (để máy 15 phút) | Bấm gửi thì báo "Chưa chắc đơn đã tới máy chủ, bấm gửi lại", gửi lại mãi vẫn không được; đăng nhập lại thì rơi vào trang trắng | Đầu trang hiện "Phiên đăng nhập đã hết hạn. Nội dung đang soạn trên máy này vẫn còn. Đăng nhập lại"; đăng nhập xong quay về đúng màn đang làm, phiếu đang soạn vẫn còn |
+| Mở đường dẫn chỉ dùng để gửi (ví dụ sau khi đăng nhập lại) | Trang trắng | Quay về màn tương ứng (Tạo đơn, Quầy pha chế, Thu ngân…) kèm lời nhắc thao tác trước chưa được lưu |
+| Biểu mẫu gửi với mã bảo mật cũ (trang mở lâu, vừa đăng nhập lại ở thẻ khác) | Trang lỗi tiếng Anh "CSRF verification failed" | Trang "Trang đã cũ" bằng tiếng Việt, nút quay lại; màn dùng mã trang (tạo đơn) nhận câu báo tương tự |
+| Màn Duyệt khi trống | "Yêu cầu do chính bạn tạo không hiện ở đây; nó được chuyển cho người duyệt khác" (còn từ thời có Quản lý ca; nay chỉ Chủ quán duyệt) | Ghi yêu cầu của nhân viên sẽ hiện ở đây và trên thanh báo đầu trang |
+| Yêu cầu điều chỉnh quá thời hạn duyệt | Thông báo "Chuyển cấp duyệt… giờ chờ Quá hạn mọi cấp"; màn thu ngân, tổng quan ghi "quá hạn mọi cấp" | "Quá hạn duyệt: …, thu ngân được thu tiền theo món khách thực nhận"; các màn ghi "quá hạn duyệt"; tham số đổi tên "Thời hạn duyệt yêu cầu điều chỉnh" |
+| Báo cáo doanh thu theo ngày hoặc theo ca qua hai tháng | Dòng xếp theo chữ nên 01/10 đứng trước 25/09 (cả trong tệp Excel) | Xếp theo thời gian thật |
+| Tổng số ly ở báo cáo doanh thu | Dòng Tổng để trống cột Số ly; số đơn, số ly trên 999 không có dấu chấm ("1442") | Có tổng số ly ở trang và tệp Excel; "1.442" |
+| Đăng ký ca khi Chủ quán vừa xóa một ca | Nhân viên bấm Gửi đăng ký thì gặp trang lỗi máy chủ, các ca khác cũng không được lưu | Các ca còn lại được lưu; báo "1 ca vừa bị Chủ quán xóa nên lựa chọn ở ca đó không được lưu" |
+| Thêm ca trong Lịch làm mà thiếu giờ | Câu báo chung "Dữ liệu không hợp lệ" hoặc trang lỗi | "Nhập giờ bắt đầu và giờ kết thúc của ca, ví dụ 06:30." |
+| Bấm Ra ca trên trang để mở từ hôm trước | Ghi giờ ra là lúc bấm, lượt làm hơn 20 giờ được tính công | Quá 18 giờ thì không ra ca được, báo nhờ Chủ quán bổ sung giờ ra đúng; vào ca khi còn lượt hôm trước chưa ra thì ghi rõ ngày của lượt đó |
+| Ô giờ ra ở mục bổ sung giờ ra | Chỉ chặn giờ trước giờ vào | Thêm giới hạn trên: không quá 18 giờ sau giờ vào và không quá hiện tại; giờ gợi ý cũng nằm trong khoảng này |
+| Thu tiền khi bàn vừa có thêm đơn | Thu ngân thấy "Thu 150.000 đ", trong lúc đó bàn có thêm đơn đã phục vụ; bấm Thu thì hệ thống ghi cả đơn mới (ví dụ 195.000 đ) trong khi khách chỉ trả 150.000 đ, quỹ ca thiếu | Không thu; báo "Bàn 3 vừa thay đổi: cần thu 195.000 đ, không phải 150.000 đ như trên màn lúc trước", màn Thu ngân hiện số mới để thu lại |
+| Hai lần kiểm kê cùng nguyên liệu cùng chờ xác nhận (đếm lại vì nghi đếm sai) | Chủ quán xác nhận cả hai thì tồn bị trừ hai lần (sữa 4.000, đếm 3.600 rồi 3.500: tồn còn 3.100 thay vì 3.500); lần đếm sau đã điều chỉnh rồi vẫn xác nhận được lần cũ | Lần đếm cũ ghi "Đã đếm lại lúc …: lần này đã cũ, chọn Không xác nhận" và chỉ còn nút Không xác nhận; cố xác nhận cũng bị chặn |
+| Nhân viên nghỉ việc hoặc bỏ bớt vai trò khi đã được xếp ca tuần sau | Tài khoản bị khóa nhưng tên vẫn nằm trong lịch, ca được tính là đủ người; lịch đã công bố vẫn ghi người đó | Các lượt từ hôm nay ở vị trí người đó không còn đảm nhận được bỏ ra (ghi lý do "Nghỉ việc" hoặc "Không còn đảm nhận vị trí này"), đăng ký tương ứng bị hủy; trang báo "Đã bỏ … ra khỏi N lượt ca từ hôm nay. Xem Lịch làm để xếp người thay", lịch hiện chỗ thiếu |
+| Người được ủy quyền thu tiền theo món thực nhận đã nghỉ việc | Ca vẫn ghi người đó; yêu cầu quá hạn duyệt thì không ai thu được (người đó không đăng nhập được, Chủ quán bị từ chối vì ca đã có người ủy quyền) | Coi như ca chưa có người ủy quyền: Chủ quán thu thay, câu báo ở Thu ngân ghi "Chủ quán"; danh sách Ca ghi "(đã nghỉ việc, Chủ quán làm thay)" |
+| Khoản nộp giữa ca ghi nhầm người nhận hoặc số tiền | Không có cách bỏ: người nhận đúng không xác nhận được, người bị chọn nhầm không nhận tiền nên không bấm; ca không bao giờ kết được | Người nộp hoặc Chủ quán mở "Ghi nhầm? Bỏ khoản này" ở mục Bút toán của ca, ghi lý do; người nhận có nút "Không nhận được". Chỉ bỏ được khoản chưa xác nhận khi ca còn mở; nội dung khoản giữ trong nhật ký |
+| Chọn người nhận tiền nộp giữa ca | Danh sách có cả pha chế, phục vụ; họ không mở được màn Ca của tôi nên không bao giờ xác nhận được, ca bị kẹt. Người nhận (kể cả Chủ quán) không được báo ở trang chủ | Chỉ liệt kê Chủ quán và thu ngân, chọn người khác bị từ chối; trang chủ của người nhận hiện ô "Tiền nộp chờ tôi xác nhận" khi có khoản đang chờ |
+| Chọn người được ủy quyền thu tiền theo món thực nhận cho ca | Danh sách có cả pha chế, phục vụ; chọn họ thì không ai thu được bàn có yêu cầu quá hạn duyệt (họ không mở được Thu ngân, Chủ quán bị từ chối) | Chỉ liệt kê Chủ quán và thu ngân; người đã chọn mà không còn vai trò thu tiền thì Chủ quán làm thay |
+| Thêm bàn, nhóm món, món, nguyên liệu, nhà cung cấp trùng tên hoặc số với mục đã có | Trang lỗi máy chủ (lỗi trùng của cơ sở dữ liệu), không biết ô nào sai | Báo ngay dưới ô: "Đã có số bàn "5"; đặt khác hoặc sửa mục đã có."; sửa chính mục đó mà giữ tên thì không bị coi là trùng |
+| Hai dòng kích cỡ (hoặc tùy chọn) trùng tên trong cùng món | Câu báo "Hãy sửa các dữ liệu trùng lặp cho name ." | "Có hai dòng trùng kích cỡ; mỗi dòng cần khác nhau." |
+| Ô số ở Dữ liệu nền gõ ngoài giới hạn | "Đảm bảo giá trị này lớn hơn hoặc bằng với 0 .", "Đảm bảo rằng không có nhiều hơn 2 số thập phân." | "Nhập số từ 0 trở lên.", "Chỉ ghi tối đa 2 chữ số sau dấu phẩy.", "Số quá lớn; kiểm tra lại số đã gõ." |
+| Mã đơn sau một năm chạy (mã chỉ có ngày và tháng, ví dụ 2710-001) | Sang năm sau cùng ngày, mỗi đơn mới hỏi cơ sở dữ liệu từng mã của năm trước (năm trước 300 đơn thì 300 lần hỏi cho mỗi đơn), tạo đơn chậm dần | Đọc các mã đã dùng một lần rồi chọn số kế tiếp còn trống; mã vẫn không trùng (đơn đầu ngày năm sau nối tiếp số của năm trước) |
+| Sau khi chép mã mới vào máy chạy (runserver) | Trình duyệt có thể vẫn dùng app.css, app.js cũ thêm nhiều giờ (máy chủ thử không ghi hạn lưu, trình duyệt tự đoán): nút mới không có kiểu, phải bấm Ctrl+F5 | Đường dẫn tệp giao diện kèm giờ sửa tệp (`?v=…`) nên bản mới được tải ngay; bản chạy thật vẫn dùng tên tệp có mã băm. Trang mất kết nối vẫn có đủ giao diện |
+| Chủ quán xếp thêm hoặc bỏ người khỏi ca sau khi đã công bố lịch tuần | Lịch của tôi đổi theo nhưng người đó không được báo; dễ đi làm theo lịch cũ | Người được xếp thêm hoặc bị bỏ ra nhận thông báo "Lịch làm tuần … thay đổi: Thêm ca 02/11 06:30–14:30 · Pha chế" hoặc "Bỏ ca …" (ca từ hôm nay trở đi) |
+| Quên kết ca hôm trước và chưa mở ca hôm nay | Đơn và tiền thu sáng hôm sau âm thầm vào ca hôm trước (ca còn mở được coi là ca đang giữ quỹ); Tổng quan ca ghi "Tính từ 06:00" như ca hôm nay | Ở Thu ngân, Tổng quan ca và Bảng điều khiển: "Ca ngày 26/10/2026 đã quá giờ kết thúc (22:00 26/10) mà chưa kết. Tiền thu lúc này vẫn vào quỹ của ca đó…", kèm đường dẫn kết ca và mở ca mới (Chủ quán); đầu trang ghi ngày của ca khi không phải hôm nay. Trả muộn ít phút sau giờ đóng cửa (dưới 2 giờ) thì không báo |
+| Bỏ chọn Đang dùng cho bàn còn đơn chưa thu | Bàn biến khỏi Tổng quan ca và danh sách chuyển bàn; đơn trên bàn đó bị lạc | Không lưu: "Bàn 5 còn 2 đơn chưa thu tiền; thu tiền hoặc chuyển đơn sang bàn khác rồi mới bỏ chọn Đang dùng." |
+| Bỏ chọn Đang dùng cho nguyên liệu còn trong định mức của món đang bán | Nguyên liệu biến khỏi Tồn kho, Kiểm kê, Kế hoạch mua nhưng mỗi ly bán ra vẫn trừ kho; không ai thấy để mua thêm | Không lưu: "Sữa đặc còn trong định mức của Bạc xỉu, Cà phê sữa. Áp dụng định mức mới không dùng nguyên liệu này, hoặc chuyển món sang Ngừng bán…" (tính cả định mức đã hẹn ngày áp dụng) |
+| Nhóm tùy chọn bắt buộc (ví dụ Mức đường) không còn tùy chọn nào đang dùng | Món vẫn hiện ở màn gọi món nhưng gửi đơn nào cũng bị từ chối "chưa chọn Mức đường" | Món không hiện ở màn gọi món; cột Điều kiện mở bán ghi "Thiếu: tùy chọn đang dùng cho nhóm bắt buộc Mức đường" |
+| Nhập bù phiếu dự phòng gõ nhầm ngày (ví dụ tháng 11 thay vì tháng 10) | Được nhận: giá, định mức lấy theo ngày sai, hạn nhập bù tính sai | Thời điểm bán hoặc giờ có mạng lại sau hiện tại bị từ chối: "Thời điểm bán 14:20 27/11/2026 chưa tới; kiểm tra lại ngày giờ ghi trên phiếu." |
+| Ghi khoản chi, nộp giữa ca, trả phiếu nhập hoặc trả nhà cung cấp bằng tiền két lớn hơn tiền đang có trong két (thường gõ thừa số 0) | Được nhận; số phải có trong két thành âm, đến lúc kết ca mới thấy chênh lệch lớn | Không lưu: "Két của Ca sáng theo sổ chỉ còn 525.000 đ, ít hơn khoản chi 5.000.000 đ. Kiểm tra lại số tiền đã gõ." Khoản nộp chưa xác nhận coi như đã ra khỏi két; ca chưa xác nhận tiền đầu ca thì câu báo nhắc xác nhận trước |
+| Ghi khoản nộp giữa ca cho Chủ quán hay thu ngân | Người nhận chỉ thấy khi mở trang chủ; ca không kết được tới khi họ xác nhận | Người nhận nhận thông báo trên điện thoại "Xác nhận nhận 1.000.000 đ tiền nộp", bấm vào mở thẳng mục xác nhận |
+| Nhân viên báo nhanh Đã hết một nguyên liệu | Chủ quán chỉ thấy khi đang mở ứng dụng | Chủ quán nhận thông báo "Đã hết Sữa đặc · Linh báo lúc 15:20" trên điện thoại; báo Sắp hết vẫn chỉ hiện ở trang Kho |
+| Tham số gõ ngoài khoảng hợp lý (giờ mở cửa 25, hạn đăng ký thứ 9, ngưỡng kiểm kê 500%, giờ mở cửa sau giờ đóng cửa) | Được lưu; trang Kế hoạch mua, Tình trạng ca và Đăng ký ca báo lỗi máy chủ từ lúc đó (giờ 24, 25 không đọc được) | Báo ngay: "Giờ mở cửa (…): nhập từ 0 đến 23 giờ.", "… nhập từ 2 (thứ Hai) đến 8 (Chủ nhật).", "Giờ mở cửa (6 giờ) phải trước giờ đóng cửa (5 giờ)." Quán mở tới nửa đêm ghi giờ đóng cửa 24 |
+| Bỏ một vai trò khỏi hồ sơ nhân viên (ví dụ thu ngân chuyển sang chỉ phục vụ) | Vai trò chọn đầu tiên lúc tạo tài khoản vẫn còn hiệu lực ngầm: người đó vẫn mở được Thu ngân, Quỹ ca dù hồ sơ ghi Phục vụ | Quyền theo đúng các vai trò đang chọn trong hồ sơ (kể cả dữ liệu cũ chưa lưu lại); tài khoản tạo với vai trò Chủ quán vẫn là Chủ quán và hồ sơ hiện ô Chủ quán đã chọn |
+| Chủ quán sửa hồ sơ của chính mình sang Nghỉ việc hoặc bỏ ô Chủ quán | Tài khoản bị khóa hoặc mất quyền ngay; nếu là Chủ quán duy nhất thì không ai vào được Dữ liệu nền để mở lại | Không lưu: "Không tự chuyển mình sang Nghỉ việc hay bỏ vai trò Chủ quán của chính mình; nhờ một Chủ quán khác làm nếu thật cần." |
+| Máy dùng chung ở quầy: phục vụ A soạn dở phiếu order rồi đăng xuất, phục vụ B đăng nhập | B thấy nguyên phiếu của A và có thể gửi đơn dưới tên mình; nội dung form nhập dở (quỹ ca, phiếu nhập) cũng hiện cho người sau | Nháp lưu theo từng tài khoản: B thấy phiếu trống, A đăng nhập lại thì phiếu dở vẫn còn |
+| Bấm Đăng xuất trong ứng dụng đã cài (hoặc gửi biểu mẫu sau khi hết phiên) | Trang hiện một đoạn chữ JSON "Phiên đăng nhập đã hết hạn…" thay vì về trang đăng nhập: qua service worker, trình duyệt đánh dấu lần mở trang giống yêu cầu của mã JavaScript | Phân biệt theo chế độ mở trang (`Sec-Fetch-Mode: navigate`): đăng xuất về trang đăng nhập; hết phiên khi gửi biểu mẫu thì về trang đăng nhập rồi quay lại; mã bảo mật cũ hiện trang báo tiếng Việt |
+| Phục vụ, thu ngân, pha chế bật thông báo trên điện thoại | Chỉ trang Cảnh báo (Chủ quán, pha chế) có nút bật; phục vụ và thu ngân không bật được nên không nhận lịch làm, tiền nộp chờ xác nhận | Khối "Thông báo trên điện thoại" ở cuối Lịch của tôi; máy chủ chưa gửi được thì khối ẩn với nhân viên (Chủ quán vẫn thấy lý do ở trang Cảnh báo) |
+| Máy dùng chung: người trước đã bật thông báo rồi đăng xuất | Máy vẫn hiện thông báo của người trước (lịch làm, yêu cầu duyệt), người đang dùng không nhận gì | Đăng xuất thì thôi gửi thông báo của người đó tới máy này; người đăng nhập sau (đã cho phép thông báo) tự nhận thông báo của mình trên máy đó |
+| Thu ngân mở sẵn màn Thu ngân trong lúc phục vụ mang món ra, khách gọi thêm | Màn đứng yên: bàn vẫn ghi "chưa phục vụ xong" tới khi thu ngân tự tải lại; bàn mới chờ thu không hiện | Mỗi 8 giây màn kiểm tra; có thay đổi thì nổi một khung ở dưới "Các bàn vừa có thay đổi… Tải lại danh sách". Không tự tải lại để nút Thu tiền không đổi chỗ dưới tay thu ngân |
+| Thu ngân gõ nhầm tiền đầu ca, hoặc ghi khoản chi trước rồi mới xác nhận tiền đầu ca | Không có chỗ sửa tiền đầu ca; ô "Xác nhận tiền đầu ca" biến mất ngay khi ca đã có một khoản bất kỳ, nên két lệch suốt ca | Ô xác nhận còn hiện tới khi ca đã có tiền đầu ca. Người đã xác nhận hoặc Chủ quán sửa ở "Gõ nhầm? Sửa tiền đầu ca" (phải ghi lý do, có nhật ký thay đổi); không nhận số làm két theo sổ bị âm |

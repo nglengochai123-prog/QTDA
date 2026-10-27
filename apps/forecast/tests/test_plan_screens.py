@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from django.urls import reverse
 
+from apps.core import numbers
 from apps.forecast import planning
 from apps.inventory.models import PurchaseOrder
 from apps.orders.tests.helpers import PASSWORD
@@ -39,12 +40,15 @@ class PlanScreenTests(PlanBase):
                                "quantity": str(plan.suggested_quantity + 1000), "expected_date": expected})
         self.assertFalse(PurchaseOrder.objects.exists())
         k = key()
+        # Số lượng gõ đúng như ô hiện ("5.900" là năm nghìn chín trăm, không phải 5,9).
+        shown = numbers.fmt(plan.suggested_quantity)
+        self.assertContains(detail, f'value="{shown}"')
         data = {"action": "chap_nhan", "plan": plan.pk, "operation_key": k, "expected_date": expected,
-                "quantity": str(plan.suggested_quantity)}
+                "quantity": shown}
         self.client.post(url, data)
         self.client.post(url, data)  # gửi lại
         po = PurchaseOrder.objects.get()
-        self.assertEqual(po.status, "nhap")
+        self.assertEqual((po.status, po.quantity), ("nhap", plan.suggested_quantity))
         self.client.post(url, {"action": "da_bao_ncc", "po": po.pk, "expected_date": expected})
         po.refresh_from_db()
         self.assertEqual(po.status, "da_dat")

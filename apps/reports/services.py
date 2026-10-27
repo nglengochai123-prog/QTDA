@@ -7,8 +7,10 @@ from collections import OrderedDict
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 
-from django.db.models import Count, Sum
+from django.db.models import Count, F, Sum
 from django.utils import timezone
+
+from apps.core import numbers
 
 BO02_MONTHLY_TARGET = 1  # BO-01, BO-02: chỉ tiêu dự án, không phải tham số cảnh báo
 
@@ -43,6 +45,18 @@ def _paid_lines(start, end):
             .select_related("order", "order__payment", "order__shift", "order__created_by", "item__group"))
 
 
+def paid_lines(start_day, end_day):
+    """Dòng món đã thu tiền của kỳ, nạp một lần để báo cáo và phân tích dùng chung."""
+    return list(_paid_lines(*period_bounds(start_day, end_day)))
+
+
+def _paid_total(start, end):
+    """Tổng giá trị món tính tiền của các đơn thu tiền trong [start, end), tính ngay trong cơ sở dữ liệu."""
+    billable = F("quantity") - F("cancelled_quantity") - F("voided_done_quantity")
+    return (_paid_lines(start, end).select_related(None)
+            .aggregate(s=Sum(F("unit_price") * billable))["s"] or 0)
+
+
 def _key(line, dim):
     order = line.order
     local = timezone.localtime(order.payment.created_at)
@@ -53,6 +67,17 @@ def _key(line, dim):
         "mon": f"{line.item_name} {line.size_name}", "nhan_vien": str(order.created_by),
         "phuong_thuc": order.payment.get_method_display(),
     }[dim]
+
+
+def _sort(line, dim, key):
+    order = line.order
+    if dim == "ngay":
+        return (timezone.localtime(order.payment.created_at).date(), key)
+    if dim == "khung_gio":
+        return (timezone.localtime(order.created_at).hour, key)
+    if dim == "ca":
+        return (order.shift.starts_at.timestamp() if order.shift else float("inf"), key)
+    return (0, key)
 
 
 def _filter(line, dim):
@@ -82,24 +107,26 @@ def revenue_link(start_day, end_day, row_filter):
     return urlencode(params)
 
 
-def revenue(start_day, end_day, dim="ngay"):
+def revenue(start_day, end_day, dim="ngay", lines=None):
     """Doanh thu theo chiều `dim` = giá trị món tính tiền của các đơn đã thu tiền trong kỳ (AC-105); hoàn tiền trừ ở doanh thu thuần."""
     from apps.shifts.models import Refund
 
     start, end = period_bounds(start_day, end_day)
     rows, total, orders = {}, 0, set()
-    for line in _paid_lines(start, end):
+    for line in _paid_lines(start, end) if lines is None else lines:
         value = line.unit_price * line.billable_quantity
         key = _key(line, dim)
-        row = rows.setdefault(key, {"key": key, "revenue": 0, "cups": 0, "orders": set(), "filters": set()})
+        row = rows.setdefault(key, {"key": key, "revenue": 0, "cups": 0, "orders": set(), "filters": set(),
+                                    "sort": _sort(line, dim, key)})
         row["filters"].add(_filter(line, dim))
         row["revenue"] += value
         row["cups"] += line.billable_quantity
         row["orders"].add(line.order_id)
         total += value
         orders.add(line.order_id)
-    result = sorted(rows.values(), key=lambda r: r["key"])
+    result = sorted(rows.values(), key=lambda r: r["sort"])  # ngày, ca theo thời gian; chuỗi "dd/mm" thì lệch tháng
     for r in result:
+        r.pop("sort")
         r["orders"] = len(r["orders"])
         filters = r.pop("filters")
         # Một dòng gộp từ nhiều giá trị lọc (ví dụ món đổi tên) thì không gắn liên kết để tránh lệch số đơn.
@@ -109,20 +136,21 @@ def revenue(start_day, end_day, dim="ngay"):
     length = (end_day - start_day).days + 1
     prev_start, prev_end = start_day - timedelta(days=length), start_day - timedelta(days=1)
     p_start, p_end = period_bounds(prev_start, prev_end)
-    previous = sum(l.unit_price * l.billable_quantity for l in _paid_lines(p_start, p_end))
+    previous = _paid_total(p_start, p_end)
     return {"rows": result, "total": total, "orders": len(orders), "refunds": refunds, "net": total - refunds,
+            "cups": sum(r["cups"] for r in result),
             "previous": previous, "previous_period": (prev_start, prev_end), "dim": dim, "dim_label": DIMENSIONS[dim]}
 
 
 def revenue_xlsx(start_day, end_day):
     from apps.core import xlsx
 
-    sheets = []
+    sheets, lines = [], paid_lines(start_day, end_day)
     for dim, label in DIMENSIONS.items():
-        data = revenue(start_day, end_day, dim)
+        data = revenue(start_day, end_day, dim, lines)
         rows = [[label, "Số đơn", "Số ly", "Doanh thu (đồng)"]]
         rows += [[r["key"], r["orders"], r["cups"], r["revenue"]] for r in data["rows"]]
-        rows += [["Tổng", data["orders"], "", data["total"]], ["Hoàn tiền đã trả trong kỳ", "", "", data["refunds"]],
+        rows += [["Tổng", data["orders"], data["cups"], data["total"]], ["Hoàn tiền đã trả trong kỳ", "", "", data["refunds"]],
                  ["Doanh thu thuần", "", "", data["net"]]]
         sheets.append((label, rows))
     return xlsx.build(sheets)
@@ -273,7 +301,8 @@ def dashboard(today=None, month=None):
     end = min(last, today) if first <= today else last
     control = monthly_control(month.year, month.month)
     shortages = ShortageCase.objects.filter(day__gte=first, day__lte=last).count()
-    by_day = revenue(first, end, "ngay")
+    lines = paid_lines(first, end)
+    by_day = revenue(first, end, "ngay", lines)
     found = {r["key"]: r for r in by_day["rows"]}
     days = []
     d = first
@@ -286,7 +315,7 @@ def dashboard(today=None, month=None):
     # So với cùng các ngày của tháng trước (1–26/10 so với 1–26/09), không phải kỳ liền trước cùng độ dài.
     prev_first = (first - timedelta(days=1)).replace(day=1)
     prev_end = min(prev_first + (end - first), first - timedelta(days=1))
-    sales = insights.sales(first, end, prev=(prev_first, prev_end), today=today)
+    sales = insights.sales(first, end, prev=(prev_first, prev_end), today=today, lines=lines)
     revenue_chart = sales["trend_chart"]
     critical = []
     for ing in Ingredient.objects.filter(is_critical=True, is_active=True).select_related("stock"):
@@ -296,9 +325,9 @@ def dashboard(today=None, month=None):
                          "below": available < ing.safety_stock})
     stock_chart = charts.hbars([{"label": c["ingredient"].name, "value": float(c["available"]),
                                  "marker": float(c["ingredient"].safety_stock), "below": c["below"],
-                                 "text": f"{c['available']:,.0f} {c['ingredient'].get_unit_display()}".replace(",", "."),
-                                 "tip": f"{c['ingredient'].name}: có thể dùng {c['available']:,.0f}, tồn an toàn "
-                                        f"{c['ingredient'].safety_stock:,.0f} {c['ingredient'].get_unit_display()}".replace(",", ".")}
+                                 "text": f"{numbers.fmt(c['available'], 0)} {c['ingredient'].get_unit_display()}",
+                                 "tip": f"{c['ingredient'].name}: có thể dùng {numbers.fmt(c['available'], 0)}, tồn an toàn "
+                                        f"{numbers.fmt(c['ingredient'].safety_stock, 0)} {c['ingredient'].get_unit_display()}"}
                                 for c in critical], "marker", label_w=130, width=charts.HALF)
     acc_rows = accumulated_report(month.year, month.month)
     limit = params.get("accumulated_manager_threshold")
@@ -306,8 +335,8 @@ def dashboard(today=None, month=None):
     for r in acc_rows:
         by_manager[r["manager"]] = by_manager.get(r["manager"], 0) + r["total"]
     acc_chart = charts.hbars([{"label": m, "value": v, "marker": limit, "below": v > limit,
-                               "text": f"{v:,} đ".replace(",", "."),
-                               "tip": f"{m}: thiếu chưa giải thích {v:,} đ, ngưỡng {limit:,} đ".replace(",", ".")}
+                               "text": f"{numbers.fmt(v, 0)} đ",
+                               "tip": f"{m}: thiếu chưa giải thích {numbers.fmt(v, 0)} đ, ngưỡng {numbers.fmt(limit, 0)} đ"}
                               for m, v in sorted(by_manager.items())], "marker", label_w=130, width=charts.HALF)
     bo01_chart = charts.stacked([("Tổn thất đã xác minh", control["verified"], 1),
                                  ("Thiếu tiền đang xử lý", control["in_process"], 2)], BO01_MONTHLY_TARGET)

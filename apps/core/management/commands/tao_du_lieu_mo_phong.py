@@ -374,7 +374,7 @@ class Simulation:
             self.clock.tick(4)
             ops.create_receipt(self.u["phache"] if self.offset % 3 else self.u["chuquan"], key(), self.suppliers[sup].pk,
                                lines, "tra_ngay" if self.offset % 2 else "tra_sau",
-                               invoice_photo=SimpleUploadedFile("hd.jpg", b"jpeg", content_type="image/jpeg"),
+                               invoice_photo=SimpleUploadedFile("hd.jpg", b"\xff\xd8\xffjpeg", content_type="image/jpeg"),
                                paid_source="chuyen_khoan")
 
     def _orders(self):

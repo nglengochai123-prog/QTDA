@@ -11,6 +11,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 
 from apps.accounts.permissions import Cap, capability_required, user_can
 from apps.catalog.models import MenuItem, Table
+from apps.core import numbers
 from apps.core.idempotency import OperationKeyError
 
 from . import adjustments, payments
@@ -19,6 +20,17 @@ from .models import AdjustmentReason, AdjustmentRequest, Order
 
 def _errors(error):
     return error.messages if isinstance(error, ValidationError) else [str(error)]
+
+
+@capability_required(Cap.ORDER_CREATE)
+@require_GET
+def overview(request):
+    """Tổng quan ca hiện tại; ?phan=1 trả phần thân để trang tự làm mới."""
+    from .overview import shift_overview
+
+    context = shift_overview(request.user)
+    template = "orders/_overview_body.html" if request.GET.get("phan") == "1" else "orders/overview.html"
+    return render(request, template, context)
 
 
 @capability_required(Cap.ORDER_CREATE)
@@ -57,7 +69,7 @@ def request_adjustment(request, order_id):
     sizes = []
     for item in MenuItem.objects.sellable().prefetch_related("sizes"):
         for size in item.active_sizes():
-            sizes.append({"item": item.pk, "size": size.pk, "label": f"{item.name} {size.name} · {size.price:,} đ".replace(",", ".")})
+            sizes.append({"item": item.pk, "size": size.pk, "label": f"{item.name} {size.name} · {numbers.fmt(size.price, 0)} đ"})
     return render(request, "orders/adjust_form.html", {
         "order": order, "kinds": kinds, "form": form, "operation_key": uuid.uuid4().hex,
         "lines": [l for l in order.lines.all() if l.billable_quantity > 0],
@@ -116,7 +128,23 @@ def cashier(request):
         bill["operation_key"] = uuid.uuid4().hex
         bill["can_received"] = bool(bill["exhausted"]) and all(
             payments.can_pay_received_items(request.user, r) for r in bill["exhausted"])
-    return render(request, "orders/cashier.html", {"bills": bills})
+        bill["can_approve"] = any(adjustments.can_decide(request.user, r) for r in bill["requests"])
+    from apps.shifts.models import Shift
+    from apps.shifts.services import pending_refunds
+
+    operating = Shift.objects.operating()
+    return render(request, "orders/cashier.html", {"bills": bills, "total": sum(b["amount"] for b in bills),
+                                                   "signature": payments.cashier_signature(bills),
+                                                   "can_detail": user_can(request.user, Cap.VIEW_DASHBOARD),
+                                                   "pending_refunds": [(r, uuid.uuid4().hex) for r in pending_refunds()],
+                                                   "refund_shift_open": operating is not None,
+                                                   "operating_shift": operating})
+
+
+@capability_required(Cap.PAYMENT)
+@require_GET
+def cashier_changes(request):
+    return JsonResponse({"sig": payments.cashier_signature()})
 
 
 @capability_required(Cap.PAYMENT)
@@ -125,14 +153,20 @@ def pay(request, table_id):
     method = request.POST.get("method", "")
     confirmed = request.POST.get("transfer_confirmed") == "1"
     received = request.POST.get("mode") == "received"
+    expected = request.POST.get("expected", "")
     try:
-        func = payments.pay_received_items if received else payments.pay_table
-        result, repeated = func(request.user, request.POST.get("operation_key", ""), table_id, method, confirmed)
+        if received:
+            result, repeated = payments.pay_received_items(request.user, request.POST.get("operation_key", ""),
+                                                           table_id, method, confirmed)
+        else:
+            result, repeated = payments.pay_table(request.user, request.POST.get("operation_key", ""), table_id,
+                                                  method, confirmed, int(expected) if expected.isdigit() else None)
     except (ValidationError, OperationKeyError) as error:
         for message in _errors(error):
             messages.error(request, message)
     else:
         amount = f"{result['amount']:,}".replace(",", ".")
-        messages.success(request, f"Đã thu {amount} đ bằng {result['method'].lower()} cho các đơn "
-                                  f"{', '.join(result['orders'])}." + (" (Gửi lại: đã ghi từ trước.)" if repeated else ""))
+        orders = ("đơn " if len(result["orders"]) == 1 else "các đơn ") + ", ".join(result["orders"])
+        messages.success(request, f"Đã thu {amount} đ bằng {result['method'].lower()} cho {orders}."
+                                  + (" (Gửi lại: đã ghi từ trước.)" if repeated else ""))
     return redirect("orders:cashier")

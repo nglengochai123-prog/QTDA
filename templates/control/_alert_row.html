@@ -1,0 +1,13 @@
+<li class="{% if a.is_overdue %}is-late{% endif %}{% if a.severity == 'khan' %} is-urgent{% endif %}">
+  <span class="row-main">{% if a.severity == "khan" %}<span class="pill pill-danger">Khẩn</span> {% endif %}<strong>{{ a.short }}</strong>
+    <small>{% if a.status == "dang_xu_ly" %}{{ a.taken_by|default:"Đã có người" }} đang xử lý · {% endif %}{% if a.is_overdue %}<span class="alert-late">Quá hạn từ {{ a.due_at|date:"H:i d/m" }}</span>{% else %}Hạn {{ a.due_at|date:"H:i d/m" }}{% endif %}{% if a.reminded_count %} · đã nhắc {{ a.reminded_count }} lần{% endif %}{% if a.level %} · chuyển Chủ quán{% endif %}</small>
+    {% if a.note %}<small class="alert-note">{{ a.note }}</small>{% endif %}</span>
+  <span class="alert-actions">
+    {% if a.link %}<a class="btn btn-quiet btn-sm" href="{{ a.link }}">Xử lý</a>{% endif %}
+    {% if a.status == "moi" %}<form method="post" data-once>{% csrf_token %}<input type="hidden" name="action" value="take"><input type="hidden" name="alert" value="{{ a.pk }}"><button class="btn btn-ghost btn-sm" type="submit">Nhận</button></form>{% endif %}
+    <details class="alert-close"><summary class="btn btn-ghost btn-sm">Đóng</summary>
+      <form method="post" class="alert-close-form" data-once>{% csrf_token %}<input type="hidden" name="action" value="close"><input type="hidden" name="alert" value="{{ a.pk }}">
+        <label class="visually-hidden" for="ac-{{ a.pk }}">Kết quả xử lý</label><input class="input input-sm" id="ac-{{ a.pk }}" name="note" maxlength="255" placeholder="Đã xử lý thế nào?" required>
+        <button class="btn btn-primary btn-sm" type="submit">Đóng việc</button></form></details>
+  </span>
+</li>

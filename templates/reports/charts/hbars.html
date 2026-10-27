@@ -1,4 +1,4 @@
-{% load l10n %}{% if c %}<div class="chart-box{% if c.w <= 400 %} chart-box-narrow{% endif %}">{% localize off %}<svg class="chart-svg" viewBox="0 0 {{ c.w }} {{ c.h }}" role="img" aria-label="{{ label|default:'Biểu đồ thanh ngang' }}">
+{% load l10n %}{% if c %}<div class="chart-box{% if c.w <= 400 %} chart-box-narrow{% elif c.w > 700 %} chart-box-wide{% endif %}">{% localize off %}<svg class="chart-svg" viewBox="0 0 {{ c.w }} {{ c.h }}" role="img" aria-label="{{ label|default:'Biểu đồ thanh ngang' }}">
   <line class="baseline" x1="{{ c.x0 }}" x2="{{ c.x0 }}" y1="2" y2="{{ c.h|add:'-4' }}"/>
   {% for r in c.rows %}<g class="hit" tabindex="0" data-tip="{{ r.tip }}">
   <text class="axis-text label-text" x="{{ c.label_x }}" y="{{ r.ty }}" dy="0.32em" text-anchor="end">{{ r.label|truncatechars:24 }}</text>

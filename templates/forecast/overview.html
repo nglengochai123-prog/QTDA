@@ -2,13 +2,12 @@
 {% block title %}Dự báo nhu cầu · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <header class="page-head">
-  <h1>Dự báo nhu cầu</h1>
+  <div><h1>Dự báo nhu cầu</h1><p class="page-sub">Số ly dự kiến bán của từng món và kích cỡ. Số trong ngoặc là mức thấp và cao: khoảng 8 trong 10 ngày số bán nằm trong đó. Khi chưa có nhiều ngày bán, dự báo dựa vào nhận định của Chủ quán.</p></div>
   <div class="page-tools">
     {% if rel %}<span class="muted">Cập nhật {{ rel.issued_at|date:"H:i d/m/Y" }} · {{ rel.horizon_days }} ngày tới</span>{% endif %}
     <form method="post" data-once>{% csrf_token %}<button class="btn btn-primary" type="submit">Cập nhật dự báo</button></form>
   </div>
 </header>
-<details class="help-tip"><summary>Giải thích</summary><p>Số ly dự kiến bán của từng món và kích cỡ. Số trong ngoặc là mức thấp và cao: khoảng 8 trong 10 ngày số bán nằm trong đó. Khi chưa có nhiều ngày bán, dự báo dựa vào nhận định của Chủ quán.</p></details>
 {% if rows %}
 {% if trend_chart %}<section class="card">
   <div class="card-head"><div><h2>Tổng số ly: đã bán và dự báo</h2><p class="card-sub">Ba tuần qua và 14 ngày tới. Ngày đóng cửa để trống.</p></div></div>
@@ -19,16 +18,16 @@
   <div class="card-body">{% include "reports/charts/ranges.html" with c=ranges_chart label="Nhu cầu 7 ngày tới theo món, dự kiến và mức thấp đến cao" %}</div>
 </section>{% endif %}
 <section class="card"><div class="card-head"><h2>Chi tiết theo món</h2></div>
-<div class="table-wrap"><table class="data-table">
+<div class="table-wrap"><table class="data-table table-stack">
   <thead><tr><th scope="col">Món</th><th scope="col" class="num">Ngày đã bán</th>
     <th scope="col" class="num">Ngày mai</th><th scope="col" class="num">3 ngày tới</th><th scope="col" class="num">7 ngày tới</th><th scope="col">Hạn chế</th></tr></thead>
   <tbody>{% for r in rows %}<tr>
     <th scope="row"><a href="{% url 'forecast:series' r.s.pk %}">{{ r.s.size.item.name }} {{ r.s.size.name }}</a></th>
-    <td class="num">{{ r.s.eligible_days }}</td>
-    <td class="num">{% if r.tomorrow %}{{ r.tomorrow.mean|floatformat:1 }} <span class="muted">({{ r.tomorrow.q10 }}–{{ r.tomorrow.q90 }})</span>{% endif %}</td>
-    <td class="num">{% if r.t3 %}{{ r.t3.mean|floatformat:0 }} <span class="muted">({{ r.t3.q10 }}–{{ r.t3.q90 }})</span>{% endif %}</td>
-    <td class="num">{% if r.t7 %}{{ r.t7.mean|floatformat:0 }} <span class="muted">({{ r.t7.q10 }}–{{ r.t7.q90 }})</span>{% endif %}</td>
-    <td>{% if r.s.limitations %}<span class="text-warn">{{ r.s.limitations|length }} lưu ý</span>{% else %}–{% endif %}</td>
+    <td class="num" data-label="Ngày đã bán">{{ r.s.eligible_days }}</td>
+    <td class="num" data-label="Ngày mai">{% if r.tomorrow %}{{ r.tomorrow.mean|floatformat:"1g" }} <span class="muted">({{ r.tomorrow.q10 }}–{{ r.tomorrow.q90 }})</span>{% endif %}</td>
+    <td class="num" data-label="3 ngày tới">{% if r.t3 %}{{ r.t3.mean|floatformat:"0g" }} <span class="muted">({{ r.t3.q10 }}–{{ r.t3.q90 }})</span>{% endif %}</td>
+    <td class="num" data-label="7 ngày tới">{% if r.t7 %}{{ r.t7.mean|floatformat:"0g" }} <span class="muted">({{ r.t7.q10 }}–{{ r.t7.q90 }})</span>{% endif %}</td>
+    <td data-label="Hạn chế">{% if r.s.limitations %}<span class="text-warn">{{ r.s.limitations|length }} lưu ý</span>{% else %}–{% endif %}</td>
   </tr>{% endfor %}</tbody>
 </table></div></section>
 <p class="page-note">"3 ngày tới" và "7 ngày tới" tính từ hôm nay.</p>

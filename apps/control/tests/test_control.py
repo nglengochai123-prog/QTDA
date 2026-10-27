@@ -22,7 +22,7 @@ class ExceptionRuleTests(Base):
         adjustments.decide(self.manager, key(), req.pk, False, "Không hợp lý")
         exc = ExceptionCase.objects.get(kind="dc_bi_tu_choi")
         self.assertEqual((exc.employee, exc.order, exc.shift), (self.d["waiter"], order, self.shift))
-        self.assertIn("BRU-12", exc.rule)
+        self.assertEqual(exc.rule, "Yêu cầu điều chỉnh sau pha chế bị từ chối")  # không lộ mã yêu cầu nội bộ
 
     def test_rejected_before_prep_no_exception(self):
         order, line = self.order()
@@ -67,6 +67,11 @@ class ExceptionRuleTests(Base):
         self.assertEqual(report["total"], 2)
         self.assertEqual(len(report["rejected"]), 1)
         self.assertEqual(report["post_prep_value"], 25000)
+        from django.urls import reverse
+        self.client.force_login(self.d["owner"])
+        page = self.client.get(reverse("control:adjustment_report", args=[self.shift.pk]))
+        self.assertContains(page, reverse("orders:detail", args=[o1.pk]))  # mỗi yêu cầu dẫn tới đơn của nó
+        self.assertContains(page, f"đơn {o2.code}")
 
 
 class ReviewAndLossTests(Base):

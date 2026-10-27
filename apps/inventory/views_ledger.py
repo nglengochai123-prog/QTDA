@@ -1,6 +1,6 @@
 """Sổ kho: tra cứu biến động tồn theo nguyên vật liệu, loại và khoảng ngày (truy vết từ báo cáo nguyên vật liệu)."""
 
-from datetime import date, datetime, time, timedelta
+from datetime import datetime, time, timedelta
 
 from django.db.models import Sum
 from django.shortcuts import render
@@ -8,16 +8,10 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from apps.accounts.permissions import Cap, capability_required
+from apps.core.dates import parse_day as _day
 from apps.core.paging import paginate
 
 from .models import Ingredient, StockMovement
-
-
-def _day(value):
-    try:
-        return date.fromisoformat(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def filter_movements(params):

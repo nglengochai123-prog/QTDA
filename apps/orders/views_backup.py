@@ -12,6 +12,7 @@ from apps.accounts.models import User
 from apps.accounts.permissions import Cap, capability_required
 from apps.catalog.models import ItemSize, Option, Table
 from apps.inventory.models import RecipeVersion
+from apps.core import errors
 from apps.core.idempotency import OperationKeyError
 
 from . import backup
@@ -66,7 +67,7 @@ def backup_slips(request):
                     request, result["message"] + (" (Gửi lại: đã ghi từ trước.)" if repeated else "")
                     + (" Nhập bù quá hạn: đã tạo ngoại lệ." if result.get("late") else ""))
         except (ValidationError, OperationKeyError, ValueError) as error:
-            for message in (error.messages if isinstance(error, ValidationError) else [str(error)]):
+            for message in errors.messages_of(error):
                 messages.error(request, message)
         return redirect("orders:backup_slips")
 

@@ -2,8 +2,8 @@
 {% load humanize %}
 {% block title %}Điều chỉnh · {{ shift }} · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<p><a href="{% url 'shifts:status' %}">‹ Tình trạng ca</a></p>
-<h1>Báo cáo điều chỉnh · {{ shift }}</h1>
+<nav class="crumbs"><a href="{% url 'shifts:status' %}">‹ Tình trạng ca</a></nav>
+<header class="page-head"><div><h1>Báo cáo điều chỉnh · {{ shift }}</h1><p class="page-sub">Các yêu cầu hủy món, đổi món, chuyển bàn và hủy hóa đơn trong ca; bấm một yêu cầu để xem đơn.</p></div></header>
 <dl class="figure-grid">
   <div><dt>Tổng số yêu cầu</dt><dd>{{ report.total }}</dd></div>
   <div class="figure-key"><dt>Giá trị món hủy sau pha chế</dt><dd>{{ report.post_prep_value|intcomma }} đ</dd></div>

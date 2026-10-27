@@ -19,6 +19,9 @@ class FoundationTests(TestCase):
         self.client.login(username="phucvu1", password="matkhau-thu-123")
         response = self.client.get(reverse("core:home"))
         self.assertContains(response, "Phục vụ")
+        # Phục vụ không có Bảng điều khiển hay Cảnh báo nên không hiện thẻ lọc "Tổng quan" trống.
+        self.assertNotContains(response, 'data-group="Tổng quan">')
+        self.assertContains(response, 'data-group="Bán hàng">')
 
     def test_pwa_files(self):
         self.assertEqual(self.client.get("/manifest.webmanifest").status_code, 200)

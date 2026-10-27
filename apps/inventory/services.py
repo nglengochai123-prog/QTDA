@@ -24,8 +24,10 @@ def ingredient_usage(version, size, options=()):
 
     Dòng món ở phần tạo đơn sẽ lưu kết quả này cùng phiên bản (BRU-39).
     """
+    size_id = getattr(size, "pk", size)
+    option_ids = {getattr(o, "pk", o) for o in options}
     usage = {}
-    lines = version.lines.filter(size=size) | version.lines.filter(option__in=list(options))
-    for line in lines:
-        usage[line.ingredient_id] = usage.get(line.ingredient_id, 0) + line.quantity
+    for line in version.lines.all():
+        if (line.size_id is not None and line.size_id == size_id) or (line.option_id is not None and line.option_id in option_ids):
+            usage[line.ingredient_id] = usage.get(line.ingredient_id, 0) + line.quantity
     return usage

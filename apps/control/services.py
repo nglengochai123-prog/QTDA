@@ -141,7 +141,16 @@ def recover(user, case, amount, note="", *, operation_key):
     from apps.core.idempotency import run_once
 
     def action():
-        LossRecovery.objects.create(case=case, amount=int(amount), note=note, actor=user)
+        if not user.is_owner:
+            raise ValidationError("Chỉ Chủ quán ghi thu hồi tổn thất.")
+        if int(amount) <= 0:
+            raise ValidationError("Số tiền thu hồi phải lớn hơn 0.")
+        remaining = LossCase.objects.select_for_update().get(pk=case.pk).remaining_amount()
+        if remaining is None:
+            raise ValidationError("Xác nhận giá trị tổn thất trước khi ghi thu hồi.")
+        if int(amount) > remaining:
+            raise ValidationError(f"Thu hồi vượt phần còn lại {remaining:,} đ.".replace(",", "."))
+        LossRecovery.objects.create(case=case, amount=int(amount), note=note[:255], actor=user)
         record(Action.UPDATE, actor=user, obj=case, object_type="control.LossCase", after={"thu_hoi": int(amount)},
                reason=note)
         return {"case": case.pk}

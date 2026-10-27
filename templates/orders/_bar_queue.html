@@ -1,3 +1,4 @@
+{% load loi_thuong %}
 <p class="bar-summary"><strong>{{ cups_waiting }}</strong> ly chờ pha · {{ tickets|length }} đơn</p>
 {% if tickets %}
 <div class="bar-grid">
@@ -7,8 +8,9 @@
       <h2 class="bar-code" id="t-{{ t.order.pk }}">{{ t.order.code }}</h2>
       <span class="bar-table">Bàn {{ t.order.table.code }}</span>
       <span class="bar-time">{{ t.order.created_at|date:"H:i" }}</span>
-      <span class="bar-wait">{% if t.is_new %}Mới · {% endif %}{{ t.minutes }} phút{% if t.minutes >= 10 %} · trễ{% endif %}</span>
+      <span class="bar-wait">{% if t.is_new %}Mới · {% endif %}{{ t.minutes|phut }}{% if t.minutes >= 10 %} · trễ{% endif %}</span>
     </header>
+    {% if t.pending %}<p class="bar-hold">Đang chờ duyệt: {{ t.pending.summary }}</p>{% endif %}
     <ul class="bar-lines">
       {% for line in t.lines %}
       <li class="bar-line">

@@ -1,37 +1,56 @@
 {% extends "base.html" %}
-{% load humanize %}
+{% load humanize loi_thuong %}
 {% block title %}Ngoại lệ · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head">
-  <h1>Ngoại lệ cần xem xét</h1>
-  <nav class="tabs" aria-label="Lọc trạng thái">
-    <a href="?trang-thai=cho_xem_xet"{% if status == "cho_xem_xet" %} aria-current="page"{% endif %}>Chờ xem xét</a>
-    <a href="?trang-thai=da_dong"{% if status == "da_dong" %} aria-current="page"{% endif %}>Đã đóng</a>
-    <a href="?trang-thai=tat-ca"{% if status == "tat-ca" %} aria-current="page"{% endif %}>Tất cả</a>
-  </nav>
-</header>
-<form method="get" class="filter-bar" aria-label="Bộ lọc ngoại lệ"><input type="hidden" name="trang-thai" value="{{ status }}">
-  <div class="field"><label for="f-loai">Loại</label><select class="input" id="f-loai" name="loai"><option value="">Tất cả</option>{% for v, l in kinds %}<option value="{{ v }}"{% if f.loai == v %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>
+<header class="page-head"><div><h1>Ngoại lệ</h1><p class="page-sub">Hệ thống tự mở ngoại lệ khi có việc bất thường: hủy hóa đơn đã thu tiền, điều chỉnh sau pha chế bị từ chối, tiêu hao hoặc kiểm kê lệch nhiều, thiếu tiền tích lũy. Chủ quán xem chứng cứ của từng mục rồi ghi kết quả.</p></div>
+  {% if first_open %}<a class="btn btn-primary" href="{% url 'control:exception_detail' first_open %}">Xem lần lượt</a>{% endif %}</header>
+
+<div class="stats">
+  <div class="stat{% if overdue %} stat-warn{% elif not pending %} stat-ok{% endif %}"><p class="stat-label">Chờ xem xét</p><p class="stat-value">{{ pending }}</p><p class="stat-note">{% if overdue %}{{ overdue }} mục đã quá hạn xem xét{% elif pending %}Chưa có mục quá hạn{% else %}Đã xem hết{% endif %}</p></div>
+  <div class="stat"><p class="stat-label">Giá trị liên quan</p><p class="stat-value">{{ pending_sum|intcomma }} đ</p><p class="stat-note">Tổng tiền của các mục đang chờ</p></div>
+  <div class="stat"><p class="stat-label">Đã xem xét 30 ngày qua</p><p class="stat-value">{{ reviewed }}</p><p class="stat-note">{% if violations %}{{ violations }} mục kết luận vi phạm{% else %}Không có mục vi phạm{% endif %}</p></div>
+</div>
+
+<nav class="seg exc-tabs" aria-label="Trạng thái">
+  <a href="?trang-thai=cho_xem_xet"{% if status == "cho_xem_xet" %} aria-current="page"{% endif %}>Chờ xem xét <span class="seg-count">{{ pending }}</span></a>
+  <a href="?trang-thai=da_dong"{% if status == "da_dong" %} aria-current="page"{% endif %}>Đã xem xét</a>
+  <a href="?trang-thai=tat-ca"{% if status == "tat-ca" %} aria-current="page"{% endif %}>Tất cả</a>
+</nav>
+
+{% if kinds|length > 1 or f.loai %}
+<div class="chip-row exc-kinds" aria-label="Loại ngoại lệ">
+  <a class="chip-btn" href="?{{ kind_qs }}"{% if not f.loai %} aria-current="true"{% endif %}>Mọi loại</a>
+  {% for k in kinds %}<a class="chip-btn" href="?{{ kind_qs }}&amp;loai={{ k.value }}"{% if f.loai == k.value %} aria-current="true"{% endif %}>{{ k.label }} <span>{{ k.n }}</span></a>{% endfor %}
+</div>
+{% endif %}
+
+<details class="filter-more"{% if filtered %} open{% endif %}><summary>Lọc theo nhân viên hoặc ngày</summary>
+<form method="get" class="filter-bar" aria-label="Bộ lọc ngoại lệ"><input type="hidden" name="trang-thai" value="{{ status }}">{% if f.loai %}<input type="hidden" name="loai" value="{{ f.loai }}">{% endif %}
   <div class="field"><label for="f-nv">Nhân viên</label><select class="input" id="f-nv" name="nhan_vien"><option value="">Tất cả</option>{% for u in staff %}<option value="{{ u.pk }}"{% if f.nhan_vien == u.pk|stringformat:"d" %} selected{% endif %}>{{ u }}</option>{% endfor %}</select></div>
   <div class="field"><label for="f-tu">Từ ngày</label><input class="input" id="f-tu" type="date" name="tu" value="{{ f.tu }}"></div>
   <div class="field"><label for="f-den">Đến ngày</label><input class="input" id="f-den" type="date" name="den" value="{{ f.den }}"></div>
   {% if f.ca %}<input type="hidden" name="ca" value="{{ f.ca }}">{% endif %}{% if f.muc %}<input type="hidden" name="muc" value="{{ f.muc }}">{% endif %}
   <div class="filter-actions"><button class="btn btn-primary" type="submit">Lọc</button><a class="btn btn-quiet" href="?trang-thai={{ status }}">Xóa lọc</a></div>
-</form>
+</form></details>
 {% if shift %}<p class="muted">Đang xem ngoại lệ của {{ shift }}. <a href="?trang-thai={{ status }}">Bỏ lọc ca</a></p>{% endif %}
+
 {% if items %}
-<ul class="ruled-list">
-  {% for e in items %}
-  <li><a href="{% url 'control:exception_detail' e.pk %}">
-    <span class="exc-text"><strong>{{ e.get_kind_display }}</strong>
-      <span class="muted">{% if e.employee %}{{ e.employee }} · {% endif %}{% if e.shift %}{{ e.shift }} · {% endif %}{% if e.order %}Đơn {{ e.order.code }} · {% endif %}{{ e.created_at|date:"H:i d/m" }}</span>
-      {% if e.pk in due %}<span class="flag-low">Quá hạn xem xét, cần xử lý</span>{% endif %}</span>
-    <span class="count">{% if e.amount %}{{ e.amount|intcomma }} đ{% endif %} <span class="chip">{{ e.get_status_display }}</span>
-      <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></span></a></li>
-  {% endfor %}
-</ul>
+<section class="card">
+  <ul class="row-list exc-list">
+    {% for e in items %}
+    <li{% if e.pk in due %} class="is-late"{% endif %}><a href="{% url 'control:exception_detail' e.pk %}">
+      <span class="row-day">{{ e.created_at|date:"d/m" }}<small>{{ e.created_at|date:"H:i" }}</small></span>
+      <span class="row-main"><strong>{{ e.get_kind_display }}</strong><small>{% if e.subject %}{{ e.subject }}{% else %}{{ e.rule|loi_thuong }}{% endif %}</small></span>
+      <span class="exc-meta">{% if e.amount %}<span class="num-cell">{{ e.amount|intcomma }} đ</span>{% endif %}
+      {% if e.result %}<span class="pill pill-{% if e.result.result == 'vi_pham' %}danger{% elif e.result.result == 'nhac_nho' %}warn{% else %}ok{% endif %}">{{ e.result.get_result_display }}</span>
+      {% elif e.pk in due %}<span class="pill pill-warn">Quá hạn</span>
+      {% elif status != "cho_xem_xet" %}<span class="pill pill-neutral">{{ e.get_status_display }}</span>{% endif %}</span>
+      <svg class="icon row-go" aria-hidden="true"><use href="#i-chevron"/></svg></a></li>
+    {% endfor %}
+  </ul>
+</section>
 {% include "partials/pagination.html" %}
 {% else %}
-<div class="empty"><p><strong>Không có ngoại lệ nào ở mục này.</strong></p><p>Ngoại lệ được tạo tự động theo quy tắc BRU-12 khi có điều chỉnh bị từ chối, hủy hóa đơn đã thanh toán, điều chỉnh vượt mức, thiếu tiền tích lũy.</p></div>
+<div class="empty"><p><strong>{% if status == "cho_xem_xet" and not f.loai and not filtered %}Không còn ngoại lệ nào chờ xem xét.{% else %}Không có ngoại lệ nào khớp bộ lọc.{% endif %}</strong></p></div>
 {% endif %}
 {% endblock %}

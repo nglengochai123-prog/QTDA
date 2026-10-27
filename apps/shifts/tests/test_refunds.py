@@ -96,3 +96,18 @@ class RefundTests(Base):
             shift_services.confirm_refund(self.cashier, key(), refund.pk)
         refund.refresh_from_db()
         self.assertEqual((refund.status, refund.shift), (Refund.Status.APPROVED, None))
+
+    def test_cashier_screen_and_home_show_refunds_waiting_for_the_customer(self):
+        from django.test import Client
+
+        from apps.orders.tests.helpers import PASSWORD
+
+        self.cancel_paid(self.paid_order("tien_mat"))
+        c = Client()
+        c.login(username=self.cashier.username, password=PASSWORD)
+        page = c.get("/thu-ngan/").content.decode()
+        self.assertIn("Hoàn tiền đã duyệt, chờ trả khách", page)
+        self.assertNotIn("Chưa có ca đang mở", page)
+        self.assertIn("Hoàn tiền chờ trả khách", c.get("/").content.decode())
+        Shift.objects.update(status=Shift.Status.CLOSED)
+        self.assertIn("Chưa có ca đang mở", c.get("/thu-ngan/").content.decode())

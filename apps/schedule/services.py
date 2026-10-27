@@ -51,7 +51,7 @@ def deadline_for(week):
 
 def week_shifts(week):
     return (WorkShift.objects.filter(date__gte=week, date__lt=week + timedelta(days=7))
-            .prefetch_related("needs", "registrations", "assignments").order_by("date", "start"))
+            .prefetch_related("needs", "registrations__user", "assignments__user").order_by("date", "start"))
 
 
 def user_roles(user):
@@ -71,6 +71,8 @@ def register(user, choices, now=None):
     """choices: {shift_id: role hoặc ''}. Thay toàn bộ đăng ký của người này trong tuần của các ca được gửi."""
     now = now or timezone.now()
     shifts = {s.pk: s for s in WorkShift.objects.filter(pk__in=choices)}
+    # Ca Chủ quán vừa xóa trong lúc trang đăng ký còn mở thì bỏ qua, không làm hỏng cả lần gửi.
+    choices = {k: v for k, v in choices.items() if k in shifts}
     if not shifts:
         raise ValidationError("Chưa chọn ca nào.")
     weeks = {week_start(s.date) for s in shifts.values()}
@@ -371,7 +373,7 @@ def basis_by_day(rows):
 def set_need(user, shift, role, needed, reason=""):
     need, _ = RoleNeed.objects.get_or_create(shift=shift, role=role, defaults={"needed": needed})
     if need.suggested is not None and needed != need.suggested and not reason.strip():
-        raise ValidationError(f"{ROLE_LABEL[role]} {shift}: khác số gợi ý {need.suggested}, ghi lý do (BRU-28).")
+        raise ValidationError(f"{ROLE_LABEL[role]} {shift}: khác số gợi ý {need.suggested}, ghi lý do.")
     before = need.needed
     need.needed, need.reason = needed, reason.strip()[:255]
     need.save()
@@ -379,6 +381,34 @@ def set_need(user, shift, role, needed, reason=""):
         record(Action.UPDATE, actor=user, obj=need, object_type="schedule.RoleNeed", before={"can": before},
                after={"can": needed, "ca": str(shift), "vi_tri": ROLE_LABEL[role]}, reason=need.reason)
     return need
+
+
+@transaction.atomic
+def set_needs(user, shifts, values, reason=""):
+    """Đặt số người cần {vị trí: số} cho một hoặc nhiều ca (ví dụ Ca sáng cả tuần) trong một lần lưu.
+
+    Kiểm tra hết trước khi ghi: ô nào khác số gợi ý mà chưa có lý do thì không ghi ô nào (BRU-28)."""
+    reason = (reason or "").strip()
+    missing = []
+    for shift in shifts:
+        current = {n.role: n for n in RoleNeed.objects.filter(shift=shift)}
+        for role, needed in values.items():
+            if needed < 0 or needed > 20:
+                raise ValidationError("Số người cần phải từ 0 đến 20.")
+            need = current.get(role)
+            if need and need.suggested is not None and needed != need.suggested and not reason:
+                missing.append(f"{ROLE_LABEL[role].lower()} {shift.date:%d/%m} (gợi ý {need.suggested})")
+    if missing:
+        raise ValidationError("Khác số gợi ý nên cần ghi lý do: " + ", ".join(missing[:4])
+                              + (f" và {len(missing) - 4} ô khác" if len(missing) > 4 else "") + ".")
+    for shift in shifts:
+        for role, needed in values.items():
+            need = RoleNeed.objects.filter(shift=shift, role=role).first()
+            if need is None and needed == 0:
+                continue
+            differs = need is not None and need.suggested is not None and needed != need.suggested
+            set_need(user, shift, role, needed, reason if differs else "")
+    return len(shifts)
 
 
 # ---------------- xếp lịch (FR-39) ----------------
@@ -413,7 +443,21 @@ def assign(owner, shift, user, role, source=Assignment.Source.OWNER):
         record(Action.CREATE, actor=owner, obj=a, object_type="schedule.Assignment",
                after={"ca": str(shift), "nhan_vien": str(user), "vi_tri": ROLE_LABEL[role]},
                reason="Chủ quán xếp sau hạn đăng ký" if late else "Chủ quán xếp")
+        _tell_if_published(user, shift, f"Thêm ca {_shift_text(shift)} · {ROLE_LABEL[role]}")
     return a
+
+
+def _shift_text(shift):
+    return f"{shift.date:%d/%m} {shift.start:%H:%M}–{shift.end:%H:%M}"
+
+
+def _tell_if_published(user, shift, body):
+    """Lịch tuần đã công bố mà Chủ quán còn xếp thêm hay bỏ ra: báo riêng người đó, không để họ đi làm theo lịch cũ."""
+    if shift.date < timezone.localdate() or not is_published(week_start(shift.date)):
+        return
+    from apps.core.push import notify_later
+
+    notify_later([user.pk], f"Lịch làm tuần {week_start(shift.date):%d/%m} thay đổi", body, "/lich/cua-toi/")
 
 
 @transaction.atomic
@@ -422,6 +466,23 @@ def unassign(owner, assignment, reason=""):
     assignment.save(update_fields=["removed_at", "remove_reason", "updated_at"])
     record(Action.DELETE, actor=owner, obj=assignment, object_type="schedule.Assignment",
            before={"ca": str(assignment.shift), "nhan_vien": str(assignment.user)}, reason=assignment.remove_reason)
+    _tell_if_published(assignment.user, assignment.shift, f"Bỏ ca {_shift_text(assignment.shift)}")
+
+
+@transaction.atomic
+def release_unfit(owner, user, today=None):
+    """Nhân viên nghỉ việc hoặc bớt vai trò: bỏ khỏi các ca từ hôm nay ở vị trí không còn đảm nhận, hủy đăng ký tương
+    ứng, để lịch hiện đúng chỗ thiếu thay vì vẫn tính người đó. Trả về số lượt đã bỏ."""
+    today = today or timezone.localdate()
+    allowed = set(user_roles(user))
+    removed = 0
+    for a in (Assignment.objects.filter(user=user, removed_at__isnull=True, shift__date__gte=today)
+              .exclude(role__in=allowed).select_related("shift", "user")):
+        unassign(owner, a, "Không còn đảm nhận vị trí này" if allowed else "Nghỉ việc")
+        removed += 1
+    (Registration.objects.filter(user=user, cancelled_at__isnull=True, shift__date__gte=today)
+     .exclude(role__in=allowed).update(cancelled_at=timezone.now()))
+    return removed
 
 
 @transaction.atomic
@@ -492,21 +553,30 @@ def coverage(week):
     return rows, gaps
 
 
-def replacements(shift, role):
-    """Người thay thế: có kỹ năng vị trí, đang làm, chưa có ca trùng giờ; người đã đăng ký ca này trước (AC-87)."""
+def replacement_context(week):
+    """Dữ liệu chung của một tuần để tìm người thay thế cho nhiều ca mà không truy vấn lại từng ca."""
     from apps.staff.models import Employee
 
-    registered = {r.user_id for r in shift.registrations.filter(cancelled_at__isnull=True)}
-    assigned = set(shift.assignments.filter(removed_at__isnull=True).values_list("user_id", flat=True))
-    week = week_start(shift.date)
+    active = _active_assignments(week)
     hours = defaultdict(float)
-    for a in _active_assignments(week):
+    for a in active:
         hours[a.user_id] += a.shift.hours
+    return {"active": active, "hours": hours,
+            "employees": list(Employee.objects.filter(status="dang_lam").select_related("user"))}
+
+
+def replacements(shift, role, context=None):
+    """Người thay thế: có kỹ năng vị trí, đang làm, chưa có ca trùng giờ; người đã đăng ký ca này trước (AC-87)."""
+    context = context or replacement_context(week_start(shift.date))
+    registered = {r.user_id for r in shift.registrations.all() if r.cancelled_at is None}
+    assigned = {a.user_id for a in context["active"] if a.shift_id == shift.pk}
+    busy = {a.user_id for a in context["active"]
+            if a.shift_id != shift.pk and a.shift.date == shift.date and a.shift.overlaps(shift)}
     out = []
-    for emp in Employee.objects.filter(status="dang_lam").select_related("user"):
-        if role not in (emp.roles or []) or emp.user_id in assigned or conflicts(emp.user, shift):
+    for emp in context["employees"]:
+        if role not in (emp.roles or []) or emp.user_id in assigned or emp.user_id in busy:
             continue
-        out.append({"user": emp.user, "registered": emp.user_id in registered, "hours": hours[emp.user_id]})
+        out.append({"user": emp.user, "registered": emp.user_id in registered, "hours": context["hours"][emp.user_id]})
     out.sort(key=lambda x: (not x["registered"], x["hours"], str(x["user"])))
     return out
 

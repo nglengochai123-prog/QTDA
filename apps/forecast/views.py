@@ -3,7 +3,7 @@
 import uuid
 from collections import OrderedDict
 from datetime import timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
@@ -15,7 +15,9 @@ from django.views.decorators.http import require_http_methods, require_POST
 from apps.accounts.permissions import Cap, capability_required
 from apps.audit.models import Action
 from apps.audit.services import record
+from apps.core import errors, numbers
 from apps.core.idempotency import OperationKeyError
+from apps.core.templatetags.loi_thuong import ngay_iso
 
 from . import evaluate as ev
 from . import services
@@ -100,15 +102,18 @@ def ordering(request):
         st = services.ordering_status(ing, rel)
         sug = st.get("suggestion") or {}
         try:
-            qty = Decimal(str(request.POST.get("quantity", "")).replace(",", "."))
-            expected = timezone.datetime.fromisoformat(request.POST.get("expected_date", "")).date()
-        except (InvalidOperation, ValueError):
-            messages.error(request, "Nhập số lượng và ngày giao dự kiến hợp lệ.")
+            qty = numbers.qty(request.POST.get("quantity", ""), "Số lượng đặt")
+            expected = ops.delivery_date(request.POST.get("expected_date"))
+        except ValidationError as error:
+            messages.error(request, error.messages[0])
+            return redirect("forecast:ordering")
+        except ValueError:
+            messages.error(request, "Nhập ngày giao dự kiến hợp lệ.")
             return redirect("forecast:ordering")
         note = request.POST.get("note", "").strip()
         suggested = Decimal(str(sug.get("quantity") or 0))
         if qty != suggested and not note:
-            messages.error(request, "Số lượng khác đề xuất: ghi lý do (BRU-24, NFR-22).")
+            messages.error(request, "Số lượng khác đề xuất: ghi lý do.")
             return redirect("forecast:ordering")
         if ing.main_supplier_id is None:
             messages.error(request, f"{ing.name} chưa có nhà cung cấp chính.")
@@ -130,7 +135,7 @@ def ordering(request):
             for m in getattr(error, "messages", [str(error)]):
                 messages.error(request, m)
             return redirect("forecast:ordering")
-        messages.success(request, f"Đã ghi lần đặt {qty.normalize():f} {ing.get_unit_display()} {ing.name}.")
+        messages.success(request, f"Đã ghi lần đặt {numbers.fmt(qty)} {ing.get_unit_display()} {ing.name}.")
         return redirect("forecast:ordering")
     groups = OrderedDict()
     if rel:
@@ -229,15 +234,24 @@ def history_import(request):
         f = request.FILES.get("file")
         kind = request.POST.get("kind")
         if not f or kind not in HistoryBatch.Kind.values:
-            messages.error(request, "Chọn tệp CSV và loại dữ liệu.")
+            messages.error(request, "Chọn tệp CSV hoặc Excel và loại dữ liệu.")
             return redirect("forecast:history")
         try:
             batch = services.import_history(f, f.name, kind, request.user, request.POST.get("note", ""))
-        except (ValueError, UnicodeDecodeError) as error:
-            messages.error(request, f"Không đọc được tệp: {error}")
+        except UnicodeDecodeError:
+            messages.error(request, "Không đọc được tệp: chữ trong tệp không phải mã UTF-8. Trong Excel chọn Lưu thành "
+                                    "\"CSV UTF-8\" rồi nhập lại, hoặc nhập thẳng tệp .xlsx.")
+            return redirect("forecast:history")
+        except (ValueError, ValidationError) as error:
+            messages.error(request, "Không nhập được tệp: " + " ".join(errors.messages_of(error)))
             return redirect("forecast:history")
         sm = batch.summary
-        messages.success(request, f"Đã nhập {sm['cups']} ly trong {sm['days']} ngày ({sm['from']} đến {sm['to']}).")
+        messages.success(request, f"Đã nhập {numbers.fmt(sm['cups'], 0)} ly trong {sm['days']} ngày "
+                                  f"({ngay_iso(sm['from'])} đến {ngay_iso(sm['to'])}).")
+        skipped = ([f"{sm['bad_rows']} dòng không đọc được ngày hoặc số ly"] if sm.get("bad_rows") else []) + \
+                  ([f"{sm['future']} dòng từ hôm nay trở đi"] if sm.get("future") else [])
+        if skipped:
+            messages.warning(request, "Đã bỏ qua " + ", ".join(skipped) + ".")
         if sm.get("unmatched"):
             messages.warning(request, "Món không khớp thực đơn (chưa nhập): " +
                              "; ".join(f"{k} ({v} dòng)" for k, v in sm["unmatched"].items()))
@@ -326,25 +340,24 @@ def plan_detail(request, ingredient_id):
             if action in ("chap_nhan", "bo_qua"):
                 plan = get_object_or_404(IngredientPlan, pk=p.get("plan"), ingredient=ing)
                 if action == "chap_nhan":
-                    qty = Decimal(str(p.get("quantity", "")).replace(",", "."))
-                    expected = timezone.datetime.fromisoformat(p.get("expected_date", "")).date()
+                    qty = numbers.qty(p.get("quantity", ""), "Số lượng đặt")
+                    expected = ops.delivery_date(p.get("expected_date"))
                     po = planning.accept(request.user, plan, qty, p.get("note", ""), expected,
                                          p.get("operation_key") or uuid.uuid4().hex)
-                    messages.success(request, f"Đã tạo đơn Nháp {po.quantity.normalize():f} {ing.get_unit_display()} "
+                    messages.success(request, f"Đã tạo đơn Nháp {numbers.fmt(po.quantity)} {ing.get_unit_display()} "
                                               f"{ing.name}. Báo nhà cung cấp rồi bấm Đã báo nhà cung cấp.")
                 else:
                     planning.skip(request.user, plan, p.get("reason", ""), p.get("operation_key") or uuid.uuid4().hex)
                     messages.success(request, f"Đã bỏ qua đề xuất {ing.name}; đề xuất vẫn được lưu để đánh giá.")
             elif action == "da_bao_ncc":
                 expected = p.get("expected_date")
-                ops.mark_ordered(request.user, p.get("po"),
-                                 timezone.datetime.fromisoformat(expected).date() if expected else None)
+                ops.mark_ordered(request.user, p.get("po"), ops.delivery_date(expected) if expected else None)
                 messages.success(request, "Đơn đã chuyển sang Đã đặt.")
             elif action == "huy_don":
                 ops.cancel_order(request.user, p.get("po"), p.get("reason", ""))
                 messages.success(request, "Đã hủy đơn.")
-        except (InvalidOperation, ValueError):
-            messages.error(request, "Nhập số lượng và ngày giao dự kiến hợp lệ.")
+        except ValueError:
+            messages.error(request, "Nhập ngày giao dự kiến hợp lệ.")
         except (ValidationError, OperationKeyError) as error:
             for m in getattr(error, "messages", [str(error)]):
                 messages.error(request, m)

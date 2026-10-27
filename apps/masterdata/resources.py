@@ -9,12 +9,13 @@ from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.accounts.models import Role, User
+from apps.accounts.models import User
 from apps.accounts.permissions import Cap
 from apps.audit.models import Action
 from apps.audit.services import record
+from apps.core import numbers
 from apps.catalog.models import ItemSize, MenuGroup, MenuItem, Option, OptionGroup, Table
-from apps.inventory.models import Ingredient, RecipeLine, RecipeVersion, StockMovement, Supplier
+from apps.inventory.models import Ingredient, IssueRule, RecipeLine, RecipeVersion, StockMovement, Supplier
 from apps.orders.models import AdjustmentReason
 from apps.shifts.models import Shift
 from apps.staff.forms import EmployeeForm
@@ -32,7 +33,11 @@ def _local(dt):
 # ---------- Ca làm việc ----------
 
 def _shift_form(form, obj, request):
-    people = User.objects.filter(is_active=True).order_by("first_name", "last_name")
+    from apps.accounts.permissions import user_can
+
+    # Người được ủy quyền phải mở được màn Thu ngân (thu ngân, Chủ quán); chọn pha chế thì không ai thu được.
+    active = User.objects.filter(is_active=True)
+    people = active.filter(pk__in=[u.pk for u in active if user_can(u, Cap.PAYMENT)]).order_by("first_name", "last_name")
     if "payment_authorizer" in form.fields:
         form.fields["payment_authorizer"].queryset = people
     if obj is None and not form.is_bound:
@@ -46,6 +51,19 @@ def _shift_form(form, obj, request):
             form.initial.setdefault("name", last.name)
             form.initial.setdefault("starts_at", (start + shift_by).strftime("%Y-%m-%dT%H:%M"))
             form.initial.setdefault("ends_at", (end + shift_by).strftime("%Y-%m-%dT%H:%M"))
+
+
+def _shift_hours(shift):
+    start, end = timezone.localtime(shift.starts_at), timezone.localtime(shift.ends_at)
+    return f"{start:%H:%M}–{end:%H:%M}" + ("" if end.date() == start.date() else f" {end:%d/%m}")
+
+
+def _authorizer_label(shift):
+    if shift.payment_authorizer_id is None:
+        return "Chưa có"
+    if shift.authorizer is None:
+        return f"{shift.payment_authorizer} (không còn thu tiền được, Chủ quán làm thay)"
+    return str(shift.payment_authorizer)
 
 
 def _save_shift(request, form, created):
@@ -63,8 +81,8 @@ def _save_shift(request, form, created):
 register(Resource(
     key="ca", title="Ca làm việc", singular="Ca", model=Shift,
     fields=["name", "starts_at", "ends_at", "payment_authorizer"],
-    columns=[("Ca", "name"), ("Bắt đầu", lambda s: _local(s.starts_at)), ("Kết thúc", lambda s: _local(s.ends_at)),
-             ("Ủy quyền thanh toán theo món", lambda s: s.payment_authorizer or "Chưa có"), ("Trạng thái", "status")],
+    columns=[("Ca", str), ("Giờ", _shift_hours),
+             ("Ủy quyền thanh toán theo món", _authorizer_label), ("Trạng thái", "status")],
     save=_save_shift,
     search=("name",), filters=[("trang-thai", "Trạng thái", "status", Shift.Status.choices)],
     queryset=lambda: Shift.objects.select_related("payment_authorizer").order_by("-starts_at"),
@@ -75,10 +93,33 @@ register(Resource(
 # ---------- Nhân viên và tài khoản ----------
 
 def _save_employee(request, form, created):
+    from apps.accounts.models import Role
+
     employee = form.save(commit=False)
+    if not created and employee.user.is_owner:
+        stays_owner = employee.is_working and Role.CHU_QUAN in (employee.roles or [])
+        if not stays_owner and employee.user == request.user:
+            # Tự khóa hoặc tự bỏ quyền Chủ quán thì có thể không còn ai vào được Dữ liệu nền để mở lại.
+            raise ValidationError("Không tự chuyển mình sang Nghỉ việc hay bỏ vai trò Chủ quán của chính mình; "
+                                  "nhờ một Chủ quán khác làm nếu thật cần.")
     if created:
         employee.attach_new_account(form.cleaned_data.get("username"))
     employee.save()
+    user = employee.user
+    if employee.roles and user.role not in employee.roles:
+        # Vai trò chính lúc tạo tài khoản đã bị bỏ khỏi hồ sơ: đổi theo hồ sơ để mất đúng quyền đó.
+        user.role = employee.roles[0]
+        user.save(update_fields=["role", "is_staff"])  # bỏ vai trò Chủ quán thì thôi vào trang quản trị
+    if not created and {"status", "roles"} & set(form.changed_data):
+        from django.contrib import messages
+
+        from apps.schedule.services import release_unfit
+
+        removed = release_unfit(request.user, employee.user)
+        if removed:
+            messages.warning(request, f"Đã bỏ {employee.full_name} ra khỏi {removed} lượt ca từ hôm nay "
+                                      f"({'nghỉ việc' if not employee.is_working else 'không còn đảm nhận vị trí đó'}). "
+                                      "Xem Lịch làm để xếp người thay.")
     return employee
 
 
@@ -122,10 +163,28 @@ register(Resource(
 
 # ---------- Thực đơn ----------
 
+def _save_table(request, form, created):
+    from apps.orders.models import Order
+
+    from .framework import _assign_store
+
+    table = form.save(commit=False)
+    if not created and "is_active" in form.changed_data and not table.is_active:
+        # Bàn ngừng dùng thì không còn hiện ở Tổng quan ca và không chuyển đơn đến được; đơn còn mở sẽ bị lạc.
+        open_orders = (Order.objects.filter(table=table, payment__isnull=True)
+                       .exclude(status__in=[Order.Status.PAID, Order.Status.CANCELLED]).count())
+        if open_orders:
+            raise ValidationError(f"Bàn {table.code} còn {open_orders} đơn chưa thu tiền; thu tiền hoặc chuyển đơn "
+                                  "sang bàn khác rồi mới bỏ chọn Đang dùng.")
+    _assign_store(table, request)
+    table.save()
+    return table
+
+
 register(Resource(
     key="ban", title="Bàn", singular="Bàn", model=Table, fields=["code", "area", "seats", "sort_order", "is_active"],
     columns=[("Số bàn", "code"), ("Khu vực", "area"), ("Số chỗ", "seats"), ("Đang dùng", "is_active")],
-    search=("code", "area"), filters=[("dang-dung", "Đang dùng", "is_active", YES_NO)],
+    search=("code", "area"), filters=[("dang-dung", "Đang dùng", "is_active", YES_NO)], save=_save_table,
 ))
 
 register(Resource(
@@ -183,10 +242,38 @@ register(Resource(
 def _opening(request, ingredient, data):
     from apps.inventory import stock
 
-    movement = stock.record_opening(ingredient, data["quantity"], request.user, data.get("note") or "")
+    movement = stock.record_opening(ingredient, data["quantity"], request.user, data.get("note") or "",
+                                    expiry_date=data.get("expiry_date"), unit_cost=data.get("unit_cost"))
     record(Action.CREATE, request=request, obj=movement, object_type="inventory.StockMovement",
            after={"ingredient": ingredient.name, "quantity": movement.quantity, "kind": movement.kind})
-    return f"Đã ghi tồn đầu kỳ {ingredient.name}."
+    return (f"Đã ghi tồn đầu kỳ {ingredient.name}: {numbers.fmt(movement.quantity)} "
+            f"{ingredient.get_unit_display()}.")
+
+
+def _save_ingredient(request, form, created):
+    from .framework import _assign_store
+
+    ingredient = form.save(commit=False)
+    if not created and "is_active" in form.changed_data and not ingredient.is_active:
+        # Nguyên liệu ngừng dùng bị ẩn khỏi tồn kho, kiểm kê và kế hoạch mua; món còn dùng nó sẽ trừ kho âm thầm.
+        now = timezone.now()
+        current = RecipeVersion.objects.current_map()
+        using = {v.item for v in current.values()
+                 if v.item.status != MenuItem.Status.STOPPED and any(l.ingredient_id == ingredient.pk for l in v.lines.all())}
+        using |= {v.item for v in RecipeVersion.objects.published().filter(effective_from__gt=now,
+                                                                            lines__ingredient=ingredient)}
+        if using:
+            names = ", ".join(sorted(i.name for i in using))
+            raise ValidationError(f"{ingredient.name} còn trong định mức của {names}. Áp dụng định mức mới không dùng "
+                                  "nguyên liệu này, hoặc chuyển món sang Ngừng bán, rồi mới bỏ chọn Đang dùng.")
+    _assign_store(ingredient, request)
+    ingredient.save()
+    return ingredient
+
+
+def _ingredient_form(form, obj, request):
+    if "issue_rule" in form.fields:
+        form.fields["issue_rule"].choices = [("", "Tự chọn theo hạn dùng"), *IssueRule.choices]
 
 
 register(Resource(
@@ -203,12 +290,21 @@ register(Resource(
              ("Trọng yếu", "is_critical"), ("Đang dùng", "is_active")],
     search=("name",), filters=[("trong-yeu", "Trọng yếu", "is_critical", YES_NO),
                                ("dang-dung", "Đang dùng", "is_active", YES_NO)],
-    queryset=lambda: Ingredient.objects.select_related("main_supplier").order_by("name"),
+    queryset=lambda: Ingredient.objects.select_related("main_supplier").order_by("name"), prepare_form=_ingredient_form,
+    save=_save_ingredient,
     actions=[ActionDef("ton-dau-ky", "Ghi tồn đầu kỳ", _opening,
                        when=lambda i: not StockMovement.objects.filter(ingredient=i).exists(),
-                       fields={"quantity": forms.DecimalField(label="Tồn đầu kỳ", min_value=0, decimal_places=2),
+                       fields={"quantity": numbers.SoThapPhanField(label="Số lượng đang có", min_value=0,
+                                                                   decimal_places=2),
+                               "expiry_date": forms.DateField(label="Hạn sử dụng trên bao bì", required=False,
+                                                              widget=forms.DateInput(attrs={"type": "date"})),
+                               "unit_cost": numbers.SoNguyenField(label="Giá mua mỗi đơn vị tính (đồng)",
+                                                                  required=False, min_value=0),
                                "note": forms.CharField(label="Ghi chú", required=False)},
-                       help="Chỉ ghi một lần khi bắt đầu dùng hệ thống; sau đó điều chỉnh bằng kiểm kê.")],
+                       help="Hàng đang có trong kho khi bắt đầu dùng hệ thống, ghi theo đơn vị tính của nguyên liệu "
+                            "(gram, ml, cái…). Chỉ ghi một lần; sau đó điều chỉnh bằng kiểm kê. Không rõ hạn thì để "
+                            "trống, lô sẽ ghi là chưa rõ hạn. Giá mua dùng để tính giá trị tồn kho; để trống thì "
+                            "lấy theo giá của lần nhập hàng gần nhất.")],
 ))
 
 
@@ -255,7 +351,8 @@ register(Resource(
                   help="Sau khi áp dụng, phiên bản này không sửa được; muốn đổi thì tạo bản nháp mới."),
         ActionDef("tao-ban-nhap", "Tạo bản nháp mới từ phiên bản này", _copy, when=lambda v: v.is_published),
     ],
-    note="Mỗi dòng chọn đúng một: kích cỡ hoặc tùy chọn.",
+    note="Lượng nguyên liệu cho một ly theo kích cỡ, cộng thêm khi khách chọn tùy chọn. Mỗi dòng chọn đúng một: "
+         "kích cỡ hoặc tùy chọn.",
 ))
 
 
@@ -333,9 +430,9 @@ def _season_resource():
         search=("basis", "ingredient__name"), filters=[("dang-ap-dung", "Đang áp dụng", "is_active", YES_NO)],
         queryset=lambda: SeasonalAdjustment.objects.select_related("ingredient", "created_by").order_by("-start"),
         save=_save_season,
-        note="Dùng khi Chủ quán biết trước nhu cầu sẽ đổi theo mùa (ví dụ sinh viên nghỉ hè) mà mô hình chưa học được. "
-             "Bắt buộc ghi căn cứ; số liệu giả định không phải căn cứ. Mức thay đổi tính so với nền ngoài mùa; phần mô "
-             "hình đã học được trừ đi. Điều chỉnh riêng một nguyên liệu thay thế điều chỉnh chung.",
+        note="Dùng khi Chủ quán biết trước nhu cầu sẽ đổi theo mùa (ví dụ sinh viên nghỉ hè) mà số bán gần đây chưa "
+             "cho thấy. Bắt buộc ghi căn cứ; số liệu giả định không phải căn cứ. Điều chỉnh riêng một nguyên liệu thay "
+             "thế điều chỉnh chung.",
     )
 
 

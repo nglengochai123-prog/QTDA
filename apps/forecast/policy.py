@@ -31,7 +31,7 @@ WEEKDAYS = ["thứ Hai", "thứ Ba", "thứ Tư", "thứ Năm", "thứ Sáu", "t
 EPOCH = date(2026, 1, 5)
 
 BUY, TOP_UP, EXPEDITE, NONE, NO_DATA = "mua", "mua_bo_sung", "thuc_giao", "khong_can", "thieu_du_lieu"
-ACTION_LABELS = {BUY: "Mua", TOP_UP: "Mua bổ sung", EXPEDITE: "Thúc giao", NONE: "Không cần mua",
+ACTION_LABELS = {BUY: "Mua", TOP_UP: "Mua bổ sung", EXPEDITE: "Thúc giao", NONE: "Chưa cần mua",
                  NO_DATA: "Chưa đủ dữ liệu"}
 
 

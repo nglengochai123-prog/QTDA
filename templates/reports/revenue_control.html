@@ -2,37 +2,53 @@
 {% load humanize %}
 {% block title %}Báo cáo kiểm soát doanh thu · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><h1>Báo cáo kiểm soát doanh thu</h1></header>
-<form method="get" class="inline-form" aria-label="Chọn kỳ">
-  <label for="p-from">Từ</label><input class="input input-sm" id="p-from" type="date" name="tu" value="{{ start|date:'Y-m-d' }}">
-  <label for="p-to">đến</label><input class="input input-sm" id="p-to" type="date" name="den" value="{{ end|date:'Y-m-d' }}">
-  <button class="btn btn-quiet" type="submit">Xem</button>
-</form>
-<section class="panel" aria-labelledby="c-title">
-  <h2 id="c-title">Giá trị kiểm soát tạm tính tháng {{ start|date:"m/Y" }}</h2>
-  <dl class="figure-grid">
-    <div class="figure-key"><dt>Giá trị kiểm soát tạm tính</dt><dd>{{ control.control_value|intcomma }} đ</dd></div>
-    <div><dt>Mục tiêu BO-01</dt><dd class="dd-text">dưới {{ target|intcomma }} đ · {% if met %}đạt{% else %}<span class="text-warn">chưa đạt</span>{% endif %}</dd></div>
-    <div><dt>Tổn thất đã xác minh</dt><dd>{{ control.verified|intcomma }} đ</dd></div>
-    <div><dt>Thiếu tiền đang xử lý</dt><dd>{{ control.in_process|intcomma }} đ</dd></div>
-    <div><dt>Đã thu hồi</dt><dd>{{ control.recovered|intcomma }} đ</dd></div>
-    <div><dt>Đã xác minh còn lại</dt><dd>{{ control.verified_remaining|intcomma }} đ</dd></div>
-  </dl>
-  <details class="help-tip"><summary>Giải thích</summary><p>Cập nhật {{ control.updated_at|date:"H:i d/m" }} · {{ control.open_cases }} vụ việc chưa kết luận. Khoản thiếu khi được xác minh chuyển nhóm và chỉ tính một lần. Hành vi không gây mất tiền và chênh lệch tiêu hao chưa xác minh không cộng vào chỉ tiêu.</p></details>
+<header class="page-head"><div><h1>Báo cáo kiểm soát doanh thu</h1><p class="page-sub">{{ start|date:"d/m/Y" }} – {{ end|date:"d/m/Y" }}. Tiền thất thoát của tháng, chênh lệch tiền theo ca, yêu cầu điều chỉnh và ngoại lệ trong kỳ.</p></div></header>
+{% include "reports/_period.html" %}
+
+<section class="card" aria-labelledby="c-title">
+  <div class="card-head"><div><h2 id="c-title">Giá trị kiểm soát tạm tính tháng {{ start|date:"m/Y" }}</h2><p class="card-sub">Tổn thất đã xác minh cộng thiếu tiền đang xử lý; mỗi khoản chỉ tính một lần. Cập nhật {{ control.updated_at|date:"H:i d/m" }}{% if control.open_cases %}, còn {{ control.open_cases }} vụ việc chưa kết luận{% endif %}.</p></div>
+    <span class="pill pill-{% if met %}ok{% else %}warn{% endif %}">{% if met %}Đạt mục tiêu{% else %}Chưa đạt mục tiêu{% endif %}</span></div>
+  <div class="mini-stats">
+    <div class="mini-stat{% if not met %} is-warn{% endif %}"><span>Giá trị kiểm soát tạm tính</span><strong>{{ control.control_value|intcomma }} đ</strong><small>Mục tiêu dưới {{ target|intcomma }} đ</small></div>
+    <div class="mini-stat"><span>Tổn thất đã xác minh</span><strong>{{ control.verified|intcomma }} đ</strong></div>
+    <div class="mini-stat"><span>Thiếu tiền đang xử lý</span><strong>{{ control.in_process|intcomma }} đ</strong></div>
+    <div class="mini-stat"><span>Đã thu hồi</span><strong>{{ control.recovered|intcomma }} đ</strong><small>Đã xác minh còn lại {{ control.verified_remaining|intcomma }} đ</small></div>
+  </div>
 </section>
-<section class="panel" aria-labelledby="cases-title"><h2 id="cases-title">Vụ việc tổn thất</h2>
-  {% if cases %}<ul class="ruled-list compact">{% for c in cases %}<li class="row-between"><span><a href="{% url 'control:case_detail' c.pk %}">{{ c.code }}</a> · {{ c.title }} · {{ c.get_status_display }}</span><span>xác minh {{ c.verified_amount|default_if_none:"–"|intcomma }} đ · thu hồi {{ c.recovered_amount|intcomma }} đ</span></li>{% endfor %}</ul>
-  {% else %}<p class="muted">Không có vụ việc trong kỳ.</p>{% endif %}</section>
-<section class="panel" aria-labelledby="d-title"><h2 id="d-title">Chênh lệch tiền theo ca</h2>
-  {% if discrepancies %}<div class="table-wrap"><table class="data-table"><thead><tr><th scope="col">Ca</th><th scope="col">Phương thức</th><th scope="col">Người chịu trách nhiệm</th><th scope="col" class="num">Chênh lệch</th><th scope="col">Tình trạng</th></tr></thead>
-  <tbody>{% for d in discrepancies %}<tr><th scope="row"><a href="{% url 'shifts:my_shift_detail' d.shift_id %}">{{ d.shift }}</a></th><td>{{ d.get_method_display }}</td><td>{{ d.manager }}</td><td class="num">{{ d.difference|intcomma }} đ</td><td>{% if d.decision %}{{ d.get_decision_display }}{% elif d.explanation %}Đã giải trình{% else %}Chưa giải thích{% endif %}{% if d.over_threshold %} · vượt ngưỡng{% endif %}</td></tr>{% endfor %}</tbody></table></div>
-  {% else %}<p class="muted">Không có chênh lệch trong kỳ.</p>{% endif %}
-  {% if accumulated %}<h3>Thiếu chưa giải thích tích lũy tháng</h3><ul class="ruled-list compact">{% for r in accumulated %}<li class="row-between"><span>{{ r.manager }} · {{ r.shift_type }}</span><span>{{ r.total|intcomma }} đ</span></li>{% endfor %}</ul>{% endif %}
+
+<section class="card" aria-labelledby="d-title">
+  <div class="card-head"><h2 id="d-title">Chênh lệch tiền theo ca</h2></div>
+  {% if discrepancies %}<div class="table-wrap"><table class="data-table table-stack"><thead><tr><th scope="col">Ca</th><th scope="col">Phương thức</th><th scope="col">Người phụ trách ca</th><th scope="col" class="num">Chênh lệch</th><th scope="col">Tình trạng</th></tr></thead>
+  <tbody>{% for d in discrepancies %}<tr><th scope="row"><a href="{% url 'shifts:my_shift_detail' d.shift_id %}">{{ d.shift }}</a></th><td data-label="Phương thức">{{ d.get_method_display }}</td><td data-label="Người phụ trách ca">{{ d.manager }}</td><td class="num" data-label="Chênh lệch">{{ d.difference|intcomma }} đ</td><td data-label="Tình trạng">{% if d.decision %}{{ d.get_decision_display }}{% elif d.explanation %}Đã giải trình{% else %}<span class="pill pill-warn">Chưa giải thích</span>{% endif %}{% if d.over_threshold %} <span class="pill pill-danger">Vượt ngưỡng</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="empty-cell">Không có chênh lệch trong kỳ.</p>{% endif %}
+  {% if accumulated %}<div class="card-body rc-acc"><h3 class="card-h3">Thiếu chưa giải thích cộng dồn tháng {{ start|date:"m/Y" }}</h3>
+    <ul class="row-list">{% for r in accumulated %}<li><span class="row-main">{{ r.manager }}<small>{{ r.shift_type }}</small></span><span class="num-cell">{{ r.total|intcomma }} đ</span></li>{% endfor %}</ul></div>{% endif %}
 </section>
-<div class="form-grid">
-<section class="panel" aria-labelledby="r-title"><h2 id="r-title">Yêu cầu điều chỉnh ({{ requests_total }})</h2>
-  {% if by_reason %}<ul class="ruled-list compact">{% for r in by_reason %}<li class="row-between"><span>{{ r.reason__name }} · {{ r.status_label }}</span><span>{{ r.n }}</span></li>{% endfor %}</ul>{% else %}<p class="muted">Không có.</p>{% endif %}</section>
-<section class="panel" aria-labelledby="e-title"><h2 id="e-title">Ngoại lệ theo nguồn và kết quả</h2>
-  {% if exceptions %}<ul class="ruled-list compact">{% for e in exceptions %}<li class="row-between"><span><a href="{% url 'control:exceptions' %}?trang-thai=tat-ca&amp;loai={{ e.value }}&amp;tu={{ start|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}">{{ e.kind }}</a> · {{ e.result }}</span><span>{{ e.n }}</span></li>{% endfor %}</ul>{% else %}<p class="muted">Không có.</p>{% endif %}</section>
+
+<section class="card" aria-labelledby="cases-title">
+  <div class="card-head"><h2 id="cases-title">Vụ việc tổn thất lập trong kỳ</h2><a class="btn btn-quiet btn-sm" href="{% url 'control:cases' %}">Mọi vụ việc</a></div>
+  {% if cases %}<ul class="row-list exc-list">{% for c in cases %}<li><a href="{% url 'control:case_detail' c.pk %}">
+    <span class="row-day">{{ c.created_at|date:"d/m" }}<small>{{ c.code }}</small></span>
+    <span class="row-main"><strong>{{ c.title }}</strong><small>{% if c.verified_amount is not None %}Xác minh {{ c.verified_amount|intcomma }} đ{% else %}Chưa xác minh{% endif %} · thu hồi {{ c.recovered_amount|intcomma }} đ</small></span>
+    <span class="exc-meta"><span class="pill pill-{% if c.status == 'da_ket_luan' %}ok{% else %}warn{% endif %}">{{ c.get_status_display }}</span></span>
+    <svg class="icon row-go" aria-hidden="true"><use href="#i-chevron"/></svg></a></li>{% endfor %}</ul>
+  {% else %}<p class="empty-cell">Không có vụ việc lập trong kỳ.</p>{% endif %}
+</section>
+
+<div class="grid-2">
+<section class="card" aria-labelledby="r-title">
+  <div class="card-head"><h2 id="r-title">Yêu cầu điều chỉnh <span class="seg-count">{{ requests_total }}</span></h2></div>
+  {% if by_reason %}<ul class="row-list">{% for r in by_reason %}<li><span class="row-main">{{ r.reason__name }}</span>
+    <span class="pill pill-{% if r.status == 'da_duyet' %}ok{% elif r.status == 'tu_choi' %}danger{% else %}neutral{% endif %}">{{ r.status_label }}</span><span class="num-cell rc-n">{{ r.n }}</span></li>{% endfor %}</ul>
+  {% else %}<p class="empty-cell">Không có yêu cầu trong kỳ.</p>{% endif %}
+</section>
+<section class="card" aria-labelledby="e-title">
+  <div class="card-head"><h2 id="e-title">Ngoại lệ theo loại và kết quả</h2></div>
+  {% if exceptions %}<ul class="row-list exc-list no-day">{% for e in exceptions %}<li><a href="{% url 'control:exceptions' %}?trang-thai=tat-ca&amp;loai={{ e.value }}&amp;tu={{ start|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}">
+    <span class="row-main">{{ e.kind }}</span>
+    <span class="exc-meta"><span class="pill pill-{% if e.result == 'Vi phạm' %}danger{% elif e.result == 'Nhắc nhở' %}warn{% elif e.result == 'Hợp lệ' %}ok{% else %}neutral{% endif %}">{{ e.result }}</span><span class="num-cell rc-n">{{ e.n }}</span></span>
+    <svg class="icon row-go" aria-hidden="true"><use href="#i-chevron"/></svg></a></li>{% endfor %}</ul>
+  {% else %}<p class="empty-cell">Không có ngoại lệ trong kỳ.</p>{% endif %}
+</section>
 </div>
 {% endblock %}

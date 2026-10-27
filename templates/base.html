@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="{% static 'css/app.css' %}">
   {% block head %}{% endblock %}
 </head>
-<body class="{% block body_class %}{% endblock %}" data-sw-url="{% url 'core:service_worker' %}" data-health-url="{% url 'core:healthz' %}"{% if READY_COUNT_URL %} data-ready-count-url="{{ READY_COUNT_URL }}"{% endif %}{% if APPROVALS_COUNT_URL %} data-approvals-count-url="{{ APPROVALS_COUNT_URL }}"{% endif %}{% if QUICK_REPORT_COUNT_URL %} data-quick-report-count-url="{{ QUICK_REPORT_COUNT_URL }}"{% endif %}>
+<body class="{% block body_class %}{% endblock %}"{% if user.is_authenticated %} data-user="{{ user.pk }}" data-push-url="{% url 'core:push_subscribe' %}" data-push-off-url="{% url 'core:push_unsubscribe' %}"{% endif %} data-sw-url="{% url 'core:service_worker' %}" data-health-url="{% url 'core:healthz' %}"{% if READY_COUNT_URL %} data-ready-count-url="{{ READY_COUNT_URL }}"{% endif %}{% if APPROVALS_COUNT_URL %} data-approvals-count-url="{{ APPROVALS_COUNT_URL }}"{% endif %}{% if QUICK_REPORT_COUNT_URL %} data-quick-report-count-url="{{ QUICK_REPORT_COUNT_URL }}"{% endif %}>
   {% include "partials/icons.html" %}
   {% block shell %}
   <div class="shell">
@@ -25,9 +25,10 @@
       <details class="account">
         <summary aria-label="Tài khoản của tôi"><span class="account-btn"><span class="account-name">{{ user.given_name|default:user.username }}</span><svg class="icon account-caret" aria-hidden="true"><use href="#i-chevron"/></svg></span><span class="avatar" aria-hidden="true">{{ HEADER.initial }}</span></summary>
         <div class="account-menu">
-          <p class="account-who"><strong>{{ user }}</strong><span>{{ user.get_role_display }}</span></p>
+          <p class="account-who"><strong>{{ user }}</strong><span>{{ user.roles_display }}</span></p>
+          <a href="{% url 'accounts:password_change' %}">Đổi mật khẩu</a>
           <a href="{% url 'core:data_notice' %}">Thông báo xử lý dữ liệu</a>
-          <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button type="submit">Đăng xuất</button></form>
+          <form method="post" action="{% url 'accounts:logout' %}" data-logout>{% csrf_token %}<button type="submit">Đăng xuất</button></form>
         </div>
       </details>
     </div>

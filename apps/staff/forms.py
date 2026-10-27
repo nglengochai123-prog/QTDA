@@ -1,6 +1,7 @@
 from django import forms
 
-from apps.accounts.models import ACTIVE_ROLES, Role, User
+from apps.accounts.models import ACTIVE_ROLES, User
+from apps.core import numbers
 
 from .models import Employee
 
@@ -14,6 +15,12 @@ class EmployeeForm(forms.ModelForm):
     class Meta:
         model = Employee
         fields = ["full_name", "phone", "roles", "hourly_wage", "status"]
+        formfield_callback = numbers.formfield
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:  # hiện đúng các vai trò đang có hiệu lực
+            self.initial["roles"] = self.instance.effective_roles()
 
     def clean_username(self):
         username = self.cleaned_data.get("username")

@@ -8,11 +8,11 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.accounts.models import Role, User
+from apps.accounts.models import Role
 from apps.catalog.models import ItemSize, MenuGroup, MenuItem
 from apps.core import periodic
 from apps.orders.models import Order, OrderLine
-from apps.orders.tests.helpers import PASSWORD, build_menu
+from apps.orders.tests.helpers import build_menu
 from apps.orders.workload import day_frames
 from apps.staff import timekeeping
 from apps.staff.models import Attendance
@@ -64,9 +64,27 @@ class AttendanceTests(TestCase):
             timekeeping.supplement_clock_out(self.owner, att.pk, at(self.yesterday, 22), "")
         with self.assertRaises(ValidationError):
             timekeeping.supplement_clock_out(self.barista, att.pk, at(self.yesterday, 22), "Quên")
+        older = Attendance.objects.create(store=self.d["store"], user=self.owner, role=Role.PHA_CHE,
+                                          clock_in=at(self.yesterday - timedelta(days=2), 17))
+        with self.assertRaisesMessage(ValidationError, "kiểm tra lại ngày giờ ra"):  # chọn nhầm sang ngày sau
+            timekeeping.supplement_clock_out(self.owner, older.pk, at(self.yesterday - timedelta(days=1), 22), "Quên")
         att = timekeeping.supplement_clock_out(self.owner, att.pk, at(self.yesterday, 22), "Quên thao tác")
         self.assertEqual(timekeeping.valid_hours(att), Decimal("5.00"))
-        self.assertFalse(timekeeping.missing_clock_out().exists())
+        self.assertEqual(list(timekeeping.missing_clock_out()), [older])
+
+
+    def test_clock_out_from_page_left_open_overnight_is_refused(self):
+        att = Attendance.objects.create(store=self.d["store"], user=self.barista, role=Role.PHA_CHE,
+                                        clock_in=timezone.now() - timedelta(hours=20))
+        with self.assertRaisesMessage(ValidationError, "báo Chủ quán bổ sung giờ ra"):
+            timekeeping.clock_out(self.barista, key())
+        att.refresh_from_db()
+        self.assertIsNone(att.clock_out)  # không tính 20 giờ vào giờ công
+        att.clock_in = timezone.now() - timedelta(hours=9)
+        att.save()
+        timekeeping.clock_out(self.barista, key())
+        att.refresh_from_db()
+        self.assertIsNotNone(att.clock_out)
 
 
 class WorkloadTests(TestCase):
@@ -92,3 +110,16 @@ class WorkloadTests(TestCase):
         self.assertEqual(frame["load"], Decimal("48.0"))
         self.assertEqual(frame["median_wait"], Decimal("14.0"))
         self.assertTrue(frame["overloaded"])
+
+    def test_waiting_cup_left_overnight_is_not_load_after_closing(self):
+        d = build_menu()
+        day = timezone.localdate() - timedelta(days=2)
+        order = Order.objects.create(store=d["store"], code=key()[:12], table=d["table"], created_by=d["waiter"],
+                                     operation_key=key(), total=10000)
+        Order.objects.filter(pk=order.pk).update(created_at=at(day, 21, 50))
+        size = ItemSize.objects.first()
+        OrderLine.objects.create(order=order, position=1, item=size.item, size=size, item_name="Món", size_name="M",
+                                 unit_price=10000, quantity=1)
+        hours = [timezone.localtime(f["start"]).hour for f in day_frames(day + timedelta(days=1))["frames"]]
+        self.assertTrue(hours)
+        self.assertTrue(all(6 <= h < 22 for h in hours), hours)  # ly chờ từ tối trước không tạo khung lúc 0–5 giờ

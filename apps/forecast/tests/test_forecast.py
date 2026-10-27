@@ -114,7 +114,7 @@ class ServiceTests(ForecastBase):
         s = rel.series.get(size=self.size)
         self.assertEqual(s.method, MethodDecision.Method.OWNER)
         self.assertEqual((s.eligible_days, s.flagged_days), (26, 1))  # ngày đóng cửa và ngày thiếu hàng không học
-        self.assertTrue(any("ngày dữ liệu" in x for x in s.limitations))
+        self.assertTrue(any("ngày bán dùng được" in x for x in s.limitations))
         self.assertIn("owner", s.daily[0])
         self.assertLessEqual(s.totals["7"]["q10"], s.totals["7"]["mean"])
         milk_fc = rel.ingredients.get(ingredient=self.d["milk"])

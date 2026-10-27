@@ -4,6 +4,7 @@
 <p><a href="{% url 'inventory:stock' %}">‹ Tồn kho</a></p>
 <h1>Báo nhanh nguyên liệu</h1>
 <p class="lead-muted">Chạm Sắp hết hoặc Đã hết ở đúng nguyên liệu. Ghi lượng còn lại nếu ước được.</p>
+{% include "partials/missing_setup.html" %}
 <ul class="ruled-list">
   {% for i in ingredients %}
   <li class="qr-row">
