@@ -229,6 +229,18 @@ Cơ sở dữ liệu mới nhập thực đơn LAM có thể tạo sẵn bán th
 
 Thuật toán và tham số dự báo không hiện trên giao diện; muốn chỉnh thì sửa `apps/core/params.py` rồi khởi động lại. Bản mô tả mô hình cho Chủ quán: tài liệu "Mô hình dự báo và mua nguyên liệu LAM Coffee".
 
+## 5c. Cập nhật lên bản thu tiền trước khi pha chế (29/10/2026)
+
+Bản này thêm hai migration: `orders 0010_prepaid_flow` (lúc và người hoàn tất đơn, tiền khách đưa, loại thanh toán Thu trước và Thu thêm, bảng khoản thu thêm) và `shifts 0008_refund_kind` (loại khoản hoàn). Chỉ thêm cột và bảng; đơn, khoản thu và khoản hoàn cũ giữ nguyên (khoản hoàn cũ nhận loại "Hủy hóa đơn đã thanh toán"). Sao lưu trước rồi mới chạy:
+
+```powershell
+.venv\Scripts\python.exe manage.py sao_luu
+.venv\Scripts\python.exe manage.py migrate
+.venv\Scripts\python.exe manage.py kiem_tra_toan_ven
+```
+
+Đang dùng CSDL khác `db.sqlite3` (ví dụ dữ liệu nghiệm thu) thì đặt `$env:SQLITE_NAME = "nghiem_thu.sqlite3"` trước các lệnh trên. Thu ngân muốn thu trước phải đang trong ca với vai trò Thu ngân (bấm Vào ca, chọn Thu ngân) hoặc có lịch phân công Thu ngân đang diễn ra; Chủ quán luôn thu trước được.
+
 ## 6. Sao lưu và phục hồi (NFR-09)
 
 Yêu cầu: tự động hằng ngày ra nơi lưu trữ ngoài máy chủ, giữ tối thiểu 30 bản, mất dữ liệu tối đa 24 giờ, phục hồi không quá 4 giờ.

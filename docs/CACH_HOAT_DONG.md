@@ -126,7 +126,9 @@ Liệt kê món đã pha xong kèm số bàn. Bấm **Đã mang ra** để chuy�
 
 ### 4.4. Vòng đời đơn
 
-Trạng thái đơn được suy ra từ các dòng: còn dòng chờ pha → *Đã gửi pha chế*; mọi dòng đã pha hoặc đã mang → *Đã pha chế*; mọi dòng đã mang → *Đã phục vụ*; thu tiền → *Đã thanh toán*; mọi dòng bị hủy hoặc hủy hóa đơn → *Đã hủy*. Chỉ đơn Đã phục vụ mới thu tiền được (AC-07).
+Trạng thái đơn được suy ra từ các dòng: còn dòng chờ pha → *Đã gửi pha chế*; mọi dòng đã pha hoặc đã mang → *Đã pha chế*; mọi dòng đã mang → *Đã phục vụ*; thu tiền → *Đã thanh toán*; mọi dòng bị hủy hoặc hủy hóa đơn → *Đã hủy*. Đơn trả sau chỉ thu tiền được khi Đã phục vụ (AC-07).
+
+Đơn **thu trước** (mục 36) có tiền ngay lúc tạo nhưng trạng thái vẫn đi theo các dòng như trên; chỉ khi thu ngân bấm *Giao nước và hoàn tất đơn* thì đơn mới sang *Đã thanh toán*, là trạng thái đóng chung của cả hai luồng. Màn hình hiện riêng hai thứ: tình trạng tiền (Chưa thu tiền, Đã thu trước, Đã thanh toán) và tiến độ (Chờ pha chế, Đang pha xong x/y ly, Đã pha xong chờ giao, Đã giao hoàn tất).
 
 ### 4.5. Tra cứu đơn — `/don/tra-cuu/`, `/don/<id>/`
 
@@ -161,6 +163,8 @@ Quy tắc:
 
 **Thu tiền cả bàn:** chọn Tiền mặt hoặc Chuyển khoản. Chuyển khoản chỉ bấm được khi đánh dấu "đã thấy tiền về" (AC-08). Máy chủ kiểm tra lại mọi điều kiện, ghi một bản ghi thanh toán gắn **ca đang giữ quỹ** (mục 3), chuyển các đơn sang Đã thanh toán. Gửi lại cùng mã không thu hai lần.
 
+**Thu tiền trước khi pha chế:** chọn *Thanh toán ngay* ở màn Tạo đơn; xem mục 36. Đơn đã thu trước không hiện trong phần thu theo bàn mà ở mục *Đơn đã thu trước* trên cùng màn Thu ngân.
+
 **Thanh toán theo món thực nhận (AC-10):** khi một yêu cầu đổi món đã quá hạn mọi cấp mà khách đã nhận món thay thế, chỉ *người được ủy quyền của ca* (không phải người tạo yêu cầu) mới bấm được. Hệ thống áp dụng yêu cầu như đã duyệt, trừ kho món thay thế ngay (món đã pha thật nên không chặn vì tồn sổ sách), tính tiền theo giá bán, chuyển yêu cầu sang *Chờ hậu kiểm* và tạo ngoại lệ cho Chủ quán.
 
 ## 7. Quỹ tiền ca, kết ca, báo cáo cuối ca, đối soát
@@ -176,7 +180,7 @@ Màn hình **Ca của tôi** (`/ca/`, Thu ngân và Chủ quán).
 
 ### 7.2. Kết ca (FR-08, AC-16)
 
-Bị chặn khi còn: đơn chưa thanh toán; yêu cầu điều chỉnh chờ duyệt; chưa có tiền đầu ca; khoản nộp chưa xác nhận; phiếu dự phòng chưa nhập bù, chưa khai số cuối đã dùng hoặc chờ Chủ quán xác nhận giá. Đơn chưa thanh toán có thể **chuyển sang ca sau** kèm lý do. Kết ca chốt doanh thu tiền mặt và chuyển khoản của ca.
+Bị chặn khi còn: đơn chưa thanh toán; đơn đã thu trước nhưng chưa giao nước và hoàn tất; khoản thu thêm của đơn thu trước chưa thu; yêu cầu điều chỉnh chờ duyệt; chưa có tiền đầu ca; khoản nộp chưa xác nhận; phiếu dự phòng chưa nhập bù, chưa khai số cuối đã dùng hoặc chờ Chủ quán xác nhận giá. Đơn chưa thanh toán có thể **chuyển sang ca sau** kèm lý do. Kết ca chốt doanh thu tiền mặt và chuyển khoản của ca.
 
 ### 7.3. Báo cáo cuối ca và đối soát (FR-08, FR-12, BRU-10)
 
@@ -196,6 +200,8 @@ Chuyển khoản nhận và chuyển khoản hoàn được so riêng. Mọi ch�
 ### 7.4. Hoàn tiền khi hủy hóa đơn đã thu (GD-07)
 
 Hai bước tách biệt: Chủ quán duyệt hủy → khoản hoàn "chờ hoàn tiền" (chưa có tiền ra, chưa gắn ca). Người thu tiền bấm **Đã hoàn tiền** ở trang Ca của tôi → khoản hoàn gắn vào ca đang giữ quỹ lúc đó và được trừ đúng một lần khi đối soát ca ấy. Khoản chờ hoàn không chặn kết ca (GD-16).
+
+Khoản hoàn sinh ra khi đơn **thu trước** được duyệt giảm tiền (loại "Trả lại phần giảm của đơn thu trước") đi đúng hai bước này và hiện cùng danh sách. Quỹ ca trừ khoản này như mọi khoản hoàn; báo cáo doanh thu theo món thì không trừ nữa vì giá trị món của đơn đã giảm theo.
 
 ### 7.5. Tình trạng ca — `/ca/tinh-trang/`
 
@@ -782,3 +788,32 @@ Kế hoạch mua tính thêm dòng tồn "nếu đặt hôm nay đúng số đ�
 Trang Đặt hàng đề xuất (`/du-bao/dat-hang/`) và Đánh giá dự báo (`/du-bao/danh-gia/`) là màn hình cũ, không có trên thanh điều hướng; Kế hoạch mua và Độ chính xác thay cho chúng.
 
 Gửi đơn mà thiếu bán thành phẩm (ví dụ hết cà phê cốt): thông báo ở màn hình Tạo đơn gợi ý "báo pha chế làm thêm mẻ … (Kho › Làm bán thành phẩm) rồi gửi lại" thay cho câu chung "kiểm kê nhanh". Duyệt đổi món thiếu bán thành phẩm cũng nhắc làm thêm mẻ.
+
+## 36. Thu tiền trước khi pha chế (29/10/2026)
+
+Quán có hai luồng song song. **Trả sau** giữ nguyên: Tạo đơn → Pha chế → Phục vụ → Thanh toán ở màn Thu ngân. **Thu trước**: Tạo đơn kèm thu tiền → Pha chế → Xác nhận pha xong → Giao nước và hoàn tất.
+
+**Tạo đơn.** Phiếu order có mục *Thanh toán*: *Thanh toán sau* (mặc định, nút "Gửi đơn") hoặc *Thanh toán ngay* (nút "Thu tiền và gửi pha chế"). Thanh toán ngay chọn Tiền mặt (ô "Tiền khách đưa" không bắt buộc, hiện tiền thừa; đưa thiếu thì không gửi được) hoặc Chuyển khoản (phải đánh dấu "Đã thấy tiền chuyển khoản về tài khoản quán"). Doanh thu luôn là tiền đơn; tiền khách đưa chỉ lưu để đối chiếu tiền thừa. Mục này chỉ hiện với người có quyền Thanh toán. Máy chủ kiểm tra lại mỗi lần gửi: có quyền Thanh toán, có ca đang giữ quỹ, và đang trong ca với vai trò Thu ngân (đã chấm công vào ca Thu ngân, hoặc có lịch phân công Thu ngân đang diễn ra); Chủ quán luôn được. Không đủ điều kiện thì trả 403 và ghi nhật ký từ chối; người đó vẫn gửi được đơn trả sau.
+
+Tạo đơn, giữ nguyên liệu và ghi tiền nằm trong **một giao dịch** cùng mã nghiệp vụ: thiếu nguyên liệu, chưa xác nhận chuyển khoản, tiền đưa thiếu hay bị từ chối quyền thì không có đơn, không giữ kho, không có tiền. Gửi lại cùng mã trả đúng đơn và khoản thu cũ; cùng mã mà đổi cách thanh toán thì bị từ chối.
+
+**Tiền vào quỹ ca lúc thu.** Khoản thu loại *Thu trước khi pha chế* gắn ca đang giữ quỹ, người thu và phương thức tại thời điểm thu, nên vào doanh thu tiền mặt hoặc chuyển khoản của ca đó ngay. Hoàn tất đơn không ghi tiền lần nữa.
+
+**Kho.** Giống đơn trả sau: giữ khi gửi; pha xong thì trừ tồn vật lý và bỏ phần giữ theo định mức đã lưu ở từng dòng; thu tiền không trừ; giao và hoàn tất không trừ. Hủy trước khi pha trả phần giữ; hủy sau pha đi qua phê duyệt và ghi *Hủy sau pha chế* như cũ.
+
+**Quầy pha chế và màn Thu ngân.** Đơn thu trước hiện ở quầy như mọi đơn, có nhãn "Đã thu tiền". Màn Thu ngân có mục *Đơn đã thu trước*: tiền (số đã thu, phương thức, giờ, người thu, tiền khách đưa và tiền thừa), tiến độ, từng món còn chờ pha. Thu ngân đang trong ca được xác nhận *Pha xong* theo số ly (được xác nhận một phần); việc này dùng đúng hàm xác nhận của quầy pha chế nên không trừ kho hai lần, hai người cùng bấm hay bấm lặp không vượt số ly, và nhật ký ghi ai, lúc nào, bao nhiêu ly.
+
+**Giao nước và hoàn tất đơn** chỉ bấm được khi: đã thu đủ, mọi món còn hiệu lực đã pha xong, không có yêu cầu điều chỉnh chờ duyệt, không còn khoản thu thêm hay khoản trả lại chưa xong. Nút chuyển các món đã pha còn lại sang Đã phục vụ (món phục vụ đã mang ra trước thì giữ nguyên người mang) và đóng đơn; không đánh dấu pha xong, không thu tiền, không trừ kho. Bấm lại không đổi gì.
+
+**Điều chỉnh sau khi đã thu.** Vẫn gửi yêu cầu và chờ Chủ quán duyệt như cũ. Khi duyệt, thanh toán gốc giữ nguyên; phần chênh giữa tổng mới và tiền đã thu (tính cả khoản đang chờ) thành:
+
+- Tổng tăng → *khoản thu thêm* chờ thu ở thẻ đơn trên màn Thu ngân. Thu ngân bấm "Đã thu thêm" (chuyển khoản phải đánh dấu đã thấy tiền) → một khoản thu mới loại *Thu thêm* vào ca đang mở lúc thu.
+- Tổng giảm → *khoản hoàn* "chờ hoàn tiền" (mục 7.4). Người thu bấm "Đã hoàn tiền" khi đã trả khách → trừ vào ca đang mở lúc đó.
+
+Đối soát ca: doanh thu ca = mọi khoản thu của ca (thu trước, thu thêm, trả sau); tiền mặt phải có trừ các khoản hoàn tiền mặt đã trả trong ca. Đơn đã hoàn tất mà sau đó hủy hóa đơn thì đi luồng hủy hóa đơn đã thanh toán như cũ.
+
+**Kết ca.** Đơn đã thu trước nhưng chưa giao và hoàn tất chặn kết ca với dòng riêng ("đã thu trước nhưng chưa giao nước và hoàn tất"), hệ thống không tự hoàn tất hộ. Hoàn tất đơn, hoặc chuyển đơn sang ca sau kèm lý do; tiền vẫn thuộc ca đã thu.
+
+**Những chỗ khác đã rà.** Tổng quan ca coi đơn thu trước là bàn có khách, số tiền trên ô bàn chỉ tính phần còn phải thu, có trạng thái "Đã thu trước, chờ hoàn tất". Ngừng dùng bàn bị chặn cả khi bàn còn đơn thu trước chưa xong. Trang Đơn đang mở và chi tiết đơn hiện tình trạng tiền và tiến độ riêng; chi tiết đơn hiện khoản thu thêm, lúc và người hoàn tất. Kiểm tra toàn vẹn thêm: tiền đã thu và chờ thu/hoàn của đơn thu trước phải bằng tổng đơn. Nhập bù phiếu dự phòng cho đơn đã thu trước thì hoàn tất đơn, không thu lần nữa.
+
+Mã: `apps/orders/prepaid.py` (điều kiện được thu trước, ghi tiền, xác nhận pha xong, hoàn tất, khoản chênh), migration `orders 0010_prepaid_flow` và `shifts 0008_refund_kind` (chỉ thêm cột và bảng, dữ liệu cũ giữ nguyên), kiểm thử `apps/orders/tests/test_prepaid.py`.

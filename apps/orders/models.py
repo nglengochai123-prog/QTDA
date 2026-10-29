@@ -38,6 +38,11 @@ class Order(StoreScopedModel):
                               related_name="orders")
     payment = models.ForeignKey("orders.Payment", verbose_name="Thanh toán", on_delete=models.PROTECT,
                                 null=True, blank=True, related_name="orders")
+    # Đơn thu trước khi pha chế: tiền đã thu lúc tạo đơn (payment) nhưng đơn còn mở cho đến khi thu ngân giao nước và
+    # hoàn tất. Hai mốc dưới chỉ ghi khi hoàn tất đơn thu trước; đơn trả sau đóng bằng thanh toán như cũ.
+    completed_at = models.DateTimeField("Hoàn tất lúc", null=True, blank=True)
+    completed_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người hoàn tất",
+                                     on_delete=models.PROTECT, null=True, blank=True, related_name="+")
 
     class Meta:
         verbose_name = "Đơn hàng"
@@ -79,6 +84,45 @@ class Order(StoreScopedModel):
 
     def pending_request(self):
         return self.adjustment_requests.filter(status=AdjustmentRequest.Status.PENDING).first()
+
+    @property
+    def is_prepaid(self):
+        """Đơn đã thu tiền ngay lúc tạo, trước khi pha chế."""
+        return self.payment_id is not None and self.payment.kind == Payment.Kind.PREPAID
+
+    @property
+    def is_open(self):
+        return self.status not in (self.Status.PAID, self.Status.CANCELLED)
+
+    def payment_label(self):
+        """Tình trạng tiền, tách khỏi tiến độ pha chế để màn hình hiện riêng hai thứ."""
+        if self.payment_id is None:
+            return "Đã hủy" if self.status == self.Status.CANCELLED else "Chưa thu tiền"
+        if self.is_prepaid:
+            return "Đã thu trước" if self.is_open else "Đã thu trước, đã hoàn tất"
+        return "Đã thanh toán"
+
+    def progress(self):
+        """Tiến độ theo số ly: (đã pha, phải pha, đã mang ra), không tính ly đã hủy."""
+        lines = [l for l in self.lines.all() if l.status != OrderLine.Status.CANCELLED]
+        made = sum(l.quantity - l.cancelled_quantity for l in lines)
+        done = sum(l.done_quantity for l in lines)
+        served = sum(l.quantity - l.cancelled_quantity for l in lines if l.status == OrderLine.Status.SERVED)
+        return {"done": done, "total": made, "served": served, "waiting": made - done, "to_deliver": made - served}
+
+    def progress_label(self):
+        if self.status == self.Status.CANCELLED:
+            return "Đã hủy"
+        if self.status == self.Status.PAID:
+            return "Đã giao, hoàn tất" if self.is_prepaid else "Đã phục vụ"
+        p = self.progress()
+        if p["waiting"] and p["done"]:
+            return f"Đang pha, xong {p['done']}/{p['total']} ly"
+        if p["waiting"]:
+            return "Chờ pha chế"
+        if p["to_deliver"]:
+            return "Đã pha xong, chờ giao" if self.is_prepaid else "Đã pha xong, chờ mang ra"
+        return "Đã mang ra, chờ hoàn tất" if self.is_prepaid else "Đã phục vụ"
 
 
 class OrderLine(TimeStampedModel):
@@ -327,6 +371,8 @@ class Payment(StoreScopedModel):
     class Kind(models.TextChoices):
         NORMAL = "thuong", "Thanh toán thường"
         RECEIVED_ITEMS = "mon_thuc_nhan", "Thanh toán theo món thực nhận"
+        PREPAID = "tra_truoc", "Thu trước khi pha chế"
+        EXTRA = "thu_them", "Thu thêm sau điều chỉnh đơn thu trước"
 
     class Status(models.TextChoices):
         VALID = "hop_le", "Hợp lệ"
@@ -342,6 +388,8 @@ class Payment(StoreScopedModel):
                               related_name="payments")
     status = models.CharField("Trạng thái", max_length=20, choices=Status.choices, default=Status.VALID)
     operation_key = models.CharField("Mã nghiệp vụ", max_length=64, unique=True)
+    # Chỉ để in tiền thừa và đối chiếu khi khách trả tiền mặt; doanh thu luôn là `amount`.
+    cash_received = models.PositiveIntegerField("Tiền khách đưa (đồng)", null=True, blank=True)
 
     class Meta:
         verbose_name = "Thanh toán"
@@ -351,6 +399,40 @@ class Payment(StoreScopedModel):
     def __str__(self):
         return f"{self.get_method_display()} {self.amount:,} đ · {self.table}".replace(",", ".")
 
+
+    @property
+    def change_due(self):
+        return self.cash_received - self.amount if self.cash_received is not None else None
+
+
+class PrepaidCharge(StoreScopedModel):
+    """Khoản phải thu thêm khi đơn đã thu trước được duyệt điều chỉnh làm tổng tiền tăng.
+
+    Thanh toán gốc không sửa. Khoản này chờ thu; thu ngân thu xong thì ghi một thanh toán mới loại Thu thêm vào ca
+    đang mở lúc thu. Khoản giảm thì ghi hoàn tiền (shifts.Refund) như hủy hóa đơn, cũng hai bước."""
+
+    class Status(models.TextChoices):
+        PENDING = "cho_thu", "Chờ thu thêm"
+        COLLECTED = "da_thu", "Đã thu thêm"
+
+    order = models.ForeignKey(Order, verbose_name="Đơn", on_delete=models.PROTECT, related_name="prepaid_charges")
+    request = models.OneToOneField(AdjustmentRequest, verbose_name="Yêu cầu điều chỉnh", on_delete=models.PROTECT,
+                                   related_name="prepaid_charge")
+    amount = models.PositiveIntegerField("Số tiền (đồng)")
+    status = models.CharField("Trạng thái", max_length=10, choices=Status.choices, default=Status.PENDING)
+    payment = models.OneToOneField(Payment, verbose_name="Thanh toán thu thêm", on_delete=models.PROTECT, null=True,
+                                   blank=True, related_name="prepaid_charge")
+    collected_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người thu thêm", on_delete=models.PROTECT,
+                                     null=True, blank=True, related_name="+")
+    collected_at = models.DateTimeField("Thu thêm lúc", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Khoản thu thêm của đơn thu trước"
+        verbose_name_plural = "Khoản thu thêm của đơn thu trước"
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"Thu thêm {self.amount:,} đ · đơn {self.order.code}".replace(",", ".")
 
 
 class BackupSlipRange(StoreScopedModel):

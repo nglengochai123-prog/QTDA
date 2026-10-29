@@ -9,8 +9,9 @@
   <article class="open-order" aria-labelledby="o-{{ order.pk }}">
     <header class="open-order-head">
       <h2 id="o-{{ order.pk }}"><span class="bar-code-sm">{{ order.code }}</span> Bàn {{ order.table.code }}</h2>
-      <span class="chip">{{ order.get_status_display }}</span>
+      <span class="chip">{{ order.progress_label }}</span>
     </header>
+    <p class="open-order-pay"><span class="pill {% if order.payment_id %}pill-ok{% else %}pill-neutral{% endif %}">{{ order.payment_label }}</span>{% if order.is_prepaid %} <span class="muted">{{ order.payment.get_method_display|lower }} {{ order.payment.created_at|date:"H:i" }} · giao nước và hoàn tất ở màn Thu ngân</span>{% endif %}</p>
     <ul class="open-order-lines">
       {% for line in order.lines.all %}
       <li class="{% if line.status == 'da_huy' %}is-void{% endif %}">

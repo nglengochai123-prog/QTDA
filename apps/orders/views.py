@@ -70,9 +70,16 @@ def _menu_data():
 @capability_required(Cap.ORDER_CREATE)
 @require_GET
 def create(request):
+    from apps.accounts.permissions import user_can
+
+    from .prepaid import duty_problem
+
     tables = [{"id": t.pk, "code": t.code, "area": t.area} for t in Table.objects.filter(is_active=True)]
+    can_pay = user_can(request.user, Cap.PAYMENT)
     return render(request, "orders/create.html", {
         "menu": _menu_data(), "tables": tables, "operation_key": uuid.uuid4().hex, "stock": _available_map(),
+        # Chỉ người có quyền thu tiền thấy lựa chọn Thanh toán ngay; máy chủ vẫn kiểm tra lại khi gửi.
+        "can_prepay": can_pay, "prepay_problem": duty_problem(request.user) if can_pay else "",
     })
 
 
@@ -90,8 +97,14 @@ def submit(request):
         body = json.loads(request.body.decode("utf-8"))
     except (ValueError, UnicodeDecodeError):
         return JsonResponse({"ok": False, "error": "Dữ liệu gửi lên không đọc được."}, status=400)
+    from .prepaid import PrepayDenied, log_denied
+
     try:
         result, repeated = services.submit_order(request.user, body.get("operation_key", ""), body.get("order") or {})
+    except PrepayDenied as error:
+        log_denied(request, error)
+        return JsonResponse({"ok": False, "error": str(error) or "Bạn không được thu tiền trước.",
+                             "denied": True}, status=403)
     except InsufficientStock as error:
         return JsonResponse({"ok": False, "shortages": error.shortages, "lines": getattr(error, "lines", []),
                              "error": "Không đủ nguyên liệu cho cả đơn nên chưa nhận đơn."}, status=409)

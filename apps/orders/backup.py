@@ -220,6 +220,11 @@ def _complete_existing(order, user, clean, shift, operation_key):
     if order.payment_id is None and order.status != Order.Status.CANCELLED:
         _pay(order, user, clean["method"], order.shift or shift, operation_key)
         filled.append("thanh toán")
+    elif order.is_prepaid and order.status == Order.Status.SERVED:
+        # Đơn đã thu trước lúc tạo: phiếu dự phòng xác nhận đã giao, nên hoàn tất đơn, không thu thêm lần nữa.
+        order.status, order.completed_at, order.completed_by = Order.Status.PAID, now, user
+        order.save(update_fields=["status", "completed_at", "completed_by", "updated_at"])
+        filled.append("hoàn tất đơn đã thu trước")
     return filled
 
 

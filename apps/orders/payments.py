@@ -64,6 +64,9 @@ def cashier_signature(bills=None):
     parts = [(b["table"].pk, b["amount"], tuple((o.pk, o.status) for o in b["orders"]), tuple(b["blockers"]))
              for b in bills]
     parts.append(tuple(pending_refunds().values_list("pk", flat=True)))
+    from .prepaid import signature_parts
+
+    parts.append(signature_parts())  # đơn thu trước: pha xong thêm ly, khoản thu thêm, hoàn tất
     return hashlib.sha1(repr(parts).encode()).hexdigest()[:16]
 
 

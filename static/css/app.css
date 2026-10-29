@@ -1780,3 +1780,30 @@ a.chip-btn:hover { text-decoration: none; border-color: var(--border-strong); }
 }
 .semi-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr)); gap: 0.6rem; align-items: end; }
 .semi-form .btn { justify-self: start; }
+
+/* Thu tiền trước khi pha chế: chọn ở phiếu order, theo dõi ở màn Thu ngân. Nền trắng, trạng thái bằng chữ. */
+.pay-choice { border: 0; border-top: 1px solid var(--border-row); margin: 0.5rem 0 0; padding: 0.75rem 0 0; display: grid; gap: 0.6rem; min-width: 0; }
+.pay-choice-title { padding: 0; font-weight: 600; font-size: var(--text-sm); color: var(--fg-2); }
+.pay-choice .seg-pick-block span { min-height: var(--tap); }
+.pay-now { display: grid; gap: 0.6rem; }
+.pay-now[hidden], .pay-cash[hidden], .pay-transfer[hidden] { display: none; }
+.pay-cash .field { margin: 0; }
+.pay-change { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pay-change.is-short { color: var(--danger); }
+.pay-hint { margin: 0; color: var(--fg-3); font-size: var(--text-sm); }
+.prepaid-section { margin: 0 0 1.5rem; }
+.prepaid-section .section-head { margin: 0 0 0.75rem; }
+.prepaid-section .section-head h2 { margin: 0; font-size: var(--text-lg); }
+.prepaid-facts { margin: 0.5rem 0; display: grid; gap: 0.35rem; }
+.prepaid-facts > div { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); gap: 0.5rem; align-items: baseline; }
+.prepaid-facts dt { color: var(--fg-3); font-size: var(--text-sm); }
+.prepaid-facts dd { margin: 0; }
+.prepaid-lines li { flex-wrap: wrap; }
+.prepaid-line-name { flex: 1 1 12rem; min-width: 0; }
+.prepaid-done { margin-left: auto; display: inline-flex; gap: 0.4rem; align-items: center; }
+.prepaid-done .input-xs { width: 4rem; min-height: var(--tap); }
+.prepaid-charge { display: grid; gap: 0.5rem; padding: 0.6rem 0; border-top: 1px solid var(--border-row); }
+.prepaid-charge p { margin: 0; }
+.prepaid-complete { margin-top: 0.6rem; }
+.open-order-pay, .bar-paid { margin: 0.35rem 0 0; }
+.prepaid-line-name .cell-sub { display: block; color: var(--fg-3); font-size: var(--text-sm); }

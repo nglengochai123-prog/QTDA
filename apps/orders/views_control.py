@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from apps.accounts.permissions import Cap, capability_required, user_can
@@ -15,7 +16,7 @@ from apps.core import numbers
 from apps.core.idempotency import OperationKeyError
 
 from . import adjustments, payments
-from .models import AdjustmentReason, AdjustmentRequest, Order
+from .models import AdjustmentReason, AdjustmentRequest, Order, OrderLine
 
 
 def _errors(error):
@@ -132,8 +133,12 @@ def cashier(request):
     from apps.shifts.models import Shift
     from apps.shifts.services import refund_rows
 
+    from .prepaid import cashier_cards, duty_problem
+
     operating = Shift.objects.operating()
     return render(request, "orders/cashier.html", {"bills": bills, "total": sum(b["amount"] for b in bills),
+                                                   "prepaid": cashier_cards(),
+                                                   "prepaid_problem": duty_problem(request.user),
                                                    "signature": payments.cashier_signature(bills),
                                                    "can_detail": user_can(request.user, Cap.VIEW_DASHBOARD),
                                                    "pending_refunds": refund_rows(operating),
@@ -170,3 +175,73 @@ def pay(request, table_id):
         messages.success(request, f"Đã thu {amount} đ bằng {result['method'].lower()} cho {orders}."
                                   + (" (Gửi lại: đã ghi từ trước.)" if repeated else ""))
     return redirect("orders:cashier")
+
+
+def _int_or_none(value):
+    value = (value or "").strip().replace(".", "").replace(",", "")
+    return int(value) if value.isdigit() else None
+
+
+def _prepaid_action(request, run, success):
+    """Chạy một thao tác của đơn thu trước từ biểu mẫu màn Thu ngân rồi quay lại màn đó."""
+    from .prepaid import PrepayDenied, log_denied
+
+    try:
+        result, repeated = run()
+    except PrepayDenied as error:
+        log_denied(request, error)
+        messages.error(request, str(error))
+    except (ValidationError, OperationKeyError) as error:
+        for message in _errors(error):
+            messages.error(request, message)
+    except (ValueError, OrderLine.DoesNotExist, Order.DoesNotExist):
+        messages.error(request, "Dữ liệu gửi lên không đọc được. Tải lại trang rồi thử lại.")
+    else:
+        text = success(result)
+        if text:
+            messages.success(request, text + (" (Gửi lại: đã ghi từ trước.)" if repeated else ""))
+        elif result.get("message"):
+            messages.info(request, result["message"])
+    return redirect(reverse("orders:cashier") + "#thu-truoc")
+
+
+@capability_required(Cap.PAYMENT)
+@require_POST
+def prepaid_done(request, line_id):
+    """Thu ngân xác nhận pha xong một phần hoặc cả dòng của đơn đã thu trước."""
+    from .prepaid import cashier_complete_line
+
+    def run():
+        return cashier_complete_line(request.user, request.POST.get("operation_key", ""), line_id,
+                                     int(request.POST.get("cups", "0")), int(request.POST.get("expected_done", "")))
+
+    return _prepaid_action(request, run, lambda r: (f"Đã ghi pha xong {r['applied']} ly." if r["applied"] else ""))
+
+
+@capability_required(Cap.PAYMENT)
+@require_POST
+def prepaid_complete(request, order_id):
+    """Giao nước và hoàn tất đơn đã thu trước."""
+    from .prepaid import complete_order
+
+    def run():
+        return complete_order(request.user, request.POST.get("operation_key", ""), order_id)
+
+    return _prepaid_action(request, run, lambda r: (f"Đơn {r['code']} đã giao nước và hoàn tất." if r["applied"]
+                                                    else ""))
+
+
+@capability_required(Cap.PAYMENT)
+@require_POST
+def prepaid_charge(request, charge_id):
+    """Thu khoản thu thêm sau khi đơn thu trước được duyệt tăng tiền."""
+    from .prepaid import collect_charge
+
+    def run():
+        return collect_charge(request.user, request.POST.get("operation_key", ""), charge_id,
+                              request.POST.get("method", ""), request.POST.get("transfer_confirmed") == "1",
+                              _int_or_none(request.POST.get("cash_received")))
+
+    return _prepaid_action(request, run, lambda r: (
+        f"Đã thu thêm {numbers.fmt(r['amount'], 0)} đ bằng {r['method'].lower()} cho đơn {r['order']}."
+        if r["applied"] else ""))

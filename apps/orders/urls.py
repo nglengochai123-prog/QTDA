@@ -29,5 +29,8 @@ urlpatterns = [
     path("thu-ngan/", views_control.cashier, name="cashier"),
     path("thu-ngan/thay-doi/", views_control.cashier_changes, name="cashier_changes"),
     path("thu-ngan/ban/<int:table_id>/", views_control.pay, name="pay"),
+    path("thu-ngan/thu-truoc/mon/<int:line_id>/xong/", views_control.prepaid_done, name="prepaid_done"),
+    path("thu-ngan/thu-truoc/don/<int:order_id>/hoan-tat/", views_control.prepaid_complete, name="prepaid_complete"),
+    path("thu-ngan/thu-truoc/thu-them/<int:charge_id>/", views_control.prepaid_charge, name="prepaid_charge"),
     path("du-phong/", views_backup.backup_slips, name="backup_slips"),
 ]

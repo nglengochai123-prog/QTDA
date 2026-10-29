@@ -30,6 +30,29 @@
 
     <ol class="ticket-lines" id="ticket-lines" aria-live="polite"></ol>
     <p class="ticket-empty" id="ticket-empty">Chạm vào món bên dưới để thêm vào phiếu.</p>
+
+    {% if can_prepay %}
+    <fieldset class="pay-choice" id="pay-choice">
+      <legend class="pay-choice-title">Thanh toán</legend>
+      <div class="seg-pick seg-pick-block" role="radiogroup" aria-label="Thời điểm thanh toán">
+        <label><input type="radio" name="pay_mode" value="sau" checked><span>Thanh toán sau</span></label>
+        <label><input type="radio" name="pay_mode" value="truoc"{% if prepay_problem %} disabled{% endif %}><span>Thanh toán ngay</span></label>
+      </div>
+      {% if prepay_problem %}<p class="pay-hint">{{ prepay_problem }}</p>{% endif %}
+      <div class="pay-now" id="pay-now" hidden>
+        <div class="seg-pick seg-pick-block" role="radiogroup" aria-label="Phương thức thanh toán">
+          <label><input type="radio" name="pay_method" value="tien_mat" checked><span>Tiền mặt</span></label>
+          <label><input type="radio" name="pay_method" value="chuyen_khoan"><span>Chuyển khoản</span></label>
+        </div>
+        <div class="pay-cash" id="pay-cash">
+          <label class="field"><span>Tiền khách đưa (không bắt buộc)</span>
+            <input class="input" id="cash-given" inputmode="numeric" autocomplete="off" placeholder="Ví dụ 100000"></label>
+          <p class="pay-change" id="cash-change" aria-live="polite"></p>
+        </div>
+        <label class="toggle pay-transfer" id="pay-transfer" hidden><input type="checkbox" id="transfer-ok"> Đã thấy tiền chuyển khoản về tài khoản quán</label>
+      </div>
+    </fieldset>
+    {% endif %}
   </section>
 
   <div id="order-feedback" class="order-feedback" aria-live="assertive"></div>
@@ -59,7 +82,7 @@
   <div class="send-bar">
     <button type="button" class="btn btn-primary btn-block" id="send-order" disabled>
       <svg class="icon" aria-hidden="true"><use href="#i-send"/></svg>
-      <span data-label>Gửi pha chế</span>
+      <span data-label>Gửi đơn</span>
     </button>
   </div>
 </div>

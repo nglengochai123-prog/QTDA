@@ -90,5 +90,6 @@ def order_detail(request, order_id):
         "order": order, "lines": order.lines.prefetch_related("options").select_related("recipe_version"),
         "requests": order.adjustment_requests.select_related("reason", "requested_by", "decided_by"),
         "refunds": Refund.objects.filter(order_code=order.code), "slip": getattr(order, "backup_slip", None),
+        "charges": order.prepaid_charges.select_related("payment", "collected_by"),
         "trail": trail,
     })

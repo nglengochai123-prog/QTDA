@@ -156,6 +156,12 @@ class Refund(StoreScopedModel):
         APPROVED = "cho_hoan", "Đã duyệt, chờ hoàn tiền"
         PAID = "da_hoan", "Đã hoàn tiền"
 
+    class Kind(models.TextChoices):
+        CANCEL_PAID = "huy_hoa_don", "Hủy hóa đơn đã thanh toán"
+        # Đơn thu trước được duyệt giảm món: tổng tiền đơn đã giảm theo, nên báo cáo doanh thu theo món không trừ
+        # khoản này lần nữa; quỹ ca vẫn trừ vì tiền thật ra khỏi két.
+        PREPAID_DECREASE = "giam_thu_truoc", "Trả lại phần giảm của đơn thu trước"
+
     shift = models.ForeignKey(Shift, verbose_name="Ca thực hoàn", on_delete=models.PROTECT, null=True, blank=True,
                               related_name="refunds")
     payment = models.ForeignKey("orders.Payment", verbose_name="Thanh toán gốc", on_delete=models.PROTECT,
@@ -164,6 +170,7 @@ class Refund(StoreScopedModel):
     method = models.CharField("Phương thức hoàn", max_length=20, choices=Method.choices)
     amount = models.PositiveBigIntegerField("Số tiền (đồng)")
     status = models.CharField("Trạng thái", max_length=10, choices=Status.choices, default=Status.APPROVED)
+    kind = models.CharField("Loại hoàn", max_length=20, choices=Kind.choices, default=Kind.CANCEL_PAID)
     approved_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người duyệt", on_delete=models.PROTECT,
                                     related_name="+")
     request_id_ref = models.PositiveBigIntegerField("Mã yêu cầu điều chỉnh", unique=True)

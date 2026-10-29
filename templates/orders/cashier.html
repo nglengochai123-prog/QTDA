@@ -2,7 +2,7 @@
 {% load humanize %}
 {% block title %}Thu ngân · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><div><h1>Thu ngân</h1><p class="page-sub">Thu tiền theo bàn khi mọi đơn của bàn đã phục vụ và không còn yêu cầu chờ duyệt. Số tiền tính tự động.</p></div>
+<header class="page-head"><div><h1>Thu ngân</h1><p class="page-sub">Thu tiền theo bàn khi mọi đơn của bàn đã phục vụ và không còn yêu cầu chờ duyệt. Số tiền tính tự động. Đơn khách đã trả trước nằm ở mục Đơn đã thu trước cho đến khi giao nước và hoàn tất.</p></div>
   {% if bills %}<p class="count-progress"><strong>{{ bills|length }}</strong> bàn chờ thu · {{ total|intcomma }} đ</p>{% endif %}</header>
 <div class="notice notice-info change-toast" role="status" id="cashier-changed" data-sig="{{ signature }}" data-url="{% url 'orders:cashier_changes' %}" hidden>
   <svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
@@ -17,6 +17,63 @@
 </div>
 {% endif %}
 {% include "shifts/_refunds.html" %}
+{% if prepaid %}
+<section class="prepaid-section" id="thu-truoc" aria-labelledby="pp-title">
+  <header class="section-head"><h2 id="pp-title">Đơn đã thu trước</h2>
+    <p class="page-sub">Tiền đã vào quỹ ca lúc thu. Quầy bận thì xác nhận pha xong ở đây (trừ kho một lần như ở quầy pha chế), rồi giao nước và hoàn tất đơn.</p></header>
+  {% if prepaid_problem %}<p class="pay-hint">{{ prepaid_problem }} Bạn xem được danh sách nhưng chưa xác nhận được.</p>{% endif %}
+  <div class="bill-grid">
+    {% for c in prepaid %}{% with o=c.order %}
+    <article class="bill prepaid-card" aria-labelledby="pp-{{ o.pk }}">
+      <header class="bill-head">
+        <h2 id="pp-{{ o.pk }}">Bàn {{ o.table.code }} {% if can_detail %}<a class="bar-code-sm" href="{% url 'orders:detail' o.pk %}">{{ o.code }}</a>{% else %}<span class="bar-code-sm">{{ o.code }}</span>{% endif %}</h2>
+        <strong class="bill-amount">{{ o.total|intcomma }} đ</strong>
+      </header>
+      <dl class="prepaid-facts">
+        <div><dt>Tiền</dt><dd><span class="pill pill-ok">{{ o.payment_label }}</span> {{ o.payment.amount|intcomma }} đ · {{ o.payment.get_method_display|lower }} · {{ o.payment.created_at|date:"H:i" }} · {{ o.payment.cashier }}{% if o.payment.cash_received is not None %} · khách đưa {{ o.payment.cash_received|intcomma }} đ, thừa {{ o.payment.change_due|intcomma }} đ{% endif %}</dd></div>
+        <div><dt>Tiến độ</dt><dd><span class="pill pill-neutral">{{ o.progress_label }}</span> {% if c.progress.waiting %}còn {{ c.progress.waiting }} ly chờ pha · {% endif %}còn giao {{ c.progress.to_deliver }} ly</dd></div>
+      </dl>
+      <ul class="bill-orders prepaid-lines">
+        {% for l in c.lines %}
+        <li>
+          <span class="prepaid-line-name">{{ l.quantity }} × {{ l.item_name }} {{ l.size_name }}{% if l.options.all %} <span class="muted">· {% for op in l.options.all %}{{ op.name }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+            <span class="cell-sub">{% if l.pending_quantity %}Đã pha {{ l.done_quantity }}, còn {{ l.pending_quantity }} ly chờ pha{% elif l.status == 'da_pha' %}Đã pha xong, chờ giao{% else %}{{ l.get_status_display }}{% endif %}{% if l.cancelled_quantity or l.voided_done_quantity %} · đã hủy {{ l.cancelled_quantity|add:l.voided_done_quantity }} ly{% endif %}</span></span>
+          {% if l.pending_quantity and not prepaid_problem %}
+          <form method="post" action="{% url 'orders:prepaid_done' l.pk %}" class="inline-form prepaid-done" data-once data-online-only>
+            {% csrf_token %}<input type="hidden" name="operation_key" value="{{ l.op_done }}"><input type="hidden" name="expected_done" value="{{ l.done_quantity }}">
+            <input class="input input-xs" type="number" name="cups" min="1" max="{{ l.pending_quantity }}" value="{{ l.pending_quantity }}" aria-label="Số ly pha xong của {{ l.item_name }} {{ l.size_name }}">
+            <button class="btn btn-quiet btn-sm" type="submit" data-busy-text="Đang ghi…">Pha xong</button>
+          </form>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% for ch in c.charges %}
+      <form method="post" action="{% url 'orders:prepaid_charge' ch.pk %}" class="pay-form prepaid-charge" data-once data-online-only>
+        {% csrf_token %}<input type="hidden" name="operation_key" value="{{ ch.op }}">
+        <p><strong>Thu thêm {{ ch.amount|intcomma }} đ</strong> <span class="muted">sau điều chỉnh đã duyệt · {{ ch.created_at|date:"H:i" }}</span></p>
+        <div class="seg-pick seg-pick-block" role="radiogroup" aria-label="Phương thức thu thêm">
+          <label><input type="radio" name="method" value="tien_mat" checked><span>Tiền mặt</span></label>
+          <label><input type="radio" name="method" value="chuyen_khoan"><span>Chuyển khoản</span></label>
+        </div>
+        <label class="toggle transfer-check"><input type="checkbox" name="transfer_confirmed" value="1"> Đã thấy tiền chuyển khoản về tài khoản quán</label>
+        <button type="submit" class="btn btn-quiet btn-block" data-busy-text="Đang ghi…"{% if prepaid_problem %} disabled{% endif %}>Đã thu thêm {{ ch.amount|intcomma }} đ</button>
+      </form>
+      {% endfor %}
+      {% for r in c.refunds %}<p class="pay-hint">Còn trả lại khách {{ r.amount|intcomma }} đ ({{ r.get_method_display|lower }}): bấm Đã hoàn tiền ở mục Hoàn tiền phía trên sau khi đưa tiền cho khách.</p>{% endfor %}
+      {% if c.blockers %}
+      <div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
+        <div><p>Chưa hoàn tất được:</p><ul class="notice-list">{% for b in c.blockers %}<li>{{ b }}</li>{% endfor %}</ul></div></div>
+      {% endif %}
+      <form method="post" action="{% url 'orders:prepaid_complete' o.pk %}" class="prepaid-complete" data-once data-online-only>
+        {% csrf_token %}<input type="hidden" name="operation_key" value="{{ c.op_complete }}">
+        <button type="submit" class="btn btn-primary btn-block" data-busy-text="Đang ghi…"{% if c.blockers or prepaid_problem %} disabled{% endif %}>Giao nước và hoàn tất đơn</button>
+      </form>
+    </article>
+    {% endwith %}{% endfor %}
+  </div>
+</section>
+{% endif %}
 {% if bills %}
 <div class="bill-grid">
   {% for bill in bills %}
@@ -58,6 +115,6 @@
   {% endfor %}
 </div>
 {% else %}
-<div class="empty"><p><strong>Không có bàn nào chờ thanh toán.</strong></p><p>Bàn có đơn chưa trả tiền sẽ hiện ở đây.</p></div>
+<div class="empty"><p><strong>Không có bàn nào chờ thanh toán.</strong></p><p>Bàn có đơn trả sau chưa trả tiền sẽ hiện ở đây.</p></div>
 {% endif %}
 {% endblock %}

@@ -10,6 +10,7 @@
       <span class="bar-time">{{ t.order.created_at|date:"H:i" }}</span>
       <span class="bar-wait">{% if t.is_new %}Mới · {% endif %}{{ t.minutes|phut }}{% if t.minutes >= 10 %} · trễ{% endif %}</span>
     </header>
+    {% if t.order.is_prepaid %}<p class="bar-paid"><span class="pill pill-ok">Đã thu tiền</span></p>{% endif %}
     {% if t.pending %}<p class="bar-hold">Đang chờ duyệt: {{ t.pending.summary }}</p>{% endif %}
     <ul class="bar-lines">
       {% for line in t.lines %}

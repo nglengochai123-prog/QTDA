@@ -203,11 +203,15 @@ def _save_table(request, form, created):
     table = form.save(commit=False)
     if not created and "is_active" in form.changed_data and not table.is_active:
         # Bàn ngừng dùng thì không còn hiện ở Tổng quan ca và không chuyển đơn đến được; đơn còn mở sẽ bị lạc.
-        open_orders = (Order.objects.filter(table=table, payment__isnull=True)
-                       .exclude(status__in=[Order.Status.PAID, Order.Status.CANCELLED]).count())
-        if open_orders:
-            raise ValidationError(f"Bàn {table.code} còn {open_orders} đơn chưa thu tiền; thu tiền hoặc chuyển đơn "
-                                  "sang bàn khác rồi mới bỏ chọn Đang dùng.")
+        # Kể cả đơn đã thu trước nhưng chưa giao nước và hoàn tất.
+        still_open = Order.objects.filter(table=table).exclude(status__in=[Order.Status.PAID, Order.Status.CANCELLED])
+        unpaid = still_open.filter(payment__isnull=True).count()
+        prepaid = still_open.count() - unpaid
+        if unpaid or prepaid:
+            parts = ([f"{unpaid} đơn chưa thu tiền"] if unpaid else []) + (
+                [f"{prepaid} đơn đã thu trước chưa giao nước và hoàn tất"] if prepaid else [])
+            raise ValidationError(f"Bàn {table.code} còn {' và '.join(parts)}; thu tiền hoặc hoàn tất đơn, hoặc chuyển "
+                                  "đơn sang bàn khác rồi mới bỏ chọn Đang dùng.")
     _assign_store(table, request)
     table.save()
     return table

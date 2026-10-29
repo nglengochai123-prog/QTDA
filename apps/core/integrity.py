@@ -9,7 +9,7 @@ from django.db.models import Sum
 
 def problems():
     from apps.inventory import stock
-    from apps.orders.models import AdjustmentRequest, Order, Payment
+    from apps.orders.models import AdjustmentRequest, Order, Payment, PrepaidCharge
     from apps.shifts.models import Refund, Shift
 
     out = list(stock.ledger_problems())
@@ -25,6 +25,16 @@ def problems():
         covered = sum(o.total for o in payment.orders.all())
         if covered != payment.amount:
             out.append(f"Giao dịch thu #{payment.pk}: số tiền {payment.amount} khác tổng các đơn {covered}")
+
+    from apps.orders.prepaid import paid_net
+
+    for payment in Payment.objects.filter(kind=Payment.Kind.PREPAID).prefetch_related("orders"):
+        for order in payment.orders.exclude(status=Order.Status.CANCELLED):
+            net = paid_net(order)
+            if net != order.total:
+                out.append(f"Đơn thu trước {order.code}: tiền đã thu và chờ thu/hoàn {net} khác tổng đơn {order.total}")
+    for charge in PrepaidCharge.objects.filter(status=PrepaidCharge.Status.COLLECTED, payment__isnull=True):
+        out.append(f"{charge}: đã thu nhưng không có giao dịch thu")
 
     for req in AdjustmentRequest.objects.filter(kind=AdjustmentRequest.Kind.CANCEL_PAID,
                                                status=AdjustmentRequest.Status.APPROVED).select_related("order"):

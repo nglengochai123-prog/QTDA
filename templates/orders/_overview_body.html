@@ -63,7 +63,7 @@
               <span class="table-time{% if t.slow %} is-slow{% endif %}" title="Thời gian từ đơn đầu tiên">{{ t.minutes|phut }}</span></span>
             <span class="pill pill-{{ t.tone }}">{{ t.label }}</span>
             <span class="table-meta">{% if t.waiting %}{{ t.waiting }} ly chờ pha{% endif %}{% if t.waiting and t.ready %} · {% endif %}{% if t.ready %}{{ t.ready }} ly chờ mang ra{% endif %}{% if not t.waiting and not t.ready %}{{ t.orders|length }} đơn{% endif %}</span>
-            <span class="table-amount">{{ t.amount|intcomma }} đ</span>
+            <span class="table-amount">{% if t.amount %}{{ t.amount|intcomma }} đ{% if t.prepaid %} · {% endif %}{% endif %}{% if t.prepaid %}{{ t.prepaid }} đơn đã thu trước{% endif %}{% if not t.amount and not t.prepaid %}0 đ{% endif %}</span>
           </a>
           {% else %}
           <div class="table-tile is-free"><span class="table-tile-head"><strong>Bàn {{ t.table.code }}</strong></span>

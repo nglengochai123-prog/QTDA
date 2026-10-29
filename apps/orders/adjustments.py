@@ -312,6 +312,11 @@ def apply_effects(req, actor, delivered=False):
     else:
         order.recompute_total()
         order.refresh_status()
+        if order.is_prepaid:
+            # Đơn đã thu trước: thanh toán gốc giữ nguyên, phần chênh thành khoản thu thêm hoặc khoản trả lại.
+            from .prepaid import settle_adjustment
+
+            settle_adjustment(order, req, actor)
         if req.kind in (Kind.CANCEL_ITEMS, Kind.CHANGE_ITEM):
             _check_post_prep_value(req)
             if req.reason.name.strip().lower() == "hết nguyên liệu":

@@ -6,7 +6,7 @@
   {% if not refund_shift_open %}<p class="muted">Chưa có ca đang mở. Khoản hoàn được ghi vào ca đang mở nên cần mở ca trước.</p>{% endif %}
   <ul class="ruled-list compact">
     {% for r, op, short in pending_refunds %}
-    <li class="row-between"><span>Đơn {{ r.order_code }} · {{ r.amount|intcomma }} đ · {{ r.get_method_display|lower }} · duyệt bởi {{ r.approved_by }} {{ r.created_at|date:"H:i d/m" }}{% if short %}<br><small class="text-warn">{{ short }}</small>{% endif %}</span>
+    <li class="row-between"><span>Đơn {{ r.order_code }}{% if r.kind == 'giam_thu_truoc' %} (trả lại phần giảm của đơn thu trước){% endif %} · {{ r.amount|intcomma }} đ · {{ r.get_method_display|lower }} · duyệt bởi {{ r.approved_by }} {{ r.created_at|date:"H:i d/m" }}{% if short %}<br><small class="text-warn">{{ short }}</small>{% endif %}</span>
       <form method="post" action="{% url 'shifts:refund_paid' r.pk %}" class="inline-form" data-once>{% csrf_token %}
         <input type="hidden" name="operation_key" value="{{ op }}"><input type="hidden" name="next" value="{{ request.path }}">
         <input class="input input-sm" name="note" placeholder="Ghi chú (mã giao dịch nếu chuyển khoản)" aria-label="Ghi chú hoàn tiền">

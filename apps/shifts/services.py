@@ -271,8 +271,13 @@ def close_blockers(shift):
 
     blockers = []
     open_orders = Order.objects.filter(shift=shift).exclude(status__in=[Order.Status.PAID, Order.Status.CANCELLED])
-    for order in open_orders:
+    for order in open_orders.select_related("table", "payment"):
+        if order.is_prepaid:
+            continue  # đơn đã thu trước nhưng chưa giao: báo riêng ở dưới, không gọi là chưa thanh toán
         blockers.append(f"Bàn {order.table.code}: đơn {order.code} chưa thanh toán ({order.get_status_display()}).")
+    from apps.orders import prepaid
+
+    blockers += prepaid.close_blockers(shift)
     orphans = (Order.objects.filter(shift__isnull=True, created_at__lt=shift.ends_at)
                .exclude(status__in=[Order.Status.PAID, Order.Status.CANCELLED]).select_related("table"))
     for order in orphans:

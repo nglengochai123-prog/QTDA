@@ -22,6 +22,9 @@
   menu.forEach(function (group) { group.items.forEach(function (item) { items[item.id] = item; }); });
 
   var state = loadDraft() || { table: null, tableCode: "", lines: [], key: root.dataset.operationKey, pending: false };
+  // Thanh toán sau là mặc định; Thanh toán ngay chỉ có với người được thu tiền (máy chủ kiểm tra lại khi gửi).
+  function freshPay() { return { mode: "sau", method: "tien_mat", given: "", confirmed: false }; }
+  if (!state.pay) state.pay = freshPay();
   var sending = false;
   // Khi đang mở một món, nút cố định ở vùng ngón cái trở thành nút "Thêm" của món đó.
   var activeAdd = null;
@@ -274,6 +277,60 @@
     head.addEventListener("click", function () { openItem(head.parentElement); });
   });
 
+  // ---------- Thanh toán ngay ----------
+  var payChoice = document.getElementById("pay-choice");
+  var payNow = document.getElementById("pay-now");
+  var cashBox = document.getElementById("pay-cash");
+  var cashGiven = document.getElementById("cash-given");
+  var cashChange = document.getElementById("cash-change");
+  var transferBox = document.getElementById("pay-transfer");
+  var transferOk = document.getElementById("transfer-ok");
+  function givenAmount() {
+    var digits = String(state.pay.given || "").replace(/[^0-9]/g, "");
+    return digits ? Number(digits) : null;
+  }
+  // Lý do chưa gửi được khi chọn Thanh toán ngay; chuỗi rỗng là gửi được.
+  function payProblem(total) {
+    if (!payChoice || state.pay.mode !== "truoc") return "";
+    if (state.pay.method === "chuyen_khoan" && !state.pay.confirmed) return "Đánh dấu đã thấy tiền chuyển khoản về";
+    var given = givenAmount();
+    if (state.pay.method === "tien_mat" && given !== null && given < total) return "Khách đưa chưa đủ tiền";
+    return "";
+  }
+  function renderPay(total) {
+    if (!payChoice) return;
+    var prepay = state.pay.mode === "truoc";
+    if (prepay && payChoice.querySelector('input[name="pay_mode"][value="truoc"]').disabled) {
+      state.pay = freshPay(); prepay = false;  // nháp cũ chọn trả trước nhưng giờ không được thu tiền
+    }
+    payChoice.querySelectorAll("input").forEach(function (i) {
+      if (i.name === "pay_mode") i.checked = i.value === state.pay.mode;
+      if (i.name === "pay_method") i.checked = i.value === state.pay.method;
+      if (i.dataset.lockable !== "0") i.disabled = state.pending || (i.name === "pay_mode" && i.value === "truoc" && i.hasAttribute("data-blocked"));
+    });
+    payNow.hidden = !prepay;
+    cashBox.hidden = state.pay.method !== "tien_mat";
+    transferBox.hidden = state.pay.method !== "chuyen_khoan";
+    transferOk.checked = !!state.pay.confirmed;
+    if (document.activeElement !== cashGiven) cashGiven.value = state.pay.given || "";
+    var given = givenAmount();
+    cashChange.textContent = given === null || !total ? "" : given >= total
+      ? "Tiền thừa trả khách: " + money(given - total) : "Khách đưa thiếu " + money(total - given);
+    cashChange.classList.toggle("is-short", given !== null && given < total);
+  }
+  if (payChoice) {
+    var blockedNow = payChoice.querySelector('input[name="pay_mode"][value="truoc"]');
+    if (blockedNow.disabled) blockedNow.setAttribute("data-blocked", "");
+    payChoice.addEventListener("change", function (e) {
+      var t = e.target;
+      if (t.name === "pay_mode") state.pay.mode = t.value;
+      if (t.name === "pay_method") { state.pay.method = t.value; state.pay.confirmed = false; }
+      if (t === transferOk) state.pay.confirmed = t.checked;
+      saveDraft(); render();
+    });
+    cashGiven.addEventListener("input", function () { state.pay.given = cashGiven.value; saveDraft(); render(); });
+  }
+
   // ---------- Phiếu ----------
   var linesEl = document.getElementById("ticket-lines");
   var emptyEl = document.getElementById("ticket-empty");
@@ -324,18 +381,25 @@
       return;
     }
     sendBtn.classList.remove("is-add");
+    renderPay(t.money);
+    var prepay = payChoice && state.pay.mode === "truoc";
+    var problem = payProblem(t.money);
     if (sending) {
-      label.textContent = "Đang gửi…";
+      label.textContent = prepay ? "Đang thu tiền và gửi…" : "Đang gửi…";
     } else if (state.pending) {
       label.textContent = "Gửi lại đơn này";
     } else if (!state.table) {
       label.textContent = "Chọn bàn để gửi";
     } else if (!state.lines.length) {
       label.textContent = "Thêm món để gửi";
+    } else if (problem) {
+      label.textContent = problem;
+    } else if (prepay) {
+      label.textContent = "Thu tiền và gửi pha chế · " + money(t.money);
     } else {
-      label.textContent = "Gửi pha chế · " + t.cups + " ly · " + money(t.money);
+      label.textContent = "Gửi đơn · " + t.cups + " ly · " + money(t.money);
     }
-    sendBtn.disabled = sending || !state.table || !state.lines.length;
+    sendBtn.disabled = sending || !state.table || !state.lines.length || (!state.pending && !!problem);
     root.classList.toggle("is-pending", state.pending);
   }
 
@@ -422,6 +486,10 @@
         return { item: l.item, size: l.size, options: l.options, quantity: l.quantity, note: l.note };
       }) },
     };
+    if (payChoice && state.pay.mode === "truoc") {
+      payload.order.payment = { mode: "truoc", method: state.pay.method, transfer_confirmed: !!state.pay.confirmed,
+        cash_received: state.pay.method === "tien_mat" ? givenAmount() : null };
+    }
     fetch(root.dataset.submitUrl, {
       method: "POST", credentials: "same-origin", cache: "no-store",
       headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
@@ -432,9 +500,17 @@
       sending = false;
       var data = res.data;
       if (data.ok) {
-        setFeedback("ok", "Đã gửi pha chế đơn " + data.code + " · Bàn " + data.table,
-          null, "Tổng " + money(data.total) + ". Đơn đã khóa; cần đổi món thì gửi yêu cầu điều chỉnh.");
-        state = { table: null, tableCode: "", lines: [], key: newKey(), pending: false };
+        if (data.prepaid) {
+          var paid = data.prepaid;
+          setFeedback("ok", "Đã thu " + money(paid.amount) + " (" + paid.method.toLowerCase() + ") và gửi pha chế đơn "
+            + data.code + " · Bàn " + data.table,
+            paid.change !== null && paid.change !== undefined ? ["Khách đưa " + money(paid.cash_received) + ", tiền thừa " + money(paid.change)] : null,
+            "Đơn hiện ở màn Thu ngân, mục Đơn đã thu trước, cho đến khi giao nước và hoàn tất.");
+        } else {
+          setFeedback("ok", "Đã gửi pha chế đơn " + data.code + " · Bàn " + data.table,
+            null, "Tổng " + money(data.total) + ". Đơn đã khóa; cần đổi món thì gửi yêu cầu điều chỉnh.");
+        }
+        state = { table: null, tableCode: "", lines: [], key: newKey(), pending: false, pay: freshPay() };
         root.querySelectorAll('input[name="table"]').forEach(function (i) { i.checked = false; });
         saveDraft();
         refreshAvailability();

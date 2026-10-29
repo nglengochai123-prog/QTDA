@@ -17,6 +17,7 @@ TABLE_STATES = {
     "mang_ra": ("Có món chờ mang ra", "ok"),
     "pha": ("Đang pha", "info"),
     "thanh_toan": ("Chờ thanh toán", "neutral"),
+    "hoan_tat": ("Đã thu trước, chờ hoàn tất", "neutral"),
 }
 
 
@@ -27,8 +28,9 @@ def _minutes(since, now):
 def _tables(now, wait_standard):
     from apps.catalog.models import Table
 
-    orders = (Order.objects.filter(payment__isnull=True).exclude(status__in=[Order.Status.PAID, Order.Status.CANCELLED])
-              .prefetch_related("lines", "adjustment_requests").order_by("created_at"))
+    # Đơn còn mở gồm cả đơn đã thu trước chưa giao: bàn vẫn có khách, món vẫn đang pha hoặc chờ giao.
+    orders = (Order.objects.exclude(status__in=[Order.Status.PAID, Order.Status.CANCELLED])
+              .select_related("payment").prefetch_related("lines", "adjustment_requests").order_by("created_at"))
     by_table = {}
     for order in orders:
         by_table.setdefault(order.table_id, []).append(order)
@@ -36,17 +38,19 @@ def _tables(now, wait_standard):
     for table in Table.objects.filter(is_active=True).order_by("sort_order", "code"):
         open_orders = by_table.get(table.pk, [])
         row = {"table": table, "orders": open_orders, "state": "", "label": "Trống", "tone": "",
-               "waiting": 0, "ready": 0, "amount": 0, "minutes": None, "slow": False, "link_order": None}
+               "waiting": 0, "ready": 0, "amount": 0, "prepaid": 0, "minutes": None, "slow": False,
+               "link_order": None}
         if open_orders:
             lines = [l for o in open_orders for l in o.lines.all()]
             row["waiting"] = sum(l.pending_quantity for l in lines if l.status == OrderLine.Status.WAITING)
             row["ready"] = sum(l.billable_quantity for l in lines if l.status == OrderLine.Status.DONE)
-            row["amount"] = sum(o.total for o in open_orders)
+            row["amount"] = sum(o.total for o in open_orders if o.payment_id is None)  # còn phải thu
+            row["prepaid"] = sum(1 for o in open_orders if o.is_prepaid)
             row["minutes"] = _minutes(open_orders[0].created_at, now)
             pending = any(r.status == AdjustmentRequest.Status.PENDING for o in open_orders
                           for r in o.adjustment_requests.all())
             state = ("duyet" if pending else "mang_ra" if row["ready"] else "pha" if row["waiting"]
-                     else "thanh_toan")
+                     else "thanh_toan" if any(o.payment_id is None for o in open_orders) else "hoan_tat")
             row["state"] = state
             row["label"], row["tone"] = TABLE_STATES[state]
             # Khách chờ lâu: còn món chưa mang ra và đơn cũ nhất chưa xong đã quá chuẩn thời gian chờ.
@@ -163,7 +167,8 @@ def shift_overview(user, now=None):
         "sales": _shift_sales(shift, now),
         "tables": tables, "areas": _areas(tables),
         "tables_busy": len(busy), "tables_total": len(tables), "tables_free": len(tables) - len(busy),
-        "states": [(label, tone, sum(1 for t in busy if t["state"] == key)) for key, (label, tone) in TABLE_STATES.items()],
+        "states": [(label, tone, n) for key, (label, tone) in TABLE_STATES.items()
+                   for n in [sum(1 for t in busy if t["state"] == key)] if n or key != "hoan_tat"],
         "slow_tables": [t for t in busy if t["slow"]],
         "to_pay": {"tables": len(to_pay), "amount": sum(t["amount"] for t in to_pay)},
         "open_amount": sum(t["amount"] for t in busy),

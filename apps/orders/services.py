@@ -126,13 +126,22 @@ def _next_code(store):
 def submit_order(user, operation_key, payload):
     """Nhận đơn và giữ nguyên liệu của cả đơn trong một giao dịch. Thiếu thì không nhận gì.
 
-    Trả (kết quả, là_lần_lặp). Ném stock.InsufficientStock, ValidationError hoặc OperationKeyError.
+    `payload["payment"]` = {"mode": "truoc", "method", "transfer_confirmed", "cash_received"} thì thu tiền ngay trong
+    cùng giao dịch (prepaid.py): lỗi ở bất kỳ bước nào thì không có đơn, không giữ kho, không có tiền.
+
+    Trả (kết quả, là_lần_lặp). Ném stock.InsufficientStock, ValidationError, prepaid.PrepayDenied hoặc
+    OperationKeyError.
     """
+    from . import prepaid
+
     clean_payload = {
         "table": payload.get("table"), "note": str(payload.get("note") or "")[:255],
         "lines": [{"item": l.get("item"), "size": l.get("size"), "options": sorted(l.get("options") or []),
                    "quantity": l.get("quantity", 1), "note": l.get("note") or ""} for l in payload.get("lines") or []],
     }
+    spec = prepaid.clean_spec(payload.get("payment"))
+    if spec is not None:
+        clean_payload["payment"] = spec  # cùng mã mà khác cách thanh toán thì bị từ chối, không trả kết quả cũ
 
     existing = Order.objects.filter(operation_key=operation_key).select_related("table").first()
     if existing is not None and BackupSlip.objects.filter(order=existing).exists():
@@ -142,6 +151,11 @@ def submit_order(user, operation_key, payload):
 
     def action():
         table, lines = build_lines(clean_payload)
+        if spec is not None:
+            problem = prepaid.duty_problem(user)
+            if problem:
+                raise prepaid.PrepayDenied(problem)  # kiểm tra ở máy chủ, không chỉ ẩn nút trên màn hình
+            prepaid.check_spec(spec)
         stock.reserve(_totals(lines))
         from apps.shifts.models import Shift
 
@@ -160,9 +174,13 @@ def submit_order(user, operation_key, payload):
                 for o in line["options"]])
         record(Action.CREATE, actor=user, obj=order, object_type="orders.Order",
                after={"code": order.code, "table": table.code, "total": order.total,
-                      "lines": [f"{l['quantity']} × {l['item'].name} {l['size'].name}" for l in lines]},
+                      "lines": [f"{l['quantity']} × {l['item'].name} {l['size'].name}" for l in lines],
+                      "thanh_toan": "Thu trước" if spec else "Trả sau"},
                reason="Gửi pha chế")
-        return {"order_id": order.pk, "code": order.code, "table": table.code, "total": order.total}
+        result = {"order_id": order.pk, "code": order.code, "table": table.code, "total": order.total}
+        if spec is not None:
+            result["prepaid"] = prepaid.record_prepayment(user, operation_key, order, spec)
+        return result
 
     try:
         return run_once(operation_key, "order_submit", clean_payload, action, actor=user)
@@ -216,7 +234,7 @@ def complete_line(user, operation_key, line_id, cups, expected_done):
         line.save(update_fields=["done_quantity", "status", "done_at", "updated_at"])
         line.order.refresh_status()
         record(Action.STATUS_CHANGE, actor=user, obj=line, object_type="orders.OrderLine",
-               before={"done": payload["expected_done"]}, after={"done": line.done_quantity},
+               before={"done": payload["expected_done"]}, after={"done": line.done_quantity, "so_ly": applied},
                reason=f"Đã pha chế {applied} ly, đơn {line.order.code}")
         return {"line": line.pk, "done": line.done_quantity, "applied": applied, "message": ""}
 

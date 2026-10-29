@@ -131,7 +131,9 @@ def revenue(start_day, end_day, dim="ngay", lines=None):
         filters = r.pop("filters")
         # Một dòng gộp từ nhiều giá trị lọc (ví dụ món đổi tên) thì không gắn liên kết để tránh lệch số đơn.
         r["link"] = revenue_link(start_day, end_day, next(iter(filters))) if len(filters) == 1 else ""
-    refunds = (Refund.objects.filter(status=Refund.Status.PAID, paid_at__gte=start, paid_at__lt=end)
+    # Khoản trả lại phần giảm của đơn thu trước không trừ ở đây: tổng tiền đơn (giá trị món) đã giảm theo.
+    refunds = (Refund.objects.filter(status=Refund.Status.PAID, paid_at__gte=start, paid_at__lt=end,
+                                     kind=Refund.Kind.CANCEL_PAID)
                .aggregate(s=Sum("amount"))["s"] or 0)
     length = (end_day - start_day).days + 1
     prev_start, prev_end = start_day - timedelta(days=length), start_day - timedelta(days=1)

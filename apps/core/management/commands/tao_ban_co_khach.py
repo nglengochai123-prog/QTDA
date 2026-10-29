@@ -73,8 +73,7 @@ class Command(BaseCommand):
         from apps.catalog.models import Table
         from apps.orders.models import Order
 
-        busy = (Order.objects.filter(payment__isnull=True)
-                .exclude(status__in=[Order.Status.PAID, Order.Status.CANCELLED]).values("table_id"))
+        busy = (Order.objects.exclude(status__in=[Order.Status.PAID, Order.Status.CANCELLED]).values("table_id"))
         free = list(Table.objects.filter(is_active=True).exclude(pk__in=busy))
         return self.rnd.choice(free) if free else None
 

@@ -5,14 +5,17 @@
 <nav class="crumbs"><a href="{% url 'orders:lookup' %}">‹ Tra cứu đơn</a></nav>
 <header class="page-head">
   <h1>Đơn {{ order.code }} <span class="muted">· Bàn {{ order.table.code }}</span></h1>
-  <span class="chip">{{ order.get_status_display }}</span>
+  <span class="chip">{{ order.progress_label }}</span>
+  <span class="chip">{{ order.payment_label }}</span>
 </header>
 <dl class="figure-grid">
   <div class="figure-key"><dt>Tổng tiền</dt><dd>{{ order.total|intcomma }} đ</dd></div>
   <div><dt>Tạo lúc</dt><dd class="dd-text">{{ order.created_at|date:"H:i d/m/Y" }}</dd></div>
   <div><dt>Người tạo</dt><dd class="dd-text">{{ order.created_by }}</dd></div>
   <div><dt>Ca</dt><dd class="dd-text">{% if order.shift %}<a href="{% url 'shifts:my_shift_detail' order.shift.pk %}">{{ order.shift }}</a>{% else %}–{% endif %}</dd></div>
-  <div><dt>Thanh toán</dt><dd class="dd-text">{% if order.payment %}{{ order.payment.get_method_display }} · {{ order.payment.created_at|date:"H:i d/m" }} · {{ order.payment.cashier }}{% if order.payment.amount != order.total %} · thu chung cả bàn {{ order.payment.amount|intcomma }} đ{% endif %}{% else %}Chưa{% endif %}</dd></div>
+  <div><dt>Thanh toán</dt><dd class="dd-text">{% if order.is_prepaid %}Thu trước · {% endif %}{% if order.payment %}{{ order.payment.get_method_display }} · {{ order.payment.created_at|date:"H:i d/m" }} · {{ order.payment.cashier }}{% if order.payment.amount != order.total %} · thu chung cả bàn {{ order.payment.amount|intcomma }} đ{% endif %}{% else %}Chưa{% endif %}</dd></div>
+  {% if order.completed_at %}<div><dt>Giao và hoàn tất</dt><dd class="dd-text">{{ order.completed_at|date:"H:i d/m" }} · {{ order.completed_by }}</dd></div>{% endif %}
+  {% for ch in charges %}<div><dt>Thu thêm</dt><dd class="dd-text">{{ ch.amount|intcomma }} đ · {{ ch.get_status_display }}{% if ch.payment %} · {{ ch.payment.get_method_display|lower }} {{ ch.collected_at|date:"H:i d/m" }} · {{ ch.collected_by }}{% endif %}</dd></div>{% endfor %}
   {% if slip %}<div><dt>Phiếu dự phòng</dt><dd class="dd-text">{{ slip }} · bán lúc {{ slip.sold_at|date:"H:i d/m" }}{% if slip.confirmed_by %} · xác nhận bởi {{ slip.confirmed_by }}{% endif %}</dd></div>{% endif %}
 </dl>
 <section class="panel" aria-labelledby="ln-title"><h2 id="ln-title">Món</h2>
