@@ -30,17 +30,22 @@
   {% else %}<p class="empty-cell">Không còn khoản phải trả nào.</p>{% endif %}
 </section>
 
-{% if recent %}
 <section class="card" aria-labelledby="paid-title">
-  <div class="card-head"><h2 id="paid-title">Đã trả gần đây</h2></div>
+  <div class="card-head"><h2 id="paid-title">Đã trả tháng {{ month|date:"m/Y" }}</h2><span class="muted">{{ paid|length }} lần · {{ paid_sum|intcomma }} đ</span></div>
+  <form method="get" class="filter-bar" aria-label="Lọc khoản đã trả">
+    <div class="field"><label for="f-thang">Tháng trả</label><input class="input" id="f-thang" type="month" name="thang" value="{{ month|date:'Y-m' }}"></div>
+    <div class="field"><label for="f-ncc">Nhà cung cấp</label><select class="input" id="f-ncc" name="ncc"><option value="">Tất cả</option>{% for x in suppliers %}<option value="{{ x.pk }}"{% if supplier == x.pk|stringformat:"d" %} selected{% endif %}>{{ x.name }}</option>{% endfor %}</select></div>
+    <div class="filter-actions"><button class="btn btn-primary" type="submit">Xem</button></div>
+  </form>
+  {% if paid %}
   <ul class="row-list">
-    {% for x in recent %}
+    {% for x in paid %}
     <li class="is-done"><span class="row-day">{{ x.paid_on|date:"d/m" }}</span>
       <span class="row-main"><strong>{{ x.payable.supplier }}</strong><small>Phiếu {{ x.payable.receipt.code }} · {{ x.get_source_display }} · {{ x.actor }}</small></span>
       <span class="num-cell">{{ x.amount|intcomma }} đ</span></li>
     {% endfor %}
   </ul>
+  {% else %}<p class="empty-cell">Không có lần trả nào trong tháng này{% if supplier %} cho nhà cung cấp đã chọn{% endif %}.</p>{% endif %}
 </section>
-{% endif %}
 {% endblock %}
 {% block scripts %}<script src="{% static 'js/kho.js' %}" defer></script>{% endblock %}

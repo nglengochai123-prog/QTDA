@@ -187,6 +187,7 @@ def confirm_refund(user, operation_key, refund_id, note=""):
         shift = Shift.objects.operating()
         if shift is None:
             raise ValidationError("Không có ca đang mở; mở ca rồi mới ghi đã hoàn tiền.")
+        warning = _refund_cash_short(shift, refund)
         refund.status, refund.shift = Refund.Status.PAID, shift
         refund.paid_by, refund.paid_at, refund.paid_note = user, timezone.now(), payload["note"]
         refund.save(update_fields=["status", "shift", "paid_by", "paid_at", "paid_note", "updated_at"])
@@ -194,13 +195,31 @@ def confirm_refund(user, operation_key, refund_id, note=""):
                before={"trang_thai": Refund.Status.APPROVED.label},
                after={"trang_thai": refund.get_status_display(), "ca": str(shift), "so_tien": refund.amount,
                       "phuong_thuc": refund.get_method_display()}, reason=payload["note"])
-        return {"refund": refund.pk, "shift": shift.pk, "applied": True, "message": ""}
+        return {"refund": refund.pk, "shift": shift.pk, "applied": True, "message": "", "warning": warning}
 
     return run_once(operation_key, "refund_paid", payload, action, actor=user)
 
 
+def _refund_cash_short(shift, refund):
+    """Hoàn tiền mặt nhiều hơn tiền két theo sổ: vẫn cho ghi (khách cần nhận lại tiền) nhưng báo để kiểm tra két."""
+    if refund.method != Refund.Method.CASH:
+        return ""
+    left = cash_on_hand(shift)
+    if refund.amount <= left:
+        return ""
+    return (f"Két của {shift} theo sổ chỉ còn {numbers.fmt(max(left, 0))} đ, ít hơn khoản hoàn {numbers.fmt(refund.amount)} đ. "
+            f"Nếu két thực có đủ tiền thì kiểm tra tiền đầu ca và các khoản chi đã ghi; cuối ca sẽ thấy chênh lệch nếu sổ sai.")
+
+
 def pending_refunds():
     return Refund.objects.filter(status=Refund.Status.APPROVED).select_related("approved_by", "payment")
+
+
+def refund_rows(operating=None):
+    """Khoản hoàn chờ trả khách cho màn Thu ngân và Ca của tôi: (khoản, khóa thao tác, cảnh báo két thiếu tiền)."""
+    import uuid
+
+    return [(r, uuid.uuid4().hex, _refund_cash_short(operating, r) if operating else "") for r in pending_refunds()]
 
 
 # ---------------- Số liệu ca ----------------
@@ -254,6 +273,12 @@ def close_blockers(shift):
     open_orders = Order.objects.filter(shift=shift).exclude(status__in=[Order.Status.PAID, Order.Status.CANCELLED])
     for order in open_orders:
         blockers.append(f"Bàn {order.table.code}: đơn {order.code} chưa thanh toán ({order.get_status_display()}).")
+    orphans = (Order.objects.filter(shift__isnull=True, created_at__lt=shift.ends_at)
+               .exclude(status__in=[Order.Status.PAID, Order.Status.CANCELLED]).select_related("table"))
+    for order in orphans:
+        # Đơn gửi lúc chưa có ca: thu tiền thì vào ca này, khách bỏ về thì hủy; không để trôi sang ngày khác.
+        blockers.append(f"Bàn {order.table.code}: đơn {order.code} gửi lúc chưa có ca, chưa thanh toán "
+                        f"({order.get_status_display()}).")
     pending = AdjustmentRequest.objects.filter(status=AdjustmentRequest.Status.PENDING, order__shift=shift)
     for req in pending:
         blockers.append(f"Yêu cầu \"{req.summary()}\" của đơn {req.order.code} đang chờ duyệt.")

@@ -2,6 +2,8 @@
 
 > **Từ 13/10/2026, quyết định mua dùng Kế hoạch mua nguyên liệu** theo `docs/THIET_KE_MUA_NGUYEN_LIEU.md` (màn hình Dự báo › Kế hoạch mua, mã ở `apps/forecast/policy.py`, `methods.py`, `usage.py`, `planning.py`). Cảnh báo Cần đặt hàng lấy từ kế hoạch này. Dự báo số ly theo món dưới đây vẫn giữ cho sắp ca và cho trường hợp món mới, đổi thực đơn (Hướng B của thiết kế); màn hình Đề xuất theo món (cũ) giữ để đối chiếu.
 
+> **Từ 27/10/2026, dự báo của Kế hoạch mua được cấu hình lại** theo phân tích "Lựa chọn mô hình dự báo và quản lý nguyên vật liệu cho LAM Coffee": bình quân theo loại ngày, bình quân có trọng số cùng thứ, Holt-Winters, TSB và dự báo phân cấp (tổng số ly × tỷ trọng món × định mức nhiều tầng), chọn theo sai số và chỉ đổi khi Chủ quán duyệt; bán thành phẩm có định mức mẻ. Xem `docs/THIET_KE_MUA_NGUYEN_LIEU.md` mục 4.4, 5.4.1, 6.3 và tài liệu "Mô hình dự báo và mua nguyên liệu LAM Coffee". Mô hình Poisson động mô tả dưới đây không đổi và vẫn dùng cho dự báo số ly theo món để sắp ca.
+
 Cập nhật 12/10/2026. Làm theo tệp "Khung lý thuyết dự báo nhu cầu bằng học máy xác suất cho LAM Coffee" của Hai và các quy tắc BRU-21, BRU-22, BRU-24 của BRD. Mã nguồn ở `apps/forecast/`.
 
 ## 1. Cách tính

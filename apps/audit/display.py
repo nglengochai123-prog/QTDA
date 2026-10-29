@@ -82,11 +82,14 @@ def _plain(value):
         percent = PERCENT_TEXT.fullmatch(value)
         if percent:
             return numbers.fmt(Decimal(percent.group(1))) + "%"
-        moment = parse_datetime(value) if "T" in value else None
+        try:  # chữ người dùng gõ (số lô "2026-13-45") có dạng ngày nhưng không phải ngày thật
+            moment = parse_datetime(value) if "T" in value else None
+            day = parse_date(value) if len(value) == 10 else None
+        except ValueError:
+            moment = day = None
         if moment is not None:
             return timezone.localtime(moment).strftime("%H:%M %d/%m/%Y") if timezone.is_aware(moment) \
                 else moment.strftime("%H:%M %d/%m/%Y")
-        day = parse_date(value) if len(value) == 10 else None
         if day is not None:
             return day.strftime("%d/%m/%Y")
         return value if len(value) <= 160 else value[:157] + "…"

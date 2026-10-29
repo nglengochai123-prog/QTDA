@@ -37,7 +37,7 @@ def clock_in(user, operation_key, role):
         current = open_attendance(user)
         if current is not None:
             since = timezone.localtime(current.clock_in)
-            if since.date() != timezone.localdate():
+            if is_forgotten(current):
                 raise ValidationError(f"Lượt vào ca lúc {since:%H:%M %d/%m} chưa có giờ ra; báo Chủ quán bổ sung giờ "
                                       f"ra rồi mới vào ca mới.")
             raise ValidationError(f"Bạn đang trong ca từ {since:%H:%M}; ra ca trước rồi mới vào ca mới.")
@@ -96,11 +96,28 @@ def supplement_clock_out(manager, attendance_id, when, reason):
     return att
 
 
+def _forgotten_before(now):
+    """Lượt mở trước mốc này coi là quên bấm Ra ca (AC-77).
+
+    Ca tối có thể kéo qua nửa đêm, nên lượt của hôm qua chỉ bị coi là quên khi đã tới giờ mở cửa hôm nay;
+    trước giờ mở cửa thì chỉ lượt dài hơn MAX_SHIFT_HOURS mới bị coi là quên.
+    """
+    from apps.core import params
+
+    start_of_today = timezone.make_aware(datetime.combine(timezone.localdate(now), time.min))
+    if timezone.localtime(now).hour >= params.get("open_hour"):
+        return start_of_today
+    return min(start_of_today, now - timedelta(hours=MAX_SHIFT_HOURS))
+
+
+def is_forgotten(att, now=None):
+    return att.clock_out is None and att.clock_in < _forgotten_before(now or timezone.now())
+
+
 def missing_clock_out(now=None):
     """Lượt vào ca của ngày trước mà chưa ra ca: Thiếu giờ ra (AC-77)."""
     now = now or timezone.now()
-    start_of_today = timezone.make_aware(datetime.combine(timezone.localdate(now), time.min))
-    return Attendance.objects.filter(clock_out__isnull=True, clock_in__lt=start_of_today).select_related("user")
+    return Attendance.objects.filter(clock_out__isnull=True, clock_in__lt=_forgotten_before(now)).select_related("user")
 
 
 def valid_hours(att):
@@ -136,4 +153,3 @@ def remind_missing(now=None):
 
 
 MISSING_OUT = "Thiếu giờ ra: nhắc Chủ quán bổ sung"
-_ = timedelta

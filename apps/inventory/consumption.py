@@ -3,6 +3,8 @@
 Tiêu hao thực tế = tồn kiểm kê kỳ trước + nhập trong kỳ − tồn kiểm kê kỳ này − hao hụt xuất kho.
 Tiêu hao theo đơn = tổng tiêu hao ghi khi pha chế trong kỳ (theo định mức đã chụp ở từng dòng món),
 gồm cả ly sau đó bị hủy sau pha chế: hủy sau pha chế không sinh biến động kho nên không bị tính lần hai.
+Nguyên liệu gốc dùng để làm bán thành phẩm (theo định mức mẻ) tính vào tiêu hao theo đơn; lượng bán thành phẩm làm ra
+tính như nhập trong kỳ của chính bán thành phẩm.
 """
 
 from decimal import Decimal
@@ -18,8 +20,9 @@ from .models import ConsumptionCheck, StockCount, StockMovement
 from .stock import fmt_vn
 
 
-def _sum(ingredient, kind, start, end):
-    total = (StockMovement.objects.filter(ingredient=ingredient, kind=kind, created_at__gte=start, created_at__lt=end)
+def _sum(ingredient, kind, start, end, **extra):
+    total = (StockMovement.objects.filter(ingredient=ingredient, kind=kind, created_at__gte=start, created_at__lt=end,
+                                          **extra)
              .aggregate(s=Sum("quantity"))["s"])
     return Decimal(total or 0)
 
@@ -37,9 +40,11 @@ def check_after_count(count, actor=None):
     if previous is None:
         return None  # lần kiểm kê đầu tiên chỉ làm mốc
     start, end = previous.created_at, count.created_at
-    receipts = _sum(ingredient, StockMovement.Kind.RECEIPT, start, end)
+    receipts = (_sum(ingredient, StockMovement.Kind.RECEIPT, start, end)
+                + _sum(ingredient, StockMovement.Kind.PRODUCE, start, end, quantity__gt=0))
     waste = -_sum(ingredient, StockMovement.Kind.WASTE, start, end)
-    by_orders = -_sum(ingredient, StockMovement.Kind.CONSUME, start, end)
+    by_orders = -(_sum(ingredient, StockMovement.Kind.CONSUME, start, end)
+                  + _sum(ingredient, StockMovement.Kind.PRODUCE, start, end, quantity__lt=0))
     actual = previous.counted + receipts - count.counted - waste
     excess = actual - by_orders
     percent = (excess / by_orders * 100) if by_orders else (Decimal(100) if excess > 0 else Decimal(0))

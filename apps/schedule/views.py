@@ -1,11 +1,12 @@
 """Lịch làm tuần cho Chủ quán; đăng ký ca và lịch của tôi cho nhân viên (FR-38, FR-39)."""
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from apps.accounts.models import User
@@ -34,8 +35,11 @@ def _back(week, shift=None, tab=None):
 
 
 def _time(value):
+    value = (value or "").strip()
+    if value in ("24:00", "24:0"):
+        return time(0, 0)  # hết ngày: ca kết thúc lúc nửa đêm
     try:
-        return datetime.strptime((value or "").strip(), "%H:%M").time()
+        return datetime.strptime(value, "%H:%M").time()
     except ValueError:
         raise ValidationError("Nhập giờ bắt đầu và giờ kết thúc của ca, ví dụ 06:30.") from None
 
@@ -72,8 +76,8 @@ def board(request):
                 if len(name) > 40:
                     raise ValidationError("Tên ca tối đa 40 ký tự.")
                 start, end = _time(p.get("start")), _time(p.get("end"))
-                if end <= start:
-                    raise ValidationError("Giờ kết thúc phải sau giờ bắt đầu.")
+                if end <= start and end != time(0, 0):
+                    raise ValidationError("Giờ kết thúc phải sau giờ bắt đầu (ca kết thúc lúc nửa đêm thì ghi 00:00).")
                 needs = _needs_from(p)
                 made, skipped = [], 0
                 for d in days:
@@ -96,9 +100,20 @@ def board(request):
                 if s.assignments.filter(removed_at__isnull=True).exists():
                     reopen = s.pk
                     raise ValidationError("Ca đã có người được xếp; bỏ người ra trước khi xóa ca.")
-                record(Action.DELETE, request=request, obj=s, object_type="schedule.WorkShift", before={"ca": str(s)})
+                registrants = sorted({r.user_id for r in s.registrations.filter(cancelled_at__isnull=True)})
+                record(Action.DELETE, request=request, obj=s, object_type="schedule.WorkShift", before={"ca": str(s)},
+                       after={"nguoi_da_dang_ky": len(registrants)})
+                label = f"{s.name} {s.date:%d/%m} {s.start:%H:%M}–{s.end:%H:%M}"
+                upcoming = s.date >= timezone.localdate()
                 s.delete()
-                messages.success(request, "Đã xóa ca.")
+                if registrants and upcoming:
+                    from apps.core.push import notify_later
+
+                    # Đăng ký bị xóa theo ca: báo người đã đăng ký để họ chọn ca khác, không chờ một ca không còn.
+                    notify_later(registrants, f"Ca {label} đã bị bỏ khỏi lịch",
+                                 "Đăng ký của bạn cho ca này không còn; chọn ca khác nếu cần.", "/lich/dang-ky/")
+                messages.success(request, "Đã xóa ca." + (f" Đã báo {len(registrants)} người đã đăng ký ca này."
+                                                         if registrants and upcoming else ""))
             elif action == "set_needs":
                 s = get_object_or_404(WorkShift, pk=p.get("shift"))
                 targets = [s]
@@ -113,7 +128,8 @@ def board(request):
                 messages.success(request, "Đã điền số người cần theo gợi ý; ô bạn đã sửa có lý do được giữ.")
             elif action == "auto_assign":
                 made = sv.auto_assign(user, week)
-                messages.success(request, f"Đã xếp {made} lượt theo đăng ký. Ô bạn xếp tay được giữ nguyên.")
+                messages.success(request, (f"Đã xếp thêm {made} lượt theo đăng ký." if made else
+                                           "Không có lượt mới theo đăng ký.") + " Ô bạn xếp tay được giữ nguyên.")
             elif action == "assign":
                 s = get_object_or_404(WorkShift, pk=p.get("shift"))
                 person = get_object_or_404(User, pk=p.get("user"))

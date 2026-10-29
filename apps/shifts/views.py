@@ -65,8 +65,9 @@ def my_shift(request, shift_id=None):
     context["to_confirm"] = CashEntry.objects.filter(kind=CashEntry.Kind.HANDOVER, receiver=request.user,
                                                      confirmed_at__isnull=True).select_related("shift", "actor")
     if user_can(request.user, Cap.PAYMENT):  # chỉ người thu tiền bấm được "Đã hoàn tiền"
-        context["pending_refunds"] = [(r, uuid.uuid4().hex) for r in services.pending_refunds()]
-        context["refund_shift_open"] = Shift.objects.operating() is not None
+        operating = Shift.objects.operating()
+        context["pending_refunds"] = services.refund_rows(operating)
+        context["refund_shift_open"] = operating is not None
     return render(request, "shifts/my_shift.html", context)
 
 
@@ -74,8 +75,10 @@ def my_shift(request, shift_id=None):
 @require_POST
 def refund_paid(request, refund_id):
     p = request.POST
-    _flash(request, lambda: services.confirm_refund(request.user, p.get("operation_key", ""), refund_id,
-                                                    p.get("note", "")), "Đã ghi đã hoàn tiền vào ca hiện tại.")
+    result = _flash(request, lambda: services.confirm_refund(request.user, p.get("operation_key", ""), refund_id,
+                                                             p.get("note", "")), "Đã ghi đã hoàn tiền vào ca hiện tại.")
+    if result and result[0].get("warning"):
+        messages.warning(request, result[0]["warning"])
     return links.back(request, "shifts:my_shift")
 
 

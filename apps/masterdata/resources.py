@@ -15,7 +15,8 @@ from apps.audit.models import Action
 from apps.audit.services import record
 from apps.core import numbers
 from apps.catalog.models import ItemSize, MenuGroup, MenuItem, Option, OptionGroup, Table
-from apps.inventory.models import Ingredient, IssueRule, RecipeLine, RecipeVersion, StockMovement, Supplier
+from apps.inventory.models import (Ingredient, IngredientKind, IssueRule, RecipeLine, RecipeVersion, SemiRecipe,
+                                   SemiRecipeLine, StockMovement, Supplier)
 from apps.orders.models import AdjustmentReason
 from apps.shifts.models import Shift
 from apps.staff.forms import EmployeeForm
@@ -66,6 +67,26 @@ def _authorizer_label(shift):
     return str(shift.payment_authorizer)
 
 
+def _adopt_orphan_orders(request, shift):
+    """Đơn gửi lúc chưa có ca đang mở được gắn vào ca vừa mở để không bị bỏ sót khi kết ca (BRU-06)."""
+    from django.contrib import messages
+
+    from apps.orders.models import Order
+
+    if Shift.objects.operating() != shift:
+        return
+    orphans = list(Order.objects.filter(shift__isnull=True)
+                   .exclude(status__in=[Order.Status.PAID, Order.Status.CANCELLED]).select_related("table"))
+    for order in orphans:
+        order.shift = shift
+        order.save(update_fields=["shift", "updated_at"])
+        record(Action.UPDATE, actor=request.user, obj=order, object_type="orders.Order", before={"ca": ""},
+               after={"ca": str(shift)}, reason="Đơn gửi lúc chưa mở ca: gắn vào ca vừa mở")
+    if orphans:
+        messages.info(request, f"Đã gắn {len(orphans)} đơn chưa thanh toán gửi lúc chưa có ca vào {shift.name}: "
+                               + ", ".join(f"{o.code} (bàn {o.table.code})" for o in orphans) + ".")
+
+
 def _save_shift(request, form, created):
     shift = form.save(commit=False)
     if created:
@@ -75,6 +96,17 @@ def _save_shift(request, form, created):
 
         shift.store = request.user.store or Store.get_default()
     shift.save()
+    _adopt_orphan_orders(request, shift)
+    overlap = (Shift.objects.filter(status=Shift.Status.OPEN, starts_at__lt=shift.ends_at, ends_at__gt=shift.starts_at)
+               .exclude(pk=shift.pk).order_by("starts_at").first())
+    if overlap is not None:
+        from django.contrib import messages
+
+        # Chồng giờ được phép (ca sau nhận tiền từ lúc bắt đầu) nhưng thường là gõ nhầm ngày giờ: báo để Chủ quán xem lại.
+        later = shift if shift.starts_at >= overlap.starts_at else overlap
+        messages.warning(request, f"{shift.name} chồng giờ với {overlap.name} ({_shift_hours(overlap)} "
+                                  f"{timezone.localtime(overlap.starts_at):%d/%m}). Trong khoảng chồng, đơn và tiền thu vào "
+                                  f"{later.name} từ {_local(later.starts_at)}; nếu gõ nhầm giờ thì sửa lại.")
     return shift
 
 
@@ -197,7 +229,11 @@ register(Resource(
 
 def _item_status(item):
     blockers = item.sale_blockers()
-    return "Đủ điều kiện" if not blockers else "Thiếu: " + "; ".join(blockers)
+    if blockers:
+        return "Thiếu: " + "; ".join(blockers)
+    if not item.group.is_active:  # món vẫn Đang bán nhưng nhóm bị bỏ Đang dùng thì không hiện ở màn gọi món
+        return f"Đủ điều kiện, nhưng nhóm {item.group.name} đang không dùng nên chưa hiện khi gọi món"
+    return "Đủ điều kiện"
 
 
 register(Resource(
@@ -278,17 +314,18 @@ def _ingredient_form(form, obj, request):
 
 register(Resource(
     key="nguyen-lieu", title="Nguyên vật liệu", singular="Nguyên vật liệu", model=Ingredient, cap=Cap.MASTER_INVENTORY,
-    fields=["name", "unit", "pack_size", "pack_label", "main_supplier", "lead_time_days", "order_cycle_days",
+    fields=["name", "unit", "kind", "pack_size", "pack_label", "main_supplier", "lead_time_days", "order_cycle_days",
             "shelf_life_days", "issue_rule", "storage_capacity", "safety_stock", "safety_stock_is_provisional",
             "is_critical", "count_accumulated_threshold", "is_active",
             # Mua hàng. Tham số chính sách của mô hình (nhóm, mức phục vụ, chu kỳ kiểm tra) không hiện ở đây: dùng
             # mặc định trong apps/core/params.py.
             "moq_packs", "weekly_low", "weekly_typical", "weekly_high"],
-    columns=[("Tên", "name"), ("Đơn vị", "unit"), ("Nhà cung cấp", "main_supplier"),
+    columns=[("Tên", "name"), ("Đơn vị", "unit"), ("Loại", "kind"), ("Nhà cung cấp", "main_supplier"),
              ("Hạn dùng", lambda i: f"{i.shelf_life_days} ngày" if i.shelf_life_days else "Không có"),
              ("Quy tắc xuất lô", lambda i: i.rule_short), ("Tồn an toàn", "safety_stock"),
              ("Trọng yếu", "is_critical"), ("Đang dùng", "is_active")],
-    search=("name",), filters=[("trong-yeu", "Trọng yếu", "is_critical", YES_NO),
+    search=("name",), filters=[("loai", "Loại", "kind", IngredientKind.choices),
+                               ("trong-yeu", "Trọng yếu", "is_critical", YES_NO),
                                ("dang-dung", "Đang dùng", "is_active", YES_NO)],
     queryset=lambda: Ingredient.objects.select_related("main_supplier").order_by("name"), prepare_form=_ingredient_form,
     save=_save_ingredient,
@@ -305,6 +342,36 @@ register(Resource(
                             "(gram, ml, cái…). Chỉ ghi một lần; sau đó điều chỉnh bằng kiểm kê. Không rõ hạn thì để "
                             "trống, lô sẽ ghi là chưa rõ hạn. Giá mua dùng để tính giá trị tồn kho; để trống thì "
                             "lấy theo giá của lần nhập hàng gần nhất.")],
+))
+
+
+def _semi_form(form, obj, request):
+    if "product" in form.fields:
+        form.fields["product"].queryset = Ingredient.objects.filter(kind=IngredientKind.SEMI).order_by("name")
+        if obj is not None:
+            form.fields["product"].disabled = True
+
+
+def _semi_lines_prepare(form, recipe):
+    form.fields["ingredient"].queryset = (Ingredient.objects.filter(is_active=True).exclude(pk=recipe.product_id)
+                                          .order_by("name"))
+
+
+register(Resource(
+    key="ban-thanh-pham", title="Định mức bán thành phẩm", singular="Định mức bán thành phẩm", model=SemiRecipe,
+    cap=Cap.MASTER_INVENTORY, fields=["product", "batch_output", "yield_measured", "note"],
+    columns=[("Bán thành phẩm", "product"),
+             ("Mỗi mẻ thu được", lambda r: f"{numbers.fmt(r.batch_output)} {r.product.get_unit_display()}"),
+             ("Thành phần", lambda r: ", ".join(str(line) for line in r.lines.all()) or "Chưa khai"),
+             ("Đã cân đo", "yield_measured")],
+    search=("product__name",),
+    queryset=lambda: (SemiRecipe.objects.select_related("product").prefetch_related("lines__ingredient")
+                      .order_by("product__name")),
+    prepare_form=_semi_form,
+    inlines=[Inline(SemiRecipeLine, ["ingredient", "quantity"], "Nguyên liệu cho một mẻ", extra=3, can_delete=True,
+                    prepare=_semi_lines_prepare)],
+    note="Nguyên liệu cho một mẻ và lượng bán thành phẩm thu được, ví dụ 500 g cà phê bột ra 1.000 ml cà phê cốt. "
+         "Nguyên liệu phải có loại Bán thành phẩm. Ghi mẻ đã làm ở Kho, Làm bán thành phẩm.",
 ))
 
 
@@ -422,17 +489,20 @@ def _season_resource():
 
     return Resource(
         key="dieu-chinh-mua", title="Điều chỉnh theo mùa", singular="Điều chỉnh theo mùa", model=SeasonalAdjustment,
-        cap=Cap.FORECASTS, fields=["ingredient", "start", "end", "percent", "basis", "baseline_daily", "independent",
-                                   "is_active"],
-        columns=[("Nguyên liệu", lambda a: a.ingredient.name if a.ingredient_id else "Mọi nguyên liệu"),
+        cap=Cap.FORECASTS, fields=["ingredient", "menu_group", "start", "end", "percent", "basis", "baseline_daily",
+                                   "independent", "is_active"],
+        columns=[("Áp cho", lambda a: a.ingredient.name if a.ingredient_id else f"Nhóm món {a.menu_group.name}"
+                  if a.menu_group_id else "Mọi nguyên liệu"),
                  ("Từ", "start"), ("Đến", "end"), ("Thay đổi (%)", "percent"), ("Căn cứ", "basis"),
                  ("Người đặt", lambda a: f"{a.created_by or ''} · {_local(a.created_at)}"), ("Đang áp dụng", "is_active")],
         search=("basis", "ingredient__name"), filters=[("dang-ap-dung", "Đang áp dụng", "is_active", YES_NO)],
-        queryset=lambda: SeasonalAdjustment.objects.select_related("ingredient", "created_by").order_by("-start"),
+        queryset=lambda: SeasonalAdjustment.objects.select_related("ingredient", "menu_group", "created_by")
+        .order_by("-start"),
         save=_save_season,
         note="Dùng khi Chủ quán biết trước nhu cầu sẽ đổi theo mùa (ví dụ sinh viên nghỉ hè) mà số bán gần đây chưa "
-             "cho thấy. Bắt buộc ghi căn cứ; số liệu giả định không phải căn cứ. Điều chỉnh riêng một nguyên liệu thay "
-             "thế điều chỉnh chung.",
+             "cho thấy. Bắt buộc ghi căn cứ; số liệu giả định không phải căn cứ. Mùa thường không đổi đều mọi món "
+             "(nóng thì trà, nước ép tăng, cà phê nóng giảm): nên đặt theo nhóm món, mỗi nguyên liệu chỉ nhận phần "
+             "tương ứng. Điều chỉnh riêng một nguyên liệu thay thế điều chỉnh theo nhóm và điều chỉnh chung.",
     )
 
 

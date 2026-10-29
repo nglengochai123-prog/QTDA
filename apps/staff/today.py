@@ -24,7 +24,7 @@ def _span(delta):
 def _bounds(shift):
     tz = timezone.get_current_timezone()
     return (timezone.make_aware(datetime.combine(shift.date, shift.start), tz),
-            timezone.make_aware(datetime.combine(shift.date, shift.end), tz))
+            timezone.make_aware(shift.end_datetime, tz))
 
 
 def _assignments(day, user=None):
@@ -72,14 +72,13 @@ def staff_card(user, now=None):
             week_hours += timekeeping.valid_hours(att)
         else:
             last_hours += timekeeping.valid_hours(att)
-    start_of_today = timezone.make_aware(datetime.combine(today, time.min))
     return {
         "current": current, "roles": roles, "default_role": default_role, "planned": planned, "upcoming": upcoming,
         "worked": _span(now - current.clock_in) if current else "",
         "current_shift": next((p for p in planned if current and _match(current, p["start"], p["end"])), None),
         "rows": rows, "week_hours": week_hours, "week_count": week_count, "week": week, "last_hours": last_hours,
         # Lượt mở từ hôm trước: quên bấm Ra ca, Chủ quán bổ sung giờ ra đúng (AC-77, AC-78).
-        "stale": bool(current and current.clock_in < start_of_today),
+        "stale": bool(current and timekeeping.is_forgotten(current, now)),
     }
 
 

@@ -84,7 +84,7 @@ def my_page(user, now=None):
             continue
         tz = timezone.get_current_timezone()
         start = timezone.make_aware(datetime.combine(s.date, s.start), tz)
-        end = timezone.make_aware(datetime.combine(s.date, s.end), tz)
+        end = timezone.make_aware(s.end_datetime, tz)
         state = "done" if end <= now else "now" if start <= now else "next"
         item = {"a": a, "shift": s, "role": sv.ROLE_LABEL.get(a.role, a.role), "day": DAY_NAMES[s.date.weekday()],
                 "short": DAY_SHORT[s.date.weekday()], "today": s.date == today, "state": state, "hours": s.hours,

@@ -58,8 +58,9 @@ class AuditedAdminTests(TestCase):
         self.size = ItemSize.objects.create(item=self.item, name="M", price=35000)
         self.client.force_login(self.owner)
 
-    def test_price_change_logged_with_before_and_after(self):
-        # AC-114: đổi giá được ghi nhật ký với giá trước và sau.
+    def test_admin_page_is_read_only_for_menu(self):
+        # Món và giá sửa ở mục Dữ liệu nền (có ghi nhật ký giá trước, sau: AC-114, xem test_masterdata);
+        # trang quản trị chỉ xem để không bỏ qua kiểm tra khi lưu.
         url = reverse("admin:catalog_menuitem_change", args=[self.item.pk])
         data = {
             "group": self.item.group_id, "name": "Trà đào", "status": "nhap", "sort_order": 0,
@@ -67,11 +68,9 @@ class AuditedAdminTests(TestCase):
             "sizes-0-id": self.size.pk, "sizes-0-item": self.item.pk, "sizes-0-name": "M",
             "sizes-0-price": 38000, "sizes-0-is_active": "on", "sizes-0-sort_order": 0,
         }
-        response = self.client.post(url, data)
-        self.assertRedirects(response, reverse("admin:catalog_menuitem_changelist"))
+        self.assertEqual(self.client.post(url, data).status_code, 403)
         self.size.refresh_from_db()
-        self.assertEqual(self.size.price, 38000)
-        log = AuditLog.objects.get(action=Action.UPDATE, object_type="catalog.ItemSize")
-        self.assertEqual(log.before, {"price": 35000})
-        self.assertEqual(log.after, {"price": 38000})
-        self.assertEqual(log.actor, self.owner)
+        self.assertEqual(self.size.price, 35000)
+        page = self.client.get(url)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "/du-lieu/mon/")

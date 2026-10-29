@@ -130,13 +130,13 @@ def cashier(request):
             payments.can_pay_received_items(request.user, r) for r in bill["exhausted"])
         bill["can_approve"] = any(adjustments.can_decide(request.user, r) for r in bill["requests"])
     from apps.shifts.models import Shift
-    from apps.shifts.services import pending_refunds
+    from apps.shifts.services import refund_rows
 
     operating = Shift.objects.operating()
     return render(request, "orders/cashier.html", {"bills": bills, "total": sum(b["amount"] for b in bills),
                                                    "signature": payments.cashier_signature(bills),
                                                    "can_detail": user_can(request.user, Cap.VIEW_DASHBOARD),
-                                                   "pending_refunds": [(r, uuid.uuid4().hex) for r in pending_refunds()],
+                                                   "pending_refunds": refund_rows(operating),
                                                    "refund_shift_open": operating is not None,
                                                    "operating_shift": operating})
 

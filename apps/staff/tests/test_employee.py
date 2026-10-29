@@ -44,17 +44,17 @@ class EmployeeTests(TestCase):
         emp.user.refresh_from_db()
         self.assertTrue(emp.user.is_active)
 
-    def test_owner_creates_profile_in_admin(self):
+    def test_admin_page_cannot_add_profile(self):
+        # Hồ sơ nhân viên thêm ở mục Dữ liệu nền (tạo tài khoản, khóa khi nghỉ việc); trang quản trị chỉ xem.
         owner = User.objects.create_user("chuquan", password="matkhau-thu-123", role=Role.CHU_QUAN)
         self.client.force_login(owner)
         response = self.client.post(reverse("admin:staff_employee_add"), {
             "full_name": "Võ Thị Em", "phone": "0905000004", "roles": [Role.THU_NGAN, Role.PHUC_VU],
             "hourly_wage": 24000, "status": EmploymentStatus.WORKING, "username": "",
         })
-        self.assertEqual(response.status_code, 302)
-        emp = Employee.objects.get(phone="0905000004")
-        self.assertEqual(emp.user.username, "0905000004")
-        self.assertEqual(emp.user.role, Role.THU_NGAN)
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Employee.objects.filter(phone="0905000004").exists())
+        self.assertEqual(self.client.get(reverse("admin:staff_employee_changelist")).status_code, 200)
 
     def test_non_owner_cannot_open_profiles(self):
         manager = User.objects.create_user("qlca", password="matkhau-thu-123", role=Role.THU_NGAN)

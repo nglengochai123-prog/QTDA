@@ -13,4 +13,5 @@ urlpatterns = [
     path("du-bao/lich-su/", views.history_import, name="history"),
     path("du-bao/ke-hoach-mua/", views.plans, name="plans"),
     path("du-bao/ke-hoach-mua/<int:ingredient_id>/", views.plan_detail, name="plan"),
+    path("du-bao/ke-hoach-mua/do-chinh-xac/", views.accuracy, name="accuracy"),
 ]

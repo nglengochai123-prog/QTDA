@@ -156,24 +156,41 @@ def stacked_columns(labels, series, height=230, tips=None, value_fmt=fmt, width=
 
 # ---------------- Đường (xu hướng theo thời gian) ----------------
 
-def line(labels, series, height=230, value_fmt=fmt, tip_labels=None, floor_zero=True, width=WIDTH):
-    """series: [{"name", "values" (None = không có số), "slot" (1..3 hoặc "muted"), "area": bool, "label_end": bool}].
+def line(labels, series, height=230, value_fmt=fmt, tip_labels=None, floor_zero=True, width=WIDTH, bands=None,
+         divider=None, tips=None):
+    """series: [{"name", "values" (None = không có số), "slot" (1..3 hoặc "muted"), "area": bool, "label_end": bool,
+    "dash": bool (nét đứt, ví dụ phần dự báo)}].
 
-    Một trục y. Mỗi vị trí x có một vùng chạm cao hết biểu đồ, chú thích liệt kê mọi chuỗi tại vị trí đó."""
+    bands: [{"name", "lo", "hi", "slot"}] dải mờ từ lo tới hi (khoảng thường gặp quanh đường dự báo).
+    divider: {"index", "label"} vạch đứng đánh dấu một ngày (ví dụ hôm nay). tips: chú thích đầy đủ theo từng vị trí x.
+
+    Một trục y; có số âm thì trục chia đều qua 0 và đường 0 đậm hơn. Mỗi vị trí x có một vùng chạm cao hết biểu đồ,
+    chú thích liệt kê mọi chuỗi tại vị trí đó."""
     if not labels or not series:
         return None
+    bands = bands or []
     vals = [v for s in series for v in s["values"] if v is not None]
+    vals += [v for b in bands for v in b["lo"] + b["hi"] if v is not None]
     if not vals:
         return None
-    pad_l, pad_r, pad_t, pad_b = 52, 56, 14, 26
-    low = 0 if floor_zero else min(vals)
-    top = _scale_top(max(vals) - low) + low if not floor_zero else _scale_top(max(vals))
+    # Chừa lề phải cho nhãn số ở cuối đường; không có nhãn cuối thì chỉ cần chỗ cho nửa nhãn ngày cuối trục.
+    pad_r = 56 if any(s.get("label_end", True) for s in series) else 22
+    pad_l, pad_t, pad_b = 52, 14 if not divider else 22, 26
+    n_ticks = 4
+    if min(vals) < 0:
+        # Trục qua 0: bước tròn, đỉnh và đáy là bội của bước để 0 luôn là một vạch.
+        step = nice_max((max(vals) - min(vals)) / 4) or 1
+        low, top = math.floor(min(vals) / step) * step, max(math.ceil(max(vals) / step) * step, step)
+        n_ticks = round((top - low) / step)
+    else:
+        low = 0 if floor_zero else min(vals)
+        top = _scale_top(max(vals) - low) + low if not floor_zero else _scale_top(max(vals))
     plot_w, plot_h = width - pad_l - pad_r, height - pad_t - pad_b
     n = len(labels)
-    step = plot_w / max(n - 1, 1)
+    step_x = plot_w / max(n - 1, 1)
 
     def xy(i, v):
-        return pad_l + i * step, pad_t + plot_h - (v - low) / ((top - low) or 1) * plot_h
+        return pad_l + i * step_x, pad_t + plot_h - (v - low) / ((top - low) or 1) * plot_h
 
     out = []
     for s in series:
@@ -186,22 +203,40 @@ def line(labels, series, height=230, value_fmt=fmt, tip_labels=None, floor_zero=
         if s.get("area"):
             area = d + f" L{coords[-1][0]:.1f},{pad_t + plot_h:.1f} L{coords[0][0]:.1f},{pad_t + plot_h:.1f} Z"
         end_x, end_y = coords[-1]
-        out.append({"d": d, "area": area, "slot": s.get("slot", 1), "name": s["name"],
+        out.append({"d": d, "area": area, "slot": s.get("slot", 1), "name": s["name"], "dash": s.get("dash", False),
                     "end": {"x": round(end_x, 1), "y": round(end_y, 1), "text": value_fmt(pts[-1][1])}
                     if s.get("label_end", True) else None})
+    band_paths = []
+    for b in bands:
+        idx = [i for i in range(n) if b["lo"][i] is not None and b["hi"][i] is not None]
+        if len(idx) < 2:
+            continue
+        upper = [xy(i, b["hi"][i]) for i in idx]
+        lower = [xy(i, b["lo"][i]) for i in reversed(idx)]
+        band_paths.append({"d": "M" + " L".join(f"{x:.1f},{y:.1f}" for x, y in upper + lower) + " Z",
+                           "slot": b.get("slot", 1)})
     shown = _show_labels(n, _label_every(n, _room(plot_w)))
     hits = []
     for i, label in enumerate(labels):
-        x = pad_l + i * step
-        parts = [f"{s['name']} {value_fmt(s['values'][i])}" for s in series if s["values"][i] is not None]
-        hits.append({"x": round(x - step / 2, 1), "w": round(step, 1), "cx": round(x, 1),
-                     "tip": f"{(tip_labels or labels)[i]}: " + " · ".join(parts),
+        x = pad_l + i * step_x
+        if tips:
+            tip = tips[i]
+        else:
+            parts = [f"{s['name']} {value_fmt(s['values'][i])}" for s in series if s["values"][i] is not None]
+            tip = f"{(tip_labels or labels)[i]}: " + " · ".join(parts)
+        hits.append({"x": round(x - step_x / 2, 1), "w": round(step_x, 1), "cx": round(x, 1), "tip": tip,
                      "label": label, "show_label": i in shown})
-    ticks = [{"y": round(pad_t + plot_h - plot_h * k / 4, 1), "text": value_fmt(low + (top - low) * k / 4)}
-             for k in range(5)]
-    return {"series": out, "hits": hits, "ticks": ticks, "w": width, "h": height, "x0": pad_l,
+    ticks = [{"y": round(pad_t + plot_h - plot_h * k / n_ticks, 1),
+              "text": value_fmt(low + (top - low) * k / n_ticks), "zero": abs(low + (top - low) * k / n_ticks) < 1e-9}
+             for k in range(n_ticks + 1)]
+    div = None
+    if divider is not None and 0 <= divider["index"] < n:
+        div = {"x": round(pad_l + divider["index"] * step_x, 1), "label": divider.get("label", "")}
+    legend = [{"name": s["name"], "slot": s.get("slot", 1), "dash": s.get("dash", False)} for s in series]
+    legend += [{"name": b["name"], "slot": b.get("slot", 1), "band": True} for b in bands if b.get("name")]
+    return {"series": out, "bands": band_paths, "hits": hits, "ticks": ticks, "w": width, "h": height, "x0": pad_l,
             "x1": width - pad_r, "base": pad_t + plot_h, "top": pad_t, "label_y": height - 8, "plot_h": plot_h,
-            "legend": [{"name": s["name"], "slot": s.get("slot", 1)} for s in series] if len(series) > 1 else []}
+            "divider": div, "legend": legend if len(legend) > 1 else []}
 
 
 def sparkline(values, width=120, height=32):

@@ -2,15 +2,15 @@ from django.contrib import admin
 from django.urls import reverse
 from django.utils.html import format_html
 
-from apps.accounts.permissions import OwnerOnlyAdminMixin
-from apps.audit.admin_mixins import AuditedAdminMixin
+from apps.accounts.permissions import AppManagedAdminMixin
 
 from .forms import EmployeeForm
 from .models import Employee
 
 
 @admin.register(Employee)
-class EmployeeAdmin(OwnerOnlyAdminMixin, AuditedAdminMixin, admin.ModelAdmin):
+class EmployeeAdmin(AppManagedAdminMixin, admin.ModelAdmin):
+    app_resource = "nhan-vien"
     form = EmployeeForm
     list_display = ("full_name", "phone", "role_labels", "status", "account_link")
     list_filter = ("status",)
@@ -24,8 +24,3 @@ class EmployeeAdmin(OwnerOnlyAdminMixin, AuditedAdminMixin, admin.ModelAdmin):
     def account_link(self, obj):
         url = reverse("admin:accounts_user_change", args=[obj.user_id])
         return format_html('<a href="{}">{}</a>', url, obj.user.username)
-
-    def save_model(self, request, obj, form, change):
-        if not change:
-            obj.attach_new_account(form.cleaned_data.get("username"))
-        super().save_model(request, obj, form, change)

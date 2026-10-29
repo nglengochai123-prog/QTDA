@@ -14,7 +14,7 @@ from apps.core import numbers, params, uploads
 from apps.core.idempotency import run_once
 
 from . import consumption, stock
-from .models import (Ingredient, Payable, PurchaseOrder, QuickReport, Receipt, ReceiptLine, ShortageCase,
+from .models import (Ingredient, Payable, PurchaseOrder, QuickReport, Receipt, ReceiptLine, SemiBatch, ShortageCase,
                      StockCount, StockLot, StockMovement, Supplier, SupplierPayment, Waste)
 
 
@@ -106,6 +106,9 @@ def create_purchase_order(user, supplier_id, ingredient_id, quantity, expected_d
     def action():
         supplier = Supplier.objects.get(pk=payload["supplier"])
         ingredient = Ingredient.objects.get(pk=payload["ingredient"])
+        if ingredient.is_semi:
+            raise ValidationError(f"{ingredient.name} là bán thành phẩm quán tự làm, không đặt mua; ghi ở Làm bán "
+                                  "thành phẩm.")
         po = PurchaseOrder.objects.create(store=ingredient.store, supplier=supplier, ingredient=ingredient,
                                           quantity=_dec(quantity, "Số lượng"), expected_date=expected_date, note=note,
                                           created_by=user, status=status, order_by=order_by,
@@ -247,6 +250,9 @@ def create_receipt(user, operation_key, supplier_id, lines, payment_type, *, inv
         parsed = []
         for raw in lines:
             ingredient = Ingredient.objects.get(pk=raw["ingredient"])
+            if ingredient.is_semi:
+                raise ValidationError(f"{ingredient.name} là bán thành phẩm quán tự làm, không nhập qua phiếu nhập; "
+                                      "ghi ở Làm bán thành phẩm.")
             qty = _dec(raw.get("quantity"), f"Số lượng {ingredient.name}")
             price = _vnd(raw.get("unit_price") or 0, f"Đơn giá {ingredient.name}", allow_zero=True)
             po = None
@@ -410,6 +416,67 @@ def record_waste(user, operation_key, ingredient_id, quantity, reason, note="", 
     return run_once(operation_key, "waste", payload, action, actor=user)
 
 
+# ---------------- Làm bán thành phẩm ----------------
+
+def produce_semi(user, operation_key, product_id, batches, actual_output=None, note=""):
+    """Ghi một lần làm bán thành phẩm: trừ nguyên liệu gốc theo định mức mẻ × số mẻ và cộng lượng thu được vào kho
+    thành một lô (hạn = hôm nay + thời hạn sử dụng). Món bán ra trừ bán thành phẩm, nên nguyên liệu gốc chỉ bị trừ
+    một lần ở đây, không trừ lại khi bán. Không đủ nguyên liệu gốc thì không ghi gì."""
+    payload = {"product": int(product_id), "batches": str(batches), "actual": str(actual_output or ""), "note": note}
+
+    def action():
+        from .lots import latest_costs
+
+        product = Ingredient.objects.select_related("semi_recipe").get(pk=payload["product"], is_active=True)
+        recipe = getattr(product, "semi_recipe", None) if product.is_semi else None
+        if recipe is None:
+            raise ValidationError(f"{product.name} chưa có định mức mẻ; khai ở Danh mục, Bán thành phẩm.")
+        n = _dec(batches, "Số mẻ").quantize(Decimal("0.01"))
+        if n <= 0:
+            raise ValidationError("Số mẻ phải lớn hơn 0.")
+        expected = (recipe.batch_output * n).quantize(Decimal("0.01"))
+        actual = (_dec(actual_output, "Lượng thu thực tế").quantize(Decimal("0.01"))
+                  if actual_output not in (None, "") else expected)
+        lines = list(recipe.lines.select_related("ingredient"))
+        if not lines:
+            raise ValidationError(f"Định mức mẻ của {product.name} chưa có nguyên liệu.")
+        need = {}
+        for line in lines:
+            need[line.ingredient_id] = need.get(line.ingredient_id, Decimal(0)) + (line.quantity * n).quantize(
+                Decimal("0.01"))
+        rows = stock._lock(list(need) + [product.pk])
+        short = [f"{rows[i].ingredient.name}: cần {stock.fmt_vn(q)}, còn {stock.fmt_vn(max(rows[i].available, 0))} "
+                 f"{rows[i].ingredient.get_unit_display()}" for i, q in need.items() if rows[i].available < q]
+        if short:
+            raise ValidationError("Không đủ nguyên liệu để làm " + product.name + ": " + "; ".join(short) + ".")
+        costs = latest_costs(list(need))
+        cost = (sum(float(q) * costs[i] for i, q in need.items()) / float(actual)
+                if actual > 0 and all(i in costs for i in need) else None)
+        batch = SemiBatch.objects.create(
+            store=product.store, product=product, batches=n, expected_output=expected, actual_output=actual,
+            usage={str(i): str(q) for i, q in need.items()}, actor=user, operation_key=operation_key, note=note[:255])
+        for i, q in need.items():
+            stock.move(i, -q, kind=StockMovement.Kind.PRODUCE, actor=user, store=product.store,
+                       source_type="me_btp", source_id=batch.pk, note=f"Làm {product.name}")
+        today = timezone.localdate()
+        lot_spec = {"source": StockLot.Source.BATCH, "code": f"BTP{timezone.localtime():%y%m%d}-{product.pk}",
+                    "expiry_date": today + timedelta(days=product.shelf_life_days - 1) if product.shelf_life_days
+                    else None, "unit_cost": round(cost) if cost else None}
+        movement = stock.move(product.pk, actual, kind=StockMovement.Kind.PRODUCE, actor=user, store=product.store,
+                              source_type="me_btp", source_id=batch.pk, note=f"{stock.fmt_vn(n)} mẻ", lot=lot_spec)
+        draw = movement.lot_draws.select_related("lot").first()
+        if draw:
+            batch.lot = draw.lot
+            batch.save(update_fields=["lot", "updated_at"])
+        record(Action.CREATE, actor=user, obj=batch, object_type="inventory.SemiBatch",
+               after={"ban_thanh_pham": product.name, "so_me": str(n), "thu_duoc": str(actual),
+                      "theo_dinh_muc": str(expected),
+                      "nguyen_lieu": {rows[i].ingredient.name: str(q) for i, q in need.items()}})
+        return {"batch": batch.pk, "lot": batch.lot.code if batch.lot else ""}
+
+    return run_once(operation_key, "semi_batch", payload, action, actor=user)
+
+
 # ---------------- Kiểm kê (FR-25, BRU-25) ----------------
 
 def _apply_count(count, actor):
@@ -568,7 +635,9 @@ def update_lot(user, lot_id, expiry_date=None, supplier_lot=None):
         lot.expiry_date, lot.expiry_estimated = expiry_date, False
     if supplier_lot is not None:
         lot.supplier_lot = supplier_lot.strip()[:40]
+    after = {"han": lot.expiry_date, "han_uoc_tinh": lot.expiry_estimated, "so_lo": lot.supplier_lot}
+    if after == before:
+        return lot  # bấm Lưu mà không đổi gì: không ghi nhật ký thừa
     lot.save(update_fields=["expiry_date", "expiry_estimated", "supplier_lot", "updated_at"])
-    record(Action.UPDATE, actor=user, obj=lot, object_type="inventory.StockLot", before=before,
-           after={"han": lot.expiry_date, "han_uoc_tinh": lot.expiry_estimated, "so_lo": lot.supplier_lot})
+    record(Action.UPDATE, actor=user, obj=lot, object_type="inventory.StockLot", before=before, after=after)
     return lot

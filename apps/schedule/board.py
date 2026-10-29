@@ -48,6 +48,7 @@ def _card(row, today):
     states = {r["state"] for r in roles}
     state = "empty" if not roles else "short" if "short" in states else "over" if "over" in states else "ok"
     return {"shift": s, "roles": roles, "short": short, "state": state, "past": s.date < today,
+            "registered_total": len({r.user_id for c in row["cells"] for r in c["registered"]}),
             "label": f"{DAY_NAMES[s.date.weekday()]} {s.date:%d/%m}"}
 
 

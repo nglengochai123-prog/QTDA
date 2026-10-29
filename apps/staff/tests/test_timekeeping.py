@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime, timedelta
+from unittest import mock
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -51,6 +52,10 @@ class AttendanceTests(TestCase):
         self.assertEqual(present, [17, 18, 19, 20, 21])
 
     def test_ac77_ac78_missing_out_then_supplemented(self):
+        # Trưa hôm nay: trước giờ mở cửa thì lượt tối hôm qua chưa bị coi là quên (ca có thể qua nửa đêm).
+        noon = mock.patch("django.utils.timezone.now", return_value=at(timezone.localdate(), 12))
+        noon.start()
+        self.addCleanup(noon.stop)
         att = Attendance.objects.create(store=self.d["store"], user=self.barista, role=Role.PHA_CHE,
                                         clock_in=at(self.yesterday, 17))
         self.assertEqual(list(timekeeping.missing_clock_out()), [att])

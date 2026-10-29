@@ -92,6 +92,7 @@ MIDDLEWARE = [
     "apps.accounts.permissions.DeniedAccessLogMiddleware",
     "apps.core.middleware.FormErrorMiddleware",
     "apps.core.middleware.SessionExpiryMiddleware",
+    "apps.core.middleware.SchemaOutdatedMiddleware",
 ]
 CSRF_FAILURE_VIEW = "apps.core.middleware.csrf_failure"
 

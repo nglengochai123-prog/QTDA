@@ -449,7 +449,11 @@
           rows = rows.concat(data.shortages.map(function (s) {
             return s.ingredient + ": cần " + s.needed + " " + s.unit + ", còn " + s.available + " " + s.unit;
           }));
-          setFeedback("error", data.error, rows, "Giảm số ly, chọn món khác, hoặc báo pha chế kiểm kê nhanh.");
+          // Bán thành phẩm (cốt, nước đường...) hết mẻ: làm thêm mẻ là đủ, không cần đổi món.
+          var semi = data.shortages.filter(function (s) { return s.semi; }).map(function (s) { return s.ingredient; });
+          setFeedback("error", data.error, rows, semi.length
+            ? "Báo pha chế làm thêm mẻ " + semi.join(", ") + " (Kho › Làm bán thành phẩm) rồi gửi lại, hoặc giảm số ly, chọn món khác."
+            : "Giảm số ly, chọn món khác, hoặc báo pha chế kiểm kê nhanh.");
           addSwitchButton(data.shortages.map(function (s) { return s.ingredient_id; }));
           refreshAvailability();
         } else {

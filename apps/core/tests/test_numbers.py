@@ -53,6 +53,8 @@ class NumberParsingTests(SimpleTestCase):
 
         self.assertEqual([_plain(v) for v in ("0.00%", "8.33%", "3925.00", "2026-10-12")],
                          ["0%", "8,33%", "3.925", "12/10/2026"])
+        # Số lô người dùng gõ trông giống ngày nhưng không phải ngày thật: giữ nguyên chữ, không làm hỏng trang.
+        self.assertEqual([_plain(v) for v in ("2026-13-45", "2026-02-30T10:00")], ["2026-13-45", "2026-02-30T10:00"])
 
 
 class PhotoUploadTests(SimpleTestCase):

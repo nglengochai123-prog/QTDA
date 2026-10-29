@@ -187,8 +187,8 @@ def enter_slip(user, operation_key, payload):
 def _pay(order, user, method, shift, operation_key):
     payment = Payment.objects.create(store=order.store, table=order.table, method=method, amount=order.total,
                                      cashier=user, shift=shift, operation_key=f"{operation_key[:52]}-pdp-tt")
-    order.payment, order.status = payment, Order.Status.PAID
-    order.save(update_fields=["payment", "status", "updated_at"])
+    order.payment, order.status, order.shift = payment, Order.Status.PAID, order.shift or shift
+    order.save(update_fields=["payment", "status", "shift", "updated_at"])
     record(Action.CREATE, actor=user, obj=payment, object_type="orders.Payment",
            after={"ban": order.table.code, "so_tien": payment.amount, "phuong_thuc": payment.get_method_display(),
                   "don": [order.code], "nguon": "nhập bù phiếu dự phòng"})

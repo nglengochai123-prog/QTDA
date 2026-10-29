@@ -1,0 +1,28 @@
+{% load static %}<!doctype html>
+{% comment %}Trang hiện khi mã nguồn mới hơn CSDL (chưa chạy migrate). Không kế thừa base.html vì base.html đọc CSDL.{% endcomment %}
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cần cập nhật cơ sở dữ liệu</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+  <main class="content" style="max-width: 640px; margin: 3rem auto; padding: 0 1rem;">
+    <h1>Cần cập nhật cơ sở dữ liệu</h1>
+    <p>Phần mềm vừa được cập nhật nhưng cơ sở dữ liệu chưa được cập nhật theo, nên trang này chưa mở được. Dữ liệu cũ vẫn còn nguyên.</p>
+    {% if sqlite %}
+    <p>Trên máy chạy phần mềm, tắt máy chủ (Ctrl+C), mở PowerShell ở thư mục phần mềm rồi chạy lần lượt:</p>
+    <pre class="code-block">{% if sqlite_name %}$env:SQLITE_NAME = "{{ sqlite_name }}"
+{% endif %}.venv\Scripts\python.exe manage.py sao_luu
+.venv\Scripts\python.exe manage.py migrate
+.venv\Scripts\python.exe manage.py runserver</pre>
+    <p class="muted">Lệnh đầu sao lưu dữ liệu trước khi cập nhật. Trên Linux hoặc macOS dùng <code>.venv/bin/python</code>{% if sqlite_name %} và <code>export SQLITE_NAME={{ sqlite_name }}</code>{% endif %}.</p>
+    {% else %}
+    <p>Người quản trị sao lưu cơ sở dữ liệu rồi chạy <code>python manage.py migrate</code> trên máy chủ.</p>
+    {% endif %}
+    <details><summary class="muted">Các bước cập nhật còn thiếu ({{ pending|length }})</summary><ul>{% for m in pending %}<li><code>{{ m }}</code></li>{% endfor %}</ul></details>
+    <p style="margin-top: 1.25rem;"><a class="btn btn-primary" href="">Tải lại sau khi cập nhật</a></p>
+  </main>
+</body>
+</html>

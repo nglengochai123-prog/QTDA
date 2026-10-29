@@ -609,3 +609,105 @@ class CashierChangeSignalTests(Base):
         self.assertNotEqual(self.client.get(url).json()["sig"], sig)
         self.client.force_login(self.d["waiter"])
         self.assertEqual(self.client.get(url).status_code, 403)
+
+
+class SmallLabelTests(Base):
+    def test_lot_saved_without_change_leaves_no_audit_entry(self):
+        from apps.audit.models import AuditLog
+        from apps.inventory import operations
+        from apps.inventory.models import StockLot
+
+        lot = StockLot.objects.filter(ingredient=self.d["coffee"]).latest("pk")
+        before = AuditLog.objects.filter(object_type="inventory.StockLot").count()
+        operations.update_lot(self.manager, lot.pk, None, lot.supplier_lot)
+        self.assertEqual(AuditLog.objects.filter(object_type="inventory.StockLot").count(), before)
+        operations.update_lot(self.manager, lot.pk, None, "L-01")
+        self.assertEqual(AuditLog.objects.filter(object_type="inventory.StockLot").count(), before + 1)
+
+    def test_last_hour_frame_reads_23_to_24(self):
+        from datetime import datetime
+
+        from django.utils import timezone
+
+        from apps.orders.models import Order
+        from apps.orders.workload import day_frames
+
+        order, _ = self.order()
+        late = timezone.make_aware(datetime.combine(date.today() - timedelta(days=1), datetime.min.time())) + timedelta(hours=23, minutes=10)
+        Order.objects.filter(pk=order.pk).update(created_at=late)
+        frames = day_frames(late.date())["frames"]
+        self.assertEqual([f["label"] for f in frames], ["23–24 giờ"])
+
+    def test_item_in_switched_off_group_says_why_it_is_hidden(self):
+        from apps.masterdata.resources import _item_status
+
+        item = self.d["item"]
+        self.assertEqual(_item_status(item), "Đủ điều kiện")
+        item.group.is_active = False
+        item.group.save()
+        self.assertIn("đang không dùng nên chưa hiện khi gọi món", _item_status(item))
+
+
+class UnlockCommandTests(TestCase):
+    def test_locked_owner_can_be_unlocked_from_the_command_line(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+        from django.utils import timezone
+
+        from apps.accounts.models import Role, User
+        from apps.audit.models import AuditLog
+
+        owner = User.objects.create_user("chu", password=PASSWORD, role=Role.CHU_QUAN)
+        User.objects.filter(pk=owner.pk).update(locked_until=timezone.now() + timedelta(minutes=15))
+        self.assertFalse(Client().login(username="chu", password=PASSWORD))
+        out = StringIO()
+        call_command("mo_khoa_tai_khoan", "chu", stdout=out)
+        self.assertIn("Đã mở khóa", out.getvalue())
+        self.assertTrue(Client().login(username="chu", password=PASSWORD))
+        self.assertTrue(AuditLog.objects.filter(actor_label="dòng lệnh").exists())
+        call_command("mo_khoa_tai_khoan", "chu", stdout=out)
+        self.assertIn("không bị khóa", out.getvalue())
+
+
+class ShiftOverlapWarningTests(TestCase):
+    def test_overlapping_open_shift_is_saved_with_a_warning(self):
+        from apps.accounts.models import Role, User
+        from apps.shifts.models import Shift
+
+        owner = User.objects.create_user("chu", password=PASSWORD, role=Role.CHU_QUAN)
+        c = Client()
+        c.force_login(owner)
+        r = c.post("/du-lieu/ca/moi/", {"name": "Ca sáng", "starts_at": "2026-10-28T06:00", "ends_at": "2026-10-28T14:00"},
+                   follow=True)
+        self.assertNotContains(r, "chồng giờ")
+        r = c.post("/du-lieu/ca/moi/", {"name": "Ca chiều", "starts_at": "2026-10-28T12:00", "ends_at": "2026-10-28T22:00"},
+                   follow=True)
+        self.assertContains(r, "Ca chiều chồng giờ với Ca sáng (06:00–14:00 28/10)")
+        self.assertContains(r, "thu vào Ca chiều từ 12:00 28/10/2026")
+        self.assertEqual(Shift.objects.count(), 2)
+
+
+class CashierWithoutShiftTests(Base):
+    def test_cashier_is_told_before_trying_to_take_money(self):
+        from apps.shifts.models import Shift
+
+        self.client.force_login(self.cashier)
+        self.assertNotContains(self.client.get("/thu-ngan/"), "Chưa có ca đang mở")
+        Shift.objects.update(status=Shift.Status.CLOSED)
+        self.assertContains(self.client.get("/thu-ngan/"), "Báo Chủ quán mở ca")
+        self.client.force_login(self.manager)
+        self.assertContains(self.client.get("/thu-ngan/"), "/du-lieu/ca/moi/")
+
+    def test_order_sent_before_any_shift_belongs_to_the_shift_that_takes_its_money(self):
+        from apps.orders import payments
+        from apps.shifts.models import Shift
+
+        Shift.objects.update(status=Shift.Status.CLOSED)
+        order, line = self.order()
+        self.assertIsNone(order.shift)
+        self.finish(line)
+        Shift.objects.filter(pk=self.shift.pk).update(status=Shift.Status.OPEN)
+        payments.pay_table(self.cashier, uuid.uuid4().hex, order.table_id, "tien_mat")
+        order.refresh_from_db()
+        self.assertEqual(order.shift, self.shift)

@@ -133,7 +133,7 @@ class MasterDataTests(TestCase):
     def test_issue_rule_set_from_ingredient_form(self):
         ing = Ingredient.objects.create(store=self.d["store"], name="Ly nhựa", unit="cai", pack_size=50, lead_time_days=2)
         self.assertContains(self.client.get(self.url("nguyen-lieu", ing.pk)), "Quy tắc xuất lô")
-        form = {"name": "Ly nhựa", "unit": "cai", "pack_size": "50", "lead_time_days": "2", "safety_stock": "0",
+        form = {"name": "Ly nhựa", "unit": "cai", "kind": "mua_vao", "pack_size": "50", "lead_time_days": "2", "safety_stock": "0",
                 "moq_packs": "1", "exposure_days": "1", "is_active": "on", "issue_rule": "lifo"}
         r = self.client.post(self.url("nguyen-lieu", ing.pk), {**form, "shelf_life_days": "7"})
         self.assertContains(r, "Hàng có hạn dùng không xuất theo kiểu nhập sau, xuất trước")
@@ -146,7 +146,7 @@ class MasterDataTests(TestCase):
     def test_number_fields_read_vietnamese_thousands(self):
         # Ô số trong Dữ liệu nền: "1.000" là một nghìn, không phải 1; hiện lại đúng như đã gõ.
         ing = Ingredient.objects.create(store=self.d["store"], name="Sữa tươi", unit="ml", pack_size=50, lead_time_days=2)
-        form = {"name": "Sữa tươi", "unit": "ml", "pack_size": "1.000", "lead_time_days": "2", "safety_stock": "1.500,5",
+        form = {"name": "Sữa tươi", "unit": "ml", "kind": "mua_vao", "pack_size": "1.000", "lead_time_days": "2", "safety_stock": "1.500,5",
                 "moq_packs": "1", "exposure_days": "1", "is_active": "on"}
         self.assertEqual(self.client.post(self.url("nguyen-lieu", ing.pk), form).status_code, 302)
         ing.refresh_from_db()

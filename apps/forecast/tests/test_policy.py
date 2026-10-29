@@ -179,7 +179,12 @@ class ScenarioTests(SimpleTestCase):
         self.assertLessEqual(r["quantity"], r["caps"]["hạn dùng"] + 1000)
         self.assertTrue(any("Giới hạn bởi hạn dùng" in n for n in r["notes"]))
         r = policy.compute(self.weekday_inputs(THU, 0.0, shelf_life=1, target_days=6))
-        self.assertGreater(r["expiry_excess"], 0)
+        # Xung đột với mức phục vụ: đề xuất không làm tròn vượt hạn dùng, cách giữ mức phục vụ là phương án kèm cảnh báo
+        self.assertEqual(r["conflict"], "hạn dùng")
+        self.assertLessEqual(r["quantity"], r["caps"]["hạn dùng"])
+        self.assertEqual(r["expiry_excess"], 0)
+        self.assertIn("giữ mức phục vụ", r["options"][1])
+        self.assertIn("dự kiến hết hạn", r["options"][1])
 
     def test_moq_and_rounding(self):
         r = policy.compute(self.weekday_inputs(THU, 2200.0, moq=5))

@@ -80,7 +80,7 @@ Ba nguyên tắc chạy xuyên suốt:
 
 1. Nếu có ca đang mở mà giờ hiện tại nằm trong khung giờ của ca: lấy ca đó (ca bắt đầu muộn nhất nếu chồng giờ).
 2. Nếu không: lấy ca đang mở, đã bắt đầu, đã quá giờ kết thúc dự kiến nhưng **chưa kết**. Ví dụ ca tối 17–22 giờ, khách trả tiền lúc 22:10 mà thu ngân chưa kết ca: tiền vẫn vào quỹ ca tối.
-3. Không có ca nào đang mở: đơn vẫn nhận được (không gắn ca) nhưng **không thu tiền được**. Thu ngân thấy thông báo "Chưa có ca đang mở; Chủ quán khai báo ca rồi mới thu tiền".
+3. Không có ca nào đang mở: đơn vẫn nhận được (chưa gắn ca; khi thu tiền thì gắn vào ca thu tiền) nhưng **không thu tiền được** cho tới khi có ca. Thu ngân thấy thông báo "Chưa có ca đang mở; Chủ quán khai báo ca rồi mới thu tiền".
 
 Màn hình **Ca của tôi** (`/ca/`) mở ca đang giữ quỹ; nếu không có thì mở ca đã kết mà còn thiếu báo cáo cuối ca.
 
@@ -376,14 +376,14 @@ Chi tiết lý thuyết ở `docs/DU_BAO.md` và `docs/THIET_KE_MUA_NGUYEN_LIEU.
 
 **Dữ liệu học:** chỉ ngày đã qua, có ca, mọi ca đã kết và có báo cáo cuối ca. Ngày đóng cửa hoặc chưa chốt không bị coi là bán 0 ly. Ngày có trường hợp thiếu nguyên liệu bị loại khỏi phần học của món bị ảnh hưởng. Phiếu dự phòng tính theo ngày bán ghi trên phiếu. Có thể nhập thêm lịch sử bán từ CSV hoặc Excel (`/du-bao/lich-su/`).
 
-**Dự báo số ly theo món** (`/du-bao/`): trang có biểu đồ tổng số ly ba tuần qua nối với dự báo 14 ngày tới, và biểu đồ khoảng nhu cầu 7 ngày tới của từng món (dải từ phân vị 10 tới 90, chấm là kỳ vọng). Mô hình Poisson với mức nền động và hiệu ứng thứ trong tuần, học tuần tự kiểu Bayes; tiên nghiệm lấy từ **Nhận định Chủ quán** (số ly điển hình, ngày ít, ngày nhiều). Mỗi ngày phát hành một bản dự báo (kỳ vọng và phân vị 10/50/90), lưu nguyên để đánh giá về sau. Mặc định đặt hàng dùng *Ước tính ban đầu*; Chủ quán chuyển sang mô hình ở trang **Đánh giá dự báo** khi kết quả đánh giá ngoài mẫu tốt hơn.
+**Dự báo số ly theo món** (`/du-bao/`): trang có bốn ô số (hôm nay, ngày mai, 7 ngày tới, nguyên liệu cần đặt), biểu đồ tổng số ly bốn tuần qua nối với dự kiến 14 ngày tới kèm dải khoảng thường gặp (phân vị 10 tới 90), và thanh ngang số ly 7 ngày tới của từng món chia theo cỡ (mục 35). Mô hình Poisson với mức nền động và hiệu ứng thứ trong tuần, học tuần tự kiểu Bayes; tiên nghiệm lấy từ **Nhận định Chủ quán** (số ly điển hình, ngày ít, ngày nhiều). Mỗi ngày phát hành một bản dự báo (kỳ vọng và phân vị 10/50/90), lưu nguyên để đánh giá về sau. Mặc định đặt hàng dùng *Ước tính ban đầu*; Chủ quán chuyển sang mô hình ở trang **Đánh giá dự báo** khi kết quả đánh giá ngoài mẫu tốt hơn.
 
 **Kế hoạch mua theo nguyên liệu** (`/du-bao/ke-hoach-mua/`), dùng cho quyết định mua từ 13/10/2026:
 
-1. Dựng chuỗi tiêu hao theo ngày của từng nguyên liệu từ dòng món đã bán × định mức, cộng tỷ lệ hủy sau pha, hao hụt vận hành, kiểm kê âm có hệ thống.
-2. Chọn phương pháp dự báo theo dữ liệu đang có: M0 (ước tính tuần của Chủ quán), M1 (trung bình cùng thứ 4–8 tuần), M2 (mô hình tuyến tính động); chỉ đổi khi sai số thấp hơn rõ rệt và không chệch.
+1. Dựng chuỗi tiêu hao theo ngày của từng nguyên liệu từ dòng món đã bán × định mức (bung qua bán thành phẩm tới nguyên liệu gốc), cộng tỷ lệ hủy sau pha, hao hụt vận hành, kiểm kê âm có hệ thống và bán thành phẩm đổ bỏ.
+2. Dự báo tổng số ly cả quán rồi chia xuống từng món theo tỷ trọng (dự báo phân cấp). Với từng nguyên liệu, so các cách M0 (ước tính tuần của Chủ quán), LN (bình quân theo loại ngày 28 ngày), WMA (bình quân có trọng số 4 lần cùng thứ), HW (Holt-Winters mùa 7 ngày), TSB (hàng bán lác đác) và PH (phân cấp × định mức) bằng đánh giá cuốn chiếu; lần đầu đủ 56 ngày chọn cách sai số nhỏ nhất, sau đó chỉ đổi khi Chủ quán bấm **Đổi cách dự báo** trên trang Kế hoạch mua (cách khác sai số thấp hơn ít nhất 5% trong 4 tuần). Từ 27/10/2026, xem THIET_KE_MUA_NGUYEN_LIEU mục 4.4.
 3. Áp **điều chỉnh theo mùa** của Chủ quán nếu có, trừ phần mô hình đã tự học.
-4. Bộ tính chính sách (hàm thuần, không đọc ghi dữ liệu): với tồn có thể dùng, hàng đang về (lô giao chậm không tính), thời gian giao, chu kỳ kiểm tra, mức phục vụ (95%; hàng để lâu nhóm B ít nhất 98%), quy cách, hạn dùng, sức chứa → tính tồn dự kiến từng ngày, **ngày phải đặt muộn nhất**, số lượng đề xuất làm tròn theo quy cách, và một câu giải thích. Nguyên liệu có hạn dùng được tính theo lô (dựng từ phiếu nhập, dùng lô cũ trước); phần dự kiến hết hạn trước khi dùng kịp không được tính là hàng có (EWA, từ 26/10/2026).
+4. Bộ tính chính sách (hàm thuần, không đọc ghi dữ liệu): với tồn có thể dùng, hàng đang về (lô giao chậm không tính), thời gian giao, chu kỳ kiểm tra, mức phục vụ (95%; hàng để lâu nhóm B ít nhất 98%), quy cách, hạn dùng, sức chứa → tính tồn dự kiến từng ngày, **ngày phải đặt muộn nhất**, số lượng đề xuất làm tròn theo quy cách, và một câu giải thích. Nguyên liệu có hạn dùng được tính theo lô (dựng từ phiếu nhập, dùng lô cũ trước); phần dự kiến hết hạn trước khi dùng kịp không được tính là hàng có (EWA, từ 26/10/2026). Tồn an toàn lấy theo phân vị sai số thật khi đã có từ 20 gốc đánh giá, và không vượt lượng dùng kịp trước khi hết hạn. Bán thành phẩm còn trong kho được tính như tồn quy đổi của nguyên liệu gốc; bán thành phẩm không có kế hoạch mua mà có gợi ý số mẻ ở trang Kho › Làm bán thành phẩm.
 5. Chủ quán **Chấp nhận** (tạo lần đặt ở trạng thái Nháp, sửa số thì ghi lý do) hoặc **Bỏ qua** kèm lý do. Hệ thống không tự liên hệ nhà cung cấp; bấm "Đã báo nhà cung cấp" để chuyển Nháp → Đã đặt.
 6. Tính lại: toàn bộ một lần sau giờ đóng cửa mỗi ngày; riêng một nguyên liệu ngay sau mỗi biến động tồn hoặc thay đổi lần đặt. Cùng dữ liệu thì dùng lại kết quả cũ.
 7. Ngày phải đặt là hôm nay hoặc đã qua → cảnh báo **Cần đặt hàng**, tự đóng khi đã đặt đủ.
@@ -725,3 +725,60 @@ Nhớ chạy `python manage.py migrate` sau khi cập nhật (migration `invento
 | Máy dùng chung: người trước đã bật thông báo rồi đăng xuất | Máy vẫn hiện thông báo của người trước (lịch làm, yêu cầu duyệt), người đang dùng không nhận gì | Đăng xuất thì thôi gửi thông báo của người đó tới máy này; người đăng nhập sau (đã cho phép thông báo) tự nhận thông báo của mình trên máy đó |
 | Thu ngân mở sẵn màn Thu ngân trong lúc phục vụ mang món ra, khách gọi thêm | Màn đứng yên: bàn vẫn ghi "chưa phục vụ xong" tới khi thu ngân tự tải lại; bàn mới chờ thu không hiện | Mỗi 8 giây màn kiểm tra; có thay đổi thì nổi một khung ở dưới "Các bàn vừa có thay đổi… Tải lại danh sách". Không tự tải lại để nút Thu tiền không đổi chỗ dưới tay thu ngân |
 | Thu ngân gõ nhầm tiền đầu ca, hoặc ghi khoản chi trước rồi mới xác nhận tiền đầu ca | Không có chỗ sửa tiền đầu ca; ô "Xác nhận tiền đầu ca" biến mất ngay khi ca đã có một khoản bất kỳ, nên két lệch suốt ca | Ô xác nhận còn hiện tới khi ca đã có tiền đầu ca. Người đã xác nhận hoặc Chủ quán sửa ở "Gõ nhầm? Sửa tiền đầu ca" (phải ghi lý do, có nhật ký thay đổi); không nhận số làm két theo sổ bị âm |
+| Khung giờ cuối ngày ở Tải theo giờ và báo cáo doanh thu theo khung giờ | Ghi "23–00 giờ" | Ghi "23–24 giờ" |
+| Bấm Lưu ở thông tin lô mà không đổi gì | Nhật ký vẫn thêm một dòng "sửa lô" trước sau như nhau | Không đổi gì thì không ghi nhật ký |
+| Bỏ chọn Đang dùng cho một nhóm món | Các món trong nhóm biến khỏi màn gọi món nhưng cột Điều kiện mở bán vẫn ghi "Đủ điều kiện", Chủ quán không biết vì sao | Cột ghi "Đủ điều kiện, nhưng nhóm … đang không dùng nên chưa hiện khi gọi món" |
+| Chủ quán duy nhất quên mật khẩu hoặc gõ sai 5 lần bị khóa | Không có cách nào trên màn hình; tài liệu không nói cách làm | VAN_HANH mục 5a: `changepassword` để đặt mật khẩu mới, lệnh mới `mo_khoa_tai_khoan` để mở khóa ngay (có nhật ký) |
+| Thêm ca mà gõ nhầm giờ làm hai ca đang mở chồng nhau (ví dụ ca sáng 6–14 giờ, ca chiều 12–22 giờ) | Lưu im lặng; từ 12 giờ đơn và tiền âm thầm vào ca chiều trong khi thu ngân ca sáng chưa kết | Vẫn lưu (chồng giờ có thể là cố ý) nhưng báo ngay: "Ca chiều chồng giờ với Ca sáng (06:00–14:00 28/10). Trong khoảng chồng, đơn và tiền thu vào Ca chiều từ 12:00 28/10/2026; nếu gõ nhầm giờ thì sửa lại." |
+| Sáng ra chưa ai mở ca, thu ngân mở màn Thu ngân | Màn hiện nút "Thu …đ" như bình thường; bấm mới báo "Chưa có ca đang mở" | Đầu màn Thu ngân báo trước "Chưa có ca đang mở nên chưa thu tiền được"; Chủ quán có lối thêm ca ngay. Trang chủ của Chủ quán tô màu dòng "0 ca đang mở" |
+| Đơn gửi lúc chưa có ca nào mở, thu tiền sau khi Chủ quán mở ca | Tiền vào quỹ ca mới nhưng đơn vẫn "Không gắn ca": báo cáo doanh thu theo ca lệch với quỹ ca | Khi thu tiền, đơn chưa thuộc ca nào được gắn vào ca thu tiền của nó |
+| Đã công bố lịch tuần, Chủ quán bấm lại "Xếp theo đăng ký" rồi "Công bố lại", một người bị đổi khỏi mọi ca | Lần công bố lại chỉ báo những người còn ca; người không còn ca nào không được báo và vẫn đi làm theo lịch cũ | Công bố lại báo thêm cho người đã có ca ở lần trước mà nay không còn: "Bạn không còn ca nào trong tuần này." |
+| Ca tối vào 17 giờ, làm qua nửa đêm (ví dụ dọn quán tới 0 giờ 10) | Sau 0 giờ màn Chấm công coi là "Quên bấm Ra ca?", không còn nút Ra ca, phải nhờ Chủ quán bổ sung giờ ra | Lượt của hôm qua chỉ bị coi là quên khi đã tới giờ mở cửa hôm nay (tham số Giờ mở cửa) hoặc đã dài hơn 18 giờ; trước đó vẫn bấm Ra ca bình thường |
+| Đơn gửi lúc chưa có ca nào mở, rồi Chủ quán thêm ca | Đơn không thuộc ca nào nên không chặn kết ca; khách chưa trả mà ca vẫn kết được | Thêm ca đang mở thì đơn chưa trả không thuộc ca nào được gắn vào ca đó (có nhật ký, báo mã đơn ngay khi lưu); đơn nào còn sót thì chặn kết ca "gửi lúc chưa có ca, chưa thanh toán" |
+| Mở màn Thu ngân, Đơn đang mở, Quầy pha chế trên điện thoại màn hẹp 320 điểm ảnh | Thẻ bàn rộng tối thiểu 320 điểm ảnh nên tràn ngang, phải kéo sang bên | Lưới thẻ co theo bề rộng màn (không nhỏ hơn màn); đã sửa chung cho mọi lưới thẻ |
+| Đã công bố lịch tuần, Chủ quán bấm lại "Xếp theo đăng ký" mà đăng ký không đổi | Mọi lượt gợi ý bị xóa rồi tạo lại nên lịch hiện "Có thay đổi chưa công bố" dù không có gì đổi | Lượt gợi ý trùng với kết quả mới được giữ nguyên; chỉ bỏ lượt không còn hợp và thêm lượt mới; người bị đổi ca trong tuần đã công bố được báo riêng |
+| Thêm ca làm kết thúc lúc nửa đêm (18:00–00:00) | Báo "Giờ kết thúc phải sau giờ bắt đầu", không thêm được | Ghi 00:00 (hoặc 24:00) là hết ngày: tính 6 giờ, so trùng giờ và giờ kết thúc ở Chấm công theo nửa đêm |
+| Xóa một ca làm đã có người đăng ký (chưa xếp ai) | Đăng ký bị xóa theo ca, người đã đăng ký không được báo | Hộp xác nhận ghi số người đã đăng ký; xóa xong báo từng người "Ca … đã bị bỏ khỏi lịch" để họ chọn ca khác |
+| Chủ quán sửa bàn, món, nguyên liệu, nhân viên, ca ở trang /quan-tri/ | Lưu thẳng, bỏ qua kiểm tra của mục Dữ liệu nền (không gắn đơn vào ca, không khóa tài khoản người nghỉ việc, không báo chồng giờ) | Trang quản trị chỉ xem các mục này và chỉ chỗ sửa: "Thêm, sửa ở mục Dữ liệu nền của ứng dụng: /du-lieu/…" |
+| Muốn xem đã trả nhà cung cấp nào bao nhiêu trong tháng trước | Màn Khoản phải trả chỉ hiện 8 lần trả gần nhất | Mục "Đã trả tháng …" lọc theo tháng trả và nhà cung cấp, kèm tổng tiền |
+| Mở Bảng điều khiển của tháng nhiều dữ liệu | Mỗi lần mở tính lại toàn bộ dòng món của hai tháng (khoảng 3,5 giây trên dữ liệu thử) | Giữ kết quả tới khi có lần thu tiền, hoàn tiền hay sửa đơn đã thu mới (tối đa 10 phút): lần mở sau khoảng 0,4 giây, số liệu không cũ hơn lần thu cuối |
+| Bấm "Đã hoàn tiền" khoản hoàn tiền mặt lớn hơn tiền két theo sổ | Ghi được mà không ai biết két thiếu cho tới lúc kết ca | Vẫn ghi được (khách phải nhận lại tiền) nhưng dòng chờ hoàn ghi rõ két theo sổ còn bao nhiêu, nút hỏi lại trước khi ghi, ghi xong báo kiểm tra két |
+
+## 34. Cấu hình lại dự báo cho kế hoạch mua và bán thành phẩm (27/10/2026)
+
+Làm theo phân tích "Lựa chọn mô hình dự báo và quản lý nguyên vật liệu cho LAM Coffee" của Hai. Bản mô tả đầy đủ cho Chủ quán: tài liệu "Mô hình dự báo và mua nguyên liệu LAM Coffee"; kết quả mô phỏng ở KET_QUA_MO_PHONG mục 2.7.
+
+Nhớ sao lưu rồi chạy `python manage.py migrate` sau khi cập nhật (migration `forecast 0007` lưu lựa chọn cách dự báo, `inventory 0014` thêm bán thành phẩm).
+
+| Việc | Trước | Sau |
+|---|---|---|
+| Cách dự báo tiêu hao nguyên liệu | Ước tính Chủ quán, trung bình cùng thứ, mô hình Bayes động; tự đổi khi cách khác tốt hơn | Thêm bình quân theo loại ngày, bình quân có trọng số cùng thứ, Holt-Winters, TSB cho hàng bán lác đác và dự báo phân cấp (tổng số ly × tỷ trọng món × định mức). Lần đầu đủ 56 ngày chọn cách sai số nhỏ nhất; sau đó chỉ đổi khi Chủ quán duyệt (BRU-37) |
+| Đề xuất đổi cách | Không có | Trang Kế hoạch mua hiện "Có cách dự báo chính xác hơn cho N mục", nút Đổi cách dự báo và Giữ cách hiện tại; quyết định có nhật ký |
+| Tồn an toàn | kσ với σ đo được | Phân vị sai số thật khi đủ 20 gốc; chặn theo lượng dùng kịp trước khi hết hạn, có ghi rõ khi bị chặn |
+| Trang Độ chính xác của dự báo | Không có | Ba tầng riêng: tổng số ly 7 ngày, từng món 1 ngày, từng nguyên liệu (sai số tuần, lệch cao hay thấp, ngày thiếu, hết hạn, hao hụt, sổ kho lệch định mức); nhóm ABC lên đầu |
+| Cà phê cốt, nước đường, foam | Món trừ thẳng cà phê bột, đường; không biết đã pha sẵn bao nhiêu | Nguyên liệu loại "Bán thành phẩm quán tự làm" có Định mức bán thành phẩm (Quản trị). Ghi mẻ làm ở Kho › Làm bán thành phẩm: trừ nguyên liệu gốc, nhập lô có hạn dùng. Bán ly chỉ trừ bán thành phẩm, không trừ hai lần. Trang gợi ý số mẻ cần làm |
+| Nhu cầu nguyên liệu gốc khi món dùng bán thành phẩm | Không tính | Bung qua mọi tầng định mức; phần bán thành phẩm đổ bỏ cộng vào nhu cầu; bán thành phẩm còn trong kho tính như tồn của nguyên liệu gốc |
+| Foam chưa cân lượng thu mỗi mẻ | Không có | Kế hoạch mua các nguyên liệu làm foam ghi "Lượng thu mỗi mẻ … chưa cân đo thực tế" tới khi đánh dấu Đã cân đo |
+| Mua hoặc nhập bán thành phẩm từ nhà cung cấp | Không phân biệt | Không cho đặt, không cho nhập; không có kế hoạch mua |
+| Thuật toán và tham số | | Không hiện trên giao diện; chỉnh trong `apps/core/params.py` |
+
+## 35. Làm lại giao diện dự báo (28/10/2026)
+
+Hai thấy các trang dự báo còn khó dùng. Mỗi trang giờ mở đầu bằng vài ô số cần nhìn, tiếp theo là một biểu đồ hợp với câu hỏi của trang. Bảng chi tiết gập lại ở cuối. Giao diện vẫn chỉ hiện kết quả, không hiện tên cách tính hay tham số.
+
+| Trang | Trước | Sau |
+|---|---|---|
+| Dự báo nhu cầu | Đoạn giải thích dài; đường đã bán và đường dự báo khác màu như hai thứ khác nhau; biểu đồ dải 19 dòng chữ nhỏ trên điện thoại; bảng 19 dòng nhắc lại cùng số | Bốn ô: hôm nay, ngày mai, 7 ngày tới (so với 7 ngày qua, ngày đông nhất), nguyên liệu cần đặt (bấm sang Kế hoạch mua). Biểu đồ tổng số ly: 4 tuần đã bán (nét liền) nối 14 ngày dự kiến (nét đứt) cùng màu, dải mờ là khoảng thường gặp, vạch "Hôm nay". Thanh ngang 7 ngày tới theo món, chia theo cỡ. Bảng từng món và cỡ gập lại |
+| Kế hoạch mua | Đoạn giải thích dài; bảng 7 cột có cột Ghi chú dài; 55 nguyên liệu Đủ hàng (phần lớn không dùng) trải dài trang | Bốn ô đếm Đặt ngay, Đặt trong 2 ngày, Theo dõi, Đủ hàng (bấm nhảy tới nhóm). Mỗi nhóm một bảng 5 cột thẳng hàng: nguyên liệu và nhà cung cấp, đề xuất, đặt chậm nhất, còn đủ dùng (kèm thanh ngày), nút Xem và đặt. Đủ hàng gập lại, tách riêng nguyên liệu chưa dùng tới trong 5 tuần. Nút Độ chính xác lên đầu trang |
+| Chi tiết nguyên liệu | Ô số rời rạc; ô nhập Quyết định lệch hàng; bảng 14 dòng tồn dự kiến | Khung quyết định ở đầu: số đề xuất, lý do, lưu ý, ba ô nhập thẳng hàng, nút Chấp nhận; Bỏ qua gập trong "Không mua lần này". Bốn ô: tồn có thể dùng, còn đủ dùng, đặt chậm nhất, dùng mỗi ngày. Biểu đồ tồn cuối ngày 14 ngày tới: "Nếu không đặt thêm" so với "Nếu đặt hôm nay theo đề xuất", vạch "Có thể thiếu", đường 0 đậm; câu "đặt hôm nay thì đủ dùng tới hết ngày …". Bảng số liệu gập lại. Nguyên liệu chưa dùng tới chỉ hiện một dòng thông báo |
+| Độ chính xác của dự báo | Bảng 9 cột, gồm cả 55 nguyên liệu không có số | Bốn ô: sai số tổng số ly, số ngày đã học, ngày thiếu hàng 8 tuần, số nguyên liệu có hàng hết hạn. Thanh ngang sai số theo nguyên liệu, khó đoán nhất ở trên. Bảng chỉ còn nguyên liệu có dùng; số nguyên liệu chưa dùng ghi một dòng |
+| Chi tiết món | Hai bảng số | Ba ô hôm nay, ngày mai, 7 ngày tới; biểu đồ đã bán nối dự kiến như trang tổng; bảng gập lại |
+| CSDL chưa chạy migrate | Trang lỗi kỹ thuật "no such column" | Trang "Cần cập nhật cơ sở dữ liệu" ghi đúng các lệnh sao lưu, migrate, chạy lại (có dòng `$env:SQLITE_NAME` khi đang dùng CSDL khác `db.sqlite3`) và danh sách bước còn thiếu |
+
+Biểu đồ theo kỹ năng dataviz: một trục y (có số âm thì chia qua 0), nét 2px, màu theo thứ tự cố định đã kiểm định (xanh, cam); màu đi theo đối tượng (cỡ M luôn xanh, cỡ L luôn cam), không theo thứ hạng. Có chú giải khi từ hai chuỗi, chú thích khi rê chuột hoặc chạm, và bảng số liệu đi kèm. Thanh ngang vẽ bằng HTML nên tự xuống dòng trên điện thoại. Biểu đồ theo ngày có bản riêng cho điện thoại (7 ngày đã bán và 14 ngày tới) vừa khít màn hình, không phải cuộn ngang. Ô "7 ngày tới" so bình quân mỗi ngày dự kiến với bình quân mỗi ngày có bán của 7 ngày qua, nên ngày đóng cửa không làm lệch phần trăm.
+
+Kế hoạch mua tính thêm dòng tồn "nếu đặt hôm nay đúng số đề xuất" (lô về cuối ngày giao dự kiến, có tính hết hạn theo lô) để vẽ đường thứ hai. Kế hoạch tính trước bản này chưa có dòng đó, nên trang chi tiết chỉ có một đường tới lần tính kế tiếp (bấm Tính lại hoặc chờ lần tính sau giờ đóng cửa).
+
+Trang Đặt hàng đề xuất (`/du-bao/dat-hang/`) và Đánh giá dự báo (`/du-bao/danh-gia/`) là màn hình cũ, không có trên thanh điều hướng; Kế hoạch mua và Độ chính xác thay cho chúng.
+
+Gửi đơn mà thiếu bán thành phẩm (ví dụ hết cà phê cốt): thông báo ở màn hình Tạo đơn gợi ý "báo pha chế làm thêm mẻ … (Kho › Làm bán thành phẩm) rồi gửi lại" thay cho câu chung "kiểm kê nhanh". Duyệt đổi món thiếu bán thành phẩm cũng nhắc làm thêm mẻ.

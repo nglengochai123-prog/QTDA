@@ -2,7 +2,7 @@
 
 import uuid
 from collections import OrderedDict
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib import messages
@@ -24,6 +24,55 @@ from . import services
 from .models import HistoryBatch, MethodDecision, OrderSuggestion, SeriesConfig, SeriesForecast
 
 
+Z10 = 1.2816  # khoảng 10–90%: trung bình ± 1,28 độ lệch chuẩn
+SPREAD = 2 * Z10
+
+
+def _combine(points):
+    """Cộng nhiều dự báo độc lập (mỗi cái có mean, q10, q90): trả (kỳ vọng, thấp, cao) của tổng theo xấp xỉ chuẩn."""
+    mean = sum(float(p["mean"]) for p in points)
+    var = sum(((float(p["q90"]) - float(p["q10"])) / SPREAD) ** 2 for p in points)
+    half = Z10 * var ** 0.5
+    return mean, max(0.0, mean - half), mean + half
+
+
+def _day(d):
+    """"Thứ Sáu 30/10" cho đầu chú thích (viết hoa chữ đầu, giữ nguyên phần còn lại)."""
+    from .policy import day_label
+
+    text = day_label(d)
+    return text[:1].upper() + text[1:]
+
+
+NARROW = 360  # biểu đồ bản điện thoại: ít ngày hơn, chữ vẫn đọc được mà không phải cuộn ngang
+
+
+def _sold_vs_expected(dates, past, points, width, height):
+    """Số ly đã bán (nét liền) nối số dự kiến (nét đứt, cùng màu vì cùng một đại lượng), dải khoảng thường gặp và vạch
+    Hôm nay. points: [(ngày, kỳ vọng, thấp, cao)] từ hôm nay."""
+    from apps.reports import charts
+
+    if not points:
+        return None
+    n_past = len(dates)
+    sold = past + [None] * len(points)
+    # Đường dự kiến nối từ điểm đã bán cuối cùng để hai đường liền mạch; dải chỉ có ở các ngày dự báo.
+    expected = ([None] * (n_past - 1) + [past[-1]] if past else []) + [m for _, m, _, _ in points]
+    tips = [f"{_day(d)}: " + ("đóng cửa" if past[k] is None else f"đã bán {past[k]:.0f} ly") for k, d in enumerate(dates)]
+    tips += [f"{_day(d)}: dự kiến {m:.0f} ly, thường từ {a:.0f} đến {b:.0f} ly" for d, m, a, b in points]
+    return charts.line([f"{d:%d/%m}" for d in dates] + [f"{d:%d/%m}" for d, *_ in points],
+                       [{"name": "Đã bán", "values": sold, "slot": 1, "label_end": False},
+                        {"name": "Dự kiến", "values": expected, "slot": 1, "dash": True, "label_end": False}],
+                       bands=[{"name": "Khoảng thường gặp", "lo": [None] * n_past + [a for _, _, a, _ in points],
+                               "hi": [None] * n_past + [b for _, _, _, b in points], "slot": 1}],
+                       divider={"index": n_past, "label": "Hôm nay"}, tips=tips,
+                       value_fmt=lambda v: f"{v:.0f}" if v is not None else "–", width=width, height=height)
+
+
+def _by_date(series):
+    return {date.fromisoformat(p["date"]): p for p in series.daily}
+
+
 @capability_required(Cap.FORECASTS)
 @require_http_methods(["GET", "POST"])
 def overview(request):
@@ -33,61 +82,111 @@ def overview(request):
         messages.success(request, "Đã cập nhật dự báo.")
         return redirect("forecast:overview")
     rel = services.latest_release()
+    today = timezone.localdate()
     rows = []
     if rel:
         for s in rel.series.select_related("size", "size__item").order_by("size__item__name", "size__sort_order"):
-            rows.append({"s": s, "method_label": MethodDecision.Method(s.method).label,
-                         "tomorrow": s.daily[1] if len(s.daily) > 1 else None,
-                         "t3": s.totals.get("3"), "t7": s.totals.get("7")})
-    return render(request, "forecast/overview.html", {"rel": rel, "rows": rows,
-                                                      "methods": dict(MethodDecision.Method.choices),
-                                                      **_overview_charts(rel, rows)})
+            days = _by_date(s)
+            week = [days[today + timedelta(days=k)] for k in range(7) if today + timedelta(days=k) in days]
+            rows.append({"s": s, "days": days, "today": days.get(today), "tomorrow": days.get(today + timedelta(days=1)),
+                         "week": _combine(week) if week else None})
+    ctx = {"rel": rel, "rows": rows, "today": today, "tomorrow": today + timedelta(days=1)}
+    if rows:
+        ctx.update(_overview_figures(rows, today))
+    return render(request, "forecast/overview.html", ctx)
 
 
-def _overview_charts(rel, rows):
-    """Tổng số ly đã bán 3 tuần qua nối với tổng kỳ vọng dự báo 14 ngày tới, và khoảng 7 ngày tới của từng món."""
-    from datetime import date, timedelta
-
+def _overview_figures(rows, today):
+    """Số tổng hôm nay, ngày mai, 7 ngày tới (kèm khoảng thường gặp), biểu đồ tổng số ly 4 tuần qua nối 14 ngày tới,
+    và số ly 7 ngày tới của từng món chia theo cỡ."""
     from apps.reports import charts
 
-    if not rel or not rows:
-        return {}
-    today = timezone.localdate()
-    dates, status, cups, _ = services.history(today, days=21)
+    from . import planning
+
+    def total(day):
+        pts = [r["days"][day] for r in rows if day in r["days"]]
+        return _combine(pts) if pts else None
+
+    week_pts = [r["days"][today + timedelta(days=k)] for r in rows for k in range(7)
+                if today + timedelta(days=k) in r["days"]]
+    week = _combine(week_pts) if week_pts else None
+    dates, status, cups, _ = services.history(today, days=28)
     past = [None if status.get(d) == "dong_cua" else sum(series.get(d, 0) for series in cups.values()) for d in dates]
-    ahead = {}
+    last7 = [v for d, v in zip(dates, past) if d >= today - timedelta(days=7) and v is not None]
+    sold7 = sum(last7) if last7 else None
+    # So theo bình quân mỗi ngày có bán: ngày đóng cửa hoặc chưa ghi số bán không làm lệch phần trăm.
+    selling = [v for v in last7 if v > 0]
+    per_day_sold = sum(selling) / len(selling) if selling else None
+    ahead = [today + timedelta(days=k) for k in range(14)]
+    fut = [total(d) for d in ahead]
+    fut = [(d, t) for d, t in zip(ahead, fut) if t is not None]
+    points = [(d, m, a, b) for d, (m, a, b) in fut]
+    trend = _sold_vs_expected(dates, past, points, charts.WIDE, 240)
+    trend_narrow = _sold_vs_expected(dates[-7:], past[-7:], points, NARROW, 230)
+    peak = max(fut[:7], key=lambda x: x[1][0]) if fut else None
+    # Theo món: gộp các cỡ của cùng món, mỗi cỡ một màu theo thứ tự cỡ cố định (màu đi theo cỡ, không theo hạng).
+    size_names = []
+    for r in sorted(rows, key=lambda r: r["s"].size.sort_order):
+        if r["s"].size.name not in size_names:
+            size_names.append(r["s"].size.name)
+    slot_of = {name: k + 1 if k < 3 else "muted" for k, name in enumerate(size_names)}
+    items = OrderedDict()
     for r in rows:
-        for point in r["s"].daily:
-            d = date.fromisoformat(point["date"])
-            if today <= d < today + timedelta(days=14):
-                ahead[d] = ahead.get(d, 0) + float(point["mean"])
-    future = sorted(ahead)
-    labels = [f"{d:%d/%m}" for d in dates + future]
-    n_past = len(dates)
-    sold = past + [None] * len(future)
-    # Đường dự báo nối từ điểm đã bán cuối cùng để hai đường liền mạch.
-    expected = ([None] * (n_past - 1) + [past[-1]] if past else []) + [ahead[d] for d in future]
-    trend = charts.line(labels, [{"name": "Đã bán", "values": sold, "slot": 1},
-                                 {"name": "Dự báo (kỳ vọng)", "values": expected, "slot": 2}],
-                        value_fmt=lambda v: f"{v:.0f} ly" if v is not None else "–",
-                        tip_labels=[f"{d:%d/%m}" + (" (đã bán)" if k < n_past else " (dự báo)")
-                                    for k, d in enumerate(dates + future)], width=charts.WIDE, height=220) \
-        if any(v is not None for v in sold + expected) else None
-    week = sorted((r for r in rows if r["t7"]), key=lambda r: -r["t7"]["mean"])
-    ranges = charts.ranges([{
-        "label": f"{r['s'].size.item.name} {r['s'].size.name}", "lo": r["t7"]["q10"], "mid": r["t7"]["mean"],
-        "hi": r["t7"]["q90"],
-        "tip": f"{r['s'].size.item.name} {r['s'].size.name}: 7 ngày tới kỳ vọng {r['t7']['mean']:.0f} ly, "
-               f"khoảng 8/10 khả năng từ {r['t7']['q10']} tới {r['t7']['q90']} ly"} for r in week],
-        label_w=150, width=charts.WIDE, unit=" ly")
-    return {"trend_chart": trend, "ranges_chart": ranges}
+        if r["week"] is None:
+            continue
+        it = items.setdefault(r["s"].size.item.name, {"name": r["s"].size.item.name, "parts": [], "week": []})
+        it["parts"].append({"size": r["s"].size.name, "value": r["week"][0], "slot": slot_of[r["s"].size.name]})
+        it["week"] += [r["days"][today + timedelta(days=k)] for k in range(7) if today + timedelta(days=k) in r["days"]]
+    item_rows = []
+    for it in items.values():
+        m, a, b = _combine(it["week"])
+        item_rows.append({"name": it["name"], "total": m, "lo": a, "hi": b,
+                          "parts": sorted(it["parts"], key=lambda p: size_names.index(p["size"]))})
+    item_rows.sort(key=lambda x: -x["total"])
+    top = max((x["total"] for x in item_rows), default=0) or 1
+    for x in item_rows:
+        x["pct"] = round(x["total"] / top * 100, 1)
+        for p in x["parts"]:
+            p["pct"] = round(p["value"] / top * 100, 2)
+        sizes = ", ".join(f"cỡ {p['size']} {p['value']:.0f}" for p in x["parts"]) if len(x["parts"]) > 1 else ""
+        x["tip"] = (f"{x['name']}: dự kiến {x['total']:.0f} ly trong 7 ngày tới" + (f" ({sizes})" if sizes else "")
+                    + f", thường từ {x['lo']:.0f} đến {x['hi']:.0f} ly")
+    delta = round((week[0] / 7 - per_day_sold) / per_day_sold * 100) if week and per_day_sold else None
+    order_now = order_soon = n_plans = 0
+    for p in planning.current_plans():
+        n_plans += 1
+        label = planning.group_label(p, today)
+        order_now += label == "Đặt ngay"
+        order_soon += label == "Đặt trong 2 ngày"
+    return {"t_today": total(today), "t_tomorrow": total(today + timedelta(days=1)), "t_week": week,
+            "sold7": sold7, "week_delta": delta, "week_delta_abs": abs(delta) if delta is not None else None,
+            "peak": {"day": peak[0], "mean": peak[1][0]} if peak else None, "trend_chart": trend,
+            "trend_narrow": trend_narrow,
+            "item_rows": item_rows, "size_legend": [{"name": f"Cỡ {n}", "slot": slot_of[n]} for n in size_names]
+            if len(size_names) > 1 else [], "order_now": order_now, "order_soon": order_soon, "has_plans": n_plans > 0}
 
 
 @capability_required(Cap.FORECASTS)
 def series_detail(request, pk):
+    from apps.reports import charts
+
     s = get_object_or_404(SeriesForecast.objects.select_related("size", "size__item", "release"), pk=pk)
-    return render(request, "forecast/series.html", {"s": s, "method_label": MethodDecision.Method(s.method).label,
-                                                    "check": services.prior_check(s.size_id)})
+    today = timezone.localdate()
+    days = _by_date(s)
+    dates, status, cups, _ = services.history(today, days=28)
+    mine = cups.get(s.size_id, {})
+    past = [None if status.get(d) == "dong_cua" else mine.get(d, 0) for d in dates]
+    fut = [(today + timedelta(days=k), days[today + timedelta(days=k)]) for k in range(14)
+           if today + timedelta(days=k) in days]
+    points = [(d, float(p["mean"]), float(p["q10"]), float(p["q90"])) for d, p in fut]
+    chart = _sold_vs_expected(dates, past, points, charts.WIDE, 230)
+    chart_narrow = _sold_vs_expected(dates[-7:], past[-7:], points, NARROW, 220)
+    week = [p for d, p in fut[:7]]
+    return render(request, "forecast/series.html", {
+        "s": s, "check": services.prior_check(s.size_id), "chart": chart, "chart_narrow": chart_narrow,
+        "today_fc": days.get(today),
+        "tomorrow_fc": days.get(today + timedelta(days=1)), "tomorrow": today + timedelta(days=1),
+        "week": _combine(week) if week else None, "fut": fut})
 
 
 @capability_required(Cap.FORECASTS)
@@ -139,7 +238,8 @@ def ordering(request):
         return redirect("forecast:ordering")
     groups = OrderedDict()
     if rel:
-        for ing in Ingredient.objects.filter(is_active=True).select_related("stock", "main_supplier").order_by("name"):
+        for ing in (Ingredient.objects.filter(is_active=True).exclude(kind="ban_thanh_pham")
+                    .select_related("stock", "main_supplier").order_by("name")):
             st = services.ordering_status(ing, rel)
             if not st.get("has_forecast"):
                 continue
@@ -274,8 +374,11 @@ def _d(value):
         return None
 
 
+RUNWAY_DAYS = 14  # thanh "còn đủ dùng" đầy khi đủ từ 14 ngày trở lên
+
+
 def _plan_view(plan):
-    from . import methods, policy
+    from . import policy
 
     r = dict(plan.result or {})
     cfg = r.get("settings") or {}
@@ -288,11 +391,13 @@ def _plan_view(plan):
         r[k] = [{**lot, "arrival": _d(lot.get("arrival"))} for lot in r.get(k) or []]
     r["timeline"] = [{**row, "date": _d(row.get("date"))} for row in r.get("timeline") or []]
     r["periods"] = [{**p, "from": _d(p.get("from")), "to": _d(p.get("to"))} for p in r.get("periods") or []]
-    fc = plan.forecast or {}
+    fc = dict(plan.forecast or {})
+    fc["seasonal"] = [{**a, "share_pct": round(a["share"] * 100) if a.get("share") is not None else None}
+                      for a in fc.get("seasonal") or []]
+    cover = r.get("cover_days")
     return {"plan": plan, "r": r, "cfg": cfg, "fc": fc, "action_label": policy.ACTION_LABELS.get(plan.action, ""),
-            "method_label": methods.METHOD_LABELS.get(fc.get("method"), "Chưa có"),
-            "stage_label": methods.STAGE_LABELS.get(fc.get("stage"), ""),
-            "group": planning_group(plan)}
+            "group": planning_group(plan), "cover_pct": round(min(cover, RUNWAY_DAYS) / RUNWAY_DAYS * 100)
+            if cover is not None else 100}
 
 
 def planning_group(plan):
@@ -310,16 +415,52 @@ def plans(request):
 
     if request.method == "POST" and request.POST.get("action") == "tinh_lai":
         run = planning.run_full(user=request.user, kind=PlanRun.Kind.MANUAL)
-        record(Action.CREATE, request=request, obj=run, object_type="forecast.PlanRun", after=run.summary)
+        record(Action.CREATE, request=request, obj=run, object_type="forecast.PlanRun",
+               after={"nguyen_lieu": run.summary.get("nguyen_lieu"), "hanh_dong": run.summary.get("hanh_dong")})
         messages.success(request, f"Đã tính lại kế hoạch mua cho {run.summary.get('nguyen_lieu', 0)} nguyên liệu.")
         return redirect("forecast:plans")
+    if request.method == "POST" and request.POST.get("action") in ("doi_cach", "giu_cach"):
+        accept = request.POST["action"] == "doi_cach"
+        try:
+            if not request.user.is_owner:
+                raise ValidationError("Chỉ Chủ quán duyệt đổi cách dự báo.")
+            planning.decide_switch(request.user, request.POST.get("key", ""), accept)
+        except (ValidationError, ValueError) as error:
+            for m in errors.messages_of(error):
+                messages.error(request, m)
+            return redirect("forecast:plans")
+        if accept:
+            planning.run_full(user=request.user, kind=PlanRun.Kind.MANUAL)
+            messages.success(request, "Đã đổi cách dự báo và tính lại kế hoạch mua.")
+        else:
+            messages.success(request, "Giữ cách dự báo hiện tại; đề xuất này không nhắc lại trong 4 tuần.")
+        return redirect("forecast:plans")
+    from . import policy
+
     today = timezone.localdate()
     rows = sorted(planning.current_plans(), key=lambda p: planning.sort_key(p, today))
-    groups = OrderedDict()
+    # Việc cần làm lên trước, mỗi nhóm một bảng; Đủ hàng gập lại, tách riêng nguyên liệu chưa dùng tới trong tầm dự báo.
+    groups = OrderedDict((k, []) for k in ("Đặt ngay", "Đặt trong 2 ngày", "Theo dõi", "Chưa đủ dữ liệu"))
+    enough, unused = [], []
     for p in rows:
-        groups.setdefault(planning.group_label(p, today), []).append(_plan_view(p))
+        v = _plan_view(p)
+        label = "Chưa đủ dữ liệu" if p.action == policy.NO_DATA else planning.group_label(p, today)
+        if label != "Đủ hàng":
+            groups[label].append(v)
+        elif any(row.get("demand") for row in v["r"]["timeline"]):
+            enough.append(v)
+        else:
+            unused.append(v)
+    anchors = {"Đặt ngay": "dat-ngay", "Đặt trong 2 ngày": "dat-trong-2-ngay", "Theo dõi": "theo-doi",
+               "Chưa đủ dữ liệu": "chua-du-du-lieu"}
+    counts = {"now": len(groups["Đặt ngay"]), "soon": len(groups["Đặt trong 2 ngày"]), "watch": len(groups["Theo dõi"]),
+              "enough": len(enough) + len(unused)}
+    groups = [{"label": k, "id": anchors[k], "items": v} for k, v in groups.items() if v]
     last_run = PlanRun.objects.filter(kind__in=[PlanRun.Kind.FULL, PlanRun.Kind.MANUAL]).first()
-    return render(request, "forecast/plans.html", {"groups": groups, "last_run": last_run, "today": today})
+    proposals = [{**p, "gain_pct": round(p["gain"] * 100)} for p in planning.proposals(today)]
+    return render(request, "forecast/plans.html", {"groups": groups, "enough": enough, "unused": unused,
+                                                   "counts": counts, "last_run": last_run, "today": today,
+                                                   "proposals": proposals, "can_decide": request.user.is_owner})
 
 
 @capability_required(Cap.FORECASTS)
@@ -333,6 +474,8 @@ def plan_detail(request, ingredient_id):
     from .models import IngredientPlan
 
     ing = get_object_or_404(Ingredient.objects.select_related("main_supplier"), pk=ingredient_id)
+    if ing.is_semi:  # bán thành phẩm không mua: xem nhu cầu và số mẻ nên làm ở trang làm bán thành phẩm
+        return redirect("inventory:semi")
     if request.method == "POST":
         p = request.POST
         action = p.get("action")
@@ -364,6 +507,8 @@ def plan_detail(request, ingredient_id):
         return redirect("forecast:plan", ingredient_id=ing.pk)
     plan = IngredientPlan.objects.filter(ingredient=ing, is_current=True).first()
     ctx = _plan_view(plan) if plan else {"plan": None}
+    if plan:
+        ctx.update(_plan_figures(ctx["r"], ctx["cfg"]))
     ctx.update({
         "ing": ing, "operation_key": uuid.uuid4().hex,
         "expected_date": timezone.localdate() + timedelta(days=ing.exposure_days),
@@ -374,3 +519,114 @@ def plan_detail(request, ingredient_id):
         "today": timezone.localdate(),
     })
     return render(request, "forecast/plan.html", ctx)
+
+
+def _plan_figures(r, cfg):
+    """Biểu đồ tồn cuối ngày 14 ngày tới: nếu không đặt thêm và nếu đặt hôm nay đúng số đề xuất; mức dùng mỗi ngày."""
+    from apps.reports import charts
+
+    rows = r["timeline"][:14]
+    if not rows:
+        return {"has_demand": False}
+    unit = cfg.get("unit", "")
+    demand7 = sum(float(x["demand"] or 0) for x in rows[:7])
+    with_order = (r.get("with_order") or [])[:len(rows)] if r.get("packs") else []
+
+    def amount(v):
+        return f"còn {numbers.fmt(v, 0)} {unit}" if v >= 0 else f"thiếu {numbers.fmt(-v, 0)} {unit}"
+
+    tips = []
+    for k, x in enumerate(rows):
+        parts = [f"dùng khoảng {numbers.fmt(x['demand'], 0)} {unit}"]
+        if x.get("arriving"):
+            parts.append(f"hàng về {numbers.fmt(x['arriving'], 0)} {unit}")
+        if with_order:
+            parts += [f"không đặt thêm: {amount(x['level'])}", f"đặt theo đề xuất: {amount(with_order[k])}"]
+        else:
+            parts.append(f"cuối ngày {amount(x['level'])}")
+        tips.append(f"{_day(x['date'])}" + (" (đóng cửa)" if x.get("closed") else "") + ": "
+                    + "; ".join(parts))
+    series = []
+    if with_order:
+        series.append({"name": "Nếu đặt hôm nay theo đề xuất", "values": with_order, "slot": 1, "label_end": False})
+        series.append({"name": "Nếu không đặt thêm", "values": [x["level"] for x in rows], "slot": 2,
+                       "label_end": False})
+    else:
+        series.append({"name": "Tồn cuối ngày", "values": [x["level"] for x in rows], "slot": 1, "label_end": False})
+    risk = r.get("risk_date")
+    idx = next((k for k, x in enumerate(rows) if risk and x["date"] == risk), None)
+    divider = {"index": idx, "label": "Có thể thiếu"} if idx is not None else None
+    labels = [f"{x['date']:%d/%m}" for x in rows]
+    chart = charts.line(labels, series, tips=tips, value_fmt=charts.fmt, divider=divider, width=charts.WIDE,
+                        height=230)
+    narrow = charts.line(labels, series, tips=tips, value_fmt=charts.fmt, divider=divider, width=NARROW, height=220)
+    until = None
+    for x, level in zip(rows, with_order):
+        if level < 0:
+            break
+        until = x["date"]
+    return {"stock_chart": chart, "stock_narrow": narrow, "per_day": demand7 / min(len(rows), 7), "demand7": demand7,
+            "order_until": until, "has_demand": any(float(x["demand"] or 0) > 0 for x in r["timeline"])}
+
+
+DEMAND_WORDS = {"deu": "Đều", "dao_dong": "Dao động mạnh", "lac_dac": "Lác đác", "thua_tho": "Lác đác, dao động mạnh"}
+
+
+def _week_error(fc):
+    """Sai số và độ chệch của dự báo đang dùng cho tổng 7 ngày (hoặc cửa sổ đặt hàng nếu chưa đo được 7 ngày), theo
+    phần trăm của lượng thực tế. Độ chệch dương: thực tế cao hơn dự báo."""
+    by = (fc.get("errors") or {}).get(fc.get("method")) or {}
+    st = by.get("7") or by.get(str(fc.get("decision_h"))) or {}
+    if not st or st.get("wape") is None:
+        return None, None, 0
+    mean = st["mae"] / st["wape"] if st.get("wape") else None
+    bias = round(st["bias"] / mean * 100, 1) if mean else 0.0
+    return round(st["wape"] * 100, 1), bias, st.get("n", 0)
+
+
+@capability_required(Cap.FORECASTS)
+def accuracy(request):
+    """Độ chính xác của dự báo cho kế hoạch mua, ba tầng: số ly bán, lượng nguyên liệu theo định mức, lượng thực dùng
+    trong sổ kho; kèm ngày thiếu hàng và lượng hết hạn 8 tuần. Chỉ hiện kết quả, không hiện cách tính."""
+    from . import planning
+    from .models import PlanRun
+
+    run = PlanRun.objects.filter(kind__in=[PlanRun.Kind.FULL, PlanRun.Kind.MANUAL]).first()
+    total = (run.summary or {}).get("tong") if run else None
+    if total:
+        total = {**total, "wape_pct": round(total["wape_7"] * 100, 1) if total.get("wape_7") is not None else None,
+                 "item_pct": round(total["item_wape_1"] * 100, 1) if total.get("item_wape_1") is not None else None}
+    rows = []
+    order = {"A": 0, "B": 1, "C": 2}
+    for plan in planning.current_plans():
+        fc = plan.forecast or {}
+        rates = fc.get("rates") or {}
+        wape, bias, n = _week_error(fc)
+        cls = fc.get("demand_class") or {}
+        ub = rates.get("ub_8w") or 0
+        recon = rates.get("recon") or {}
+        rows.append({
+            "ing": plan.ingredient, "unit": plan.ingredient.get_unit_display(), "abc": fc.get("abc", "C"),
+            "demand": DEMAND_WORDS.get(cls.get("kind"), "Chưa đủ dữ liệu"), "wape": wape, "bias": bias, "n": n,
+            "measured": fc.get("stage") == "mo_hinh", "stockout_days": rates.get("blocked_days", 0),
+            "expired": rates.get("waste_stock_8w", 0), "expired_pct": round(rates.get("waste_stock_8w", 0) / ub * 100, 1)
+            if ub else None, "recon_pct": round(recon.get("gap", 0) * 100, 1) if recon.get("ledger") else None,
+            "recon_flag": recon.get("flag"), "waste_pct": round((rates.get("r_vh") or 0) * 100, 1), "used": ub > 0})
+    # Nguyên liệu chưa dùng tới (không có lượng dùng 8 tuần, chưa đo được sai số) chỉ đếm, không liệt kê.
+    unused = [r for r in rows if r["wape"] is None and not r["used"]]
+    rows = [r for r in rows if r["wape"] is not None or r["used"]]
+    rows.sort(key=lambda r: (r["wape"] is None, -(r["wape"] or 0), order.get(r["abc"], 3), r["ing"].name))
+    measured = [r for r in rows if r["wape"] is not None]
+    top = max((r["wape"] for r in measured), default=0) or 1
+    for r in measured:
+        r["pct"] = round(r["wape"] / top * 100, 1)
+        lean = ("dùng nhiều hơn dự báo" if r["bias"] > 0 else "dùng ít hơn dự báo") if r["bias"] else "không lệch hẳn về phía nào"
+        r["tip"] = (f"{r['ing'].name}: sai số tổng 7 ngày {numbers.fmt(r['wape'], 1)}%"
+                    + (f"; thực tế thường {lean} {numbers.fmt(abs(r['bias']), 1)}%" if r["bias"] else f"; {lean}")
+                    + ("; số tạm, chưa đủ 8 tuần dữ liệu" if not r["measured"] else ""))
+    figures = {"stockout_days": sum(r["stockout_days"] for r in rows),
+               "stockout_items": sum(1 for r in rows if r["stockout_days"]),
+               "expired_items": [r for r in rows if r["expired"]],
+               "recon_flags": sum(1 for r in rows if r["recon_flag"])}
+    return render(request, "forecast/accuracy.html", {"total": total, "rows": rows, "measured": measured,
+                                                      "unused": len(unused), "figures": figures, "run": run})

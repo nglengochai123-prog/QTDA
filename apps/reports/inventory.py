@@ -75,6 +75,11 @@ def dashboard(start_day, end_day, today=None):
             flow[kind][day] += -q * prices.at(ing, day)
         if kind == StockMovement.Kind.CONSUME:
             used_qty[ing] += -q
+        if kind == StockMovement.Kind.PRODUCE and q < 0:
+            # Nguyên liệu gốc đem làm bán thành phẩm: tính giá trị tiêu hao ngay lúc làm (bán thành phẩm không có giá
+            # nhập nên lúc bán ra không tính lần hai).
+            flow[StockMovement.Kind.CONSUME][day] += -q * prices.at(ing, day)
+            used_qty[ing] += -q
 
     # Giá trị tồn theo ngày
     value_series = []

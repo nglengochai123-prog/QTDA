@@ -290,6 +290,19 @@ class Policy:
             ss_s, ss_S = whole(self.k * sig_s), whole(self.k * sig_S)
             ss_method = "kσ"
         computed_ss = (ss_s, ss_S)
+        arrival = i.today + timedelta(days=ell)
+        ss_cap = None
+        if i.shelf_life:
+            # Tồn an toàn là phần còn trên kệ khi lô sau về; theo thứ tự lấy lô cũ trước, nó phải dùng hết trong phần
+            # hạn dùng còn lại sau chu kỳ mua (hạn dùng − T). Phần vượt sẽ hết hạn trước khi kịp dùng nên không bảo vệ
+            # được gì: giới hạn lại và nói rõ mức phục vụ thực tế thấp hơn.
+            usable_days = int(i.shelf_life) - t_eff
+            ss_cap = whole(self.demand_between(arrival + timedelta(days=t_eff), usable_days)) if usable_days > 0 else 0.0
+            if max(ss_s, ss_S) > ss_cap:
+                notes.append(f"Tồn an toàn giới hạn {fmt(ss_cap)} {i.unit} theo hạn dùng (tính được "
+                             f"{fmt(max(ss_s, ss_S))} {i.unit}): phần dư sẽ hết hạn trước khi kịp dùng, nên mức phục "
+                             f"vụ thực tế thấp hơn {i.csl}%.")
+                ss_s, ss_S = min(ss_s, ss_cap), min(ss_S, ss_cap)
         manual = float(i.manual_ss or 0)
         if manual > ss_s or manual > ss_S:
             notes.append(f"Dùng tồn an toàn Chủ quán nhập {fmt(manual)} {i.unit} vì lớn hơn số tính được "
@@ -306,7 +319,6 @@ class Policy:
         risk, stockout = self.scan(rows)
         order_by = self.business_days_before(risk, ell + 1) if risk else None
         order_now = order_by is not None and order_by <= i.today
-        arrival = i.today + timedelta(days=ell)
         # Kiểm tra định kỳ: chỉ vào ngày kiểm tra, so vị thế tồn với s. Giám sát liên tục: bất kỳ lúc nào, khi ngày phải
         # đặt rơi vào trước lần kiểm tra kế tiếp (đợi tới lần kiểm tra sau thì hàng về không kịp).
         triggered = review_today and ip_s <= s
@@ -383,18 +395,26 @@ class Policy:
                         notes.append(f"Giới hạn bởi hạn dùng: mua {packs} {i.pack_label}, lần mua kế tiếp sẽ sớm hơn "
                                      f"{t_eff} ngày.")
                     else:
-                        # Hạn dùng là giới hạn mềm: xung đột với mức phục vụ, trình cả hai cách cho Chủ quán chọn.
+                        # Hạn dùng xung đột với mức phục vụ: không làm tròn vượt hạn dùng. Đề xuất lượng dùng hết
+                        # trước khi hết hạn (ít nhất lượng đặt tối thiểu) kèm cảnh báo, trình cách giữ mức phục vụ để
+                        # Chủ quán chọn.
                         conflict = binding = "hạn dùng"
-                        packs = min(reach, packs)
+                        full = min(reach, packs)
+                        packs = max(fit, i.moq)
                         expiry_excess = max(0.0, packs * pack - shelf)
+                        full_excess = max(0.0, full * pack - shelf)
                         options = [
-                            f"Mua {packs} {i.pack_label}: giữ mức phục vụ {i.csl}%, dự kiến hết hạn khoảng "
-                            f"{fmt(expiry_excess)} {i.unit}.",
-                            f"Mua {max(fit, 0)} {i.pack_label}: không hết hạn, nhưng có thể thiếu trước lần mua kế tiếp "
-                            f"(mức phục vụ thấp hơn {i.csl}%).",
+                            f"Mua {packs} {i.pack_label} (đề xuất): "
+                            + ("dùng hết trước khi hết hạn" if not expiry_excess else
+                               f"lượng đặt tối thiểu, dự kiến hết hạn khoảng {fmt(expiry_excess)} {i.unit}")
+                            + f", nhưng có thể thiếu trước lần mua kế tiếp (mức phục vụ thấp hơn {i.csl}%).",
+                            f"Mua {full} {i.pack_label}: giữ mức phục vụ {i.csl}%, dự kiến hết hạn khoảng "
+                            f"{fmt(full_excess)} {i.unit}.",
                         ]
-                        notes.append(f"Giới hạn bởi hạn dùng xung đột với mức phục vụ; đề xuất {packs} "
-                                     f"{i.pack_label}, dự kiến hết hạn khoảng {fmt(expiry_excess)} {i.unit}.")
+                        notes.append(f"Hạn dùng không đủ cho mức phục vụ {i.csl}%: đề xuất {packs} {i.pack_label}"
+                                     + (f", dự kiến hết hạn khoảng {fmt(expiry_excess)} {i.unit}" if expiry_excess
+                                        else " để không hết hạn")
+                                     + ". Nên mua thường xuyên hơn hoặc chọn quy cách nhỏ hơn.")
         elif need and action != EXPEDITE and not urgent:
             need = False  # vị thế tồn đã đủ tới mức mục tiêu
         if not need:
@@ -403,6 +423,9 @@ class Policy:
             notes.append("Có thể thiếu trước khi đơn đặt hôm nay kịp về: cân nhắc mua gấp hoặc nhờ giao ngay.")
         quantity = round(packs * pack, 2)
         delta = round(quantity - q0, 2) if packs else 0.0
+        # Dòng tồn nếu đặt hôm nay đúng số đề xuất (lô về cuối ngày arrival), để màn hình so với khi không đặt thêm.
+        with_order = [r["level"] for r in self.timeline(horizon, list(i.lots) + [
+            Lot(quantity=quantity, arrival=arrival, status="nhap")])] if packs else None
         if action == EXPEDITE and packs:
             notes.append("Nếu nhà cung cấp không giao sớm được, mua bổ sung theo số đề xuất.")
         sig_flags = i.sigma_measured or []
@@ -418,13 +441,14 @@ class Policy:
             "window_s": [t for t in self.window(n_s)], "window_S": [t for t in self.window(n_S)],
             "mu_s": mu_s, "mu_S": mu_S, "sigma_s": round(sig_s, 2), "sigma_S": round(sig_S, 2),
             "ss_method": ss_method, "sigma_label": i.sigma_label, "computed_ss": computed_ss,
-            "ss_s": ss_s, "ss_S": ss_S, "s": round(s, 2), "S": round(S, 2), "manual_ss": manual,
+            "ss_s": ss_s, "ss_S": ss_S, "ss_cap": ss_cap, "s": round(s, 2), "S": round(S, 2), "manual_ss": manual,
             "ip_s": round(ip_s, 2), "ip_S": round(ip_S, 2), "outdating_s": round(out_s, 2),
             "outdating_S": round(out_S, 2), "available": i.available, "physical": i.physical,
             "reserved": i.reserved, "committed": i.committed,
             "counted_lots": [lot for lot in i.lots if lot.arrival <= i.today + timedelta(days=n_S)],
             "uncounted_lots": [lot for lot in i.lots if lot.arrival > i.today + timedelta(days=n_S)],
-            "excluded_lots": i.excluded, "timeline": rows, "risk_date": risk, "stockout_date": stockout,
+            "excluded_lots": i.excluded, "timeline": rows, "with_order": with_order, "risk_date": risk,
+            "stockout_date": stockout,
             "order_by": order_by, "order_now": order_now, "triggered": triggered, "need": need, "q0": round(q0, 2),
             "caps": caps, "binding": binding, "packs": packs, "quantity": quantity, "delta": delta,
             "expiry_excess": round(expiry_excess, 2), "action": action, "expedite_po": expedite_po,

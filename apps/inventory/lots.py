@@ -21,7 +21,7 @@ import math
 from datetime import timedelta
 from decimal import Decimal
 
-from django.db.models import Min, Sum
+from django.db.models import Min, Q, Sum
 from django.utils import timezone
 
 from apps.core import params
@@ -201,13 +201,14 @@ def _surplus(ingredient, movement, qty, today):
 # ---------------- Đọc: trạng thái lô cho màn hình và cảnh báo ----------------
 
 def daily_usage(ingredient_ids=None, today=None, days=USAGE_WINDOW_DAYS):
-    """Lượng dùng bình quân mỗi ngày (pha chế) trong `days` ngày gần nhất: {ingredient_id: số}.
+    """Lượng dùng bình quân mỗi ngày (pha chế, và làm bán thành phẩm với nguyên liệu gốc) trong `days` ngày gần nhất: {ingredient_id: số}.
 
     Nguyên liệu mới theo dõi chưa đủ `days` ngày thì chia cho số ngày đã có sổ kho, để không tính thiếu tốc độ dùng."""
     today = today or timezone.localdate()
     since = today - timedelta(days=days)
-    rows = StockMovement.objects.filter(kind=StockMovement.Kind.CONSUME, created_at__date__gt=since,
-                                        created_at__date__lte=today)
+    rows = StockMovement.objects.filter(Q(kind=StockMovement.Kind.CONSUME)
+                                        | Q(kind=StockMovement.Kind.PRODUCE, quantity__lt=0),
+                                        created_at__date__gt=since, created_at__date__lte=today)
     if ingredient_ids is not None:
         rows = rows.filter(ingredient_id__in=ingredient_ids)
     sums = {r["ingredient_id"]: float(-r["s"]) for r in rows.values("ingredient_id").annotate(s=Sum("quantity"))

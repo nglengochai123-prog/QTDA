@@ -8,12 +8,14 @@ lỗi vẫn được ghi vào nhật ký máy chủ để lập trình viên xem
 
 import logging
 from decimal import InvalidOperation
+from pathlib import Path
 
 from django.contrib import messages
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
-from django.db import DataError
+from django.db import DataError, OperationalError, ProgrammingError
 from django.http import JsonResponse
 from django.shortcuts import redirect
+from django.template.loader import render_to_string
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .idempotency import OperationKeyError
@@ -125,3 +127,57 @@ def csrf_failure(request, reason=""):
     if is_fetch(request):
         return JsonResponse({"ok": False, "error": text, "errors": [text]}, status=403)
     return render(request, "403_csrf.html", {"text": text}, status=403)
+
+
+# Lỗi CSDL thường gặp khi mã nguồn mới hơn CSDL (chưa chạy migrate): SQLite "no such column/table", PostgreSQL
+# "column ... does not exist".
+SCHEMA_WORDS = ("no such column", "no such table", "has no column named", "does not exist")
+
+
+def pending_migrations():
+    """Các bước cập nhật CSDL chưa chạy, dạng "ung_dung.ten_buoc"; rỗng khi CSDL khớp mã nguồn."""
+    from django.db import connection
+    from django.db.migrations.executor import MigrationExecutor
+
+    executor = MigrationExecutor(connection)
+    plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
+    return [f"{m.app_label}.{m.name}" for m, _ in plan]
+
+
+class SchemaOutdatedMiddleware:
+    """Mã nguồn đã cập nhật mà CSDL chưa chạy migrate: thay trang lỗi bằng trang chỉ đúng hai lệnh cần chạy (sao lưu
+    rồi cập nhật), thay vì hiện dấu vết lỗi khó hiểu. Chỉ xét khi đã có lỗi CSDL dạng thiếu cột, thiếu bảng."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        return self.get_response(request)
+
+    def process_exception(self, request, exception):
+        if not isinstance(exception, (OperationalError, ProgrammingError)):
+            return None
+        if not any(w in str(exception).lower() for w in SCHEMA_WORDS):
+            return None
+        try:
+            pending = pending_migrations()
+        except Exception:  # noqa: BLE001 - không đọc được trạng thái cập nhật: để trang lỗi thường xử lý
+            return None
+        if not pending:
+            return None
+        logging.getLogger("lam.schema").error("CSDL chưa cập nhật (%s) tại %s", ", ".join(pending), request.path,
+                                              exc_info=exception)
+        from django.conf import settings
+        from django.http import HttpResponse
+
+        db = settings.DATABASES["default"]
+        sqlite = "sqlite" in db["ENGINE"]
+        name = Path(str(db["NAME"]))
+        try:
+            name = name.relative_to(settings.BASE_DIR)  # SQLITE_NAME tính từ thư mục phần mềm
+        except ValueError:
+            pass
+        custom = sqlite and str(name) != "db.sqlite3"
+        html = render_to_string("errors/csdl_chua_cap_nhat.html", {
+            "pending": pending, "sqlite_name": str(name) if custom else None, "sqlite": sqlite})
+        return HttpResponse(html, status=503)

@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime, time, timedelta
+from unittest import mock
 
 from django.test import TestCase
 from django.urls import reverse
@@ -44,6 +45,10 @@ class TodayBoardTests(TestCase):
         self.assertEqual({r["state"] for r in early["rows"]}, {"wait"})
 
     def test_missing_clock_out_gets_scheduled_end_as_guess(self):
+        # Trưa hôm nay: trước giờ mở cửa thì lượt tối hôm qua chưa bị coi là quên (ca có thể qua nửa đêm).
+        noon = mock.patch("django.utils.timezone.now", return_value=at(timezone.localdate(), 12))
+        noon.start()
+        self.addCleanup(noon.stop)
         att = Attendance.objects.create(store=self.d["store"], user=self.barista, role=Role.PHA_CHE,
                                         clock_in=at(self.day, 16, 58))
         board = today.owner_board()

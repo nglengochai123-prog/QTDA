@@ -88,7 +88,9 @@ def _record_payment(user, operation_key, table, method, kind):
     for order in orders:
         order.payment = payment
         order.status = Order.Status.PAID
-        order.save(update_fields=["payment", "status", "updated_at"])
+        # Đơn gửi lúc chưa có ca nào mở thì thuộc ca thu tiền của nó, để báo cáo theo ca khớp với quỹ ca.
+        order.shift = order.shift or shift
+        order.save(update_fields=["payment", "status", "shift", "updated_at"])
     record(Action.CREATE, actor=user, obj=payment, object_type="orders.Payment",
            after={"ban": table.code, "so_tien": payment.amount, "phuong_thuc": payment.get_method_display(),
                   "loai": payment.get_kind_display(), "don": [o.code for o in orders]})

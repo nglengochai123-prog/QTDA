@@ -19,7 +19,7 @@ from apps.core.dates import parse_month
 from apps.core.idempotency import OperationKeyError
 
 from . import operations as ops
-from .models import (ConsumptionCheck, Ingredient, Payable, PurchaseOrder, ShortageCase, StockCount, StockMovement,
+from .models import (ConsumptionCheck, Ingredient, IngredientKind, Payable, PurchaseOrder, ShortageCase, StockCount, StockMovement,
                      Supplier, SupplierPayment, Unit, Waste)
 from .stock import ensure_stock_rows
 
@@ -42,6 +42,11 @@ def _run(request, fn, ok):
 def _ingredients():
     ensure_stock_rows()
     return Ingredient.objects.filter(is_active=True).select_related("stock").order_by("-is_critical", "name")
+
+
+def _purchasable():
+    """Nguyên liệu mua vào: bán thành phẩm do quán tự làm không có trên phiếu nhập và đơn đặt."""
+    return _ingredients().exclude(kind=IngredientKind.SEMI)
 
 
 @capability_required(Cap.STOCK_OPERATIONS)
@@ -198,6 +203,33 @@ def waste(request):
 
 @capability_required(Cap.STOCK_OPERATIONS)
 @require_http_methods(["GET", "POST"])
+def semi(request):
+    """Làm bán thành phẩm: ghi mẻ đã làm, xem tồn và số mẻ nên làm."""
+    from apps.forecast.planning import production_suggestions
+
+    from .models import SemiBatch
+
+    if request.method == "POST":
+        p = request.POST
+        result = _run(request, lambda: ops.produce_semi(request.user, p.get("operation_key", ""), p.get("product"),
+                                                        p.get("batches", ""), p.get("actual") or None,
+                                                        p.get("note", "")), "")
+        if result:
+            data, _ = result
+            messages.success(request, "Đã ghi mẻ: nguyên liệu gốc đã trừ, bán thành phẩm đã vào kho"
+                             + (f" (lô {data['lot']})." if data.get("lot") else "."))
+        return redirect("inventory:semi")
+    rows = production_suggestions()
+    for r in rows:
+        r["operation_key"] = uuid.uuid4().hex
+    return render(request, "inventory/semi.html", {
+        "rows": rows, "recent": SemiBatch.objects.select_related("product", "actor", "lot")[:12],
+        "can_setup": user_can(request.user, Cap.MASTER_INVENTORY),
+    })
+
+
+@capability_required(Cap.STOCK_OPERATIONS)
+@require_http_methods(["GET", "POST"])
 def receipt(request):
     if request.method == "POST":
         p = request.POST
@@ -235,7 +267,7 @@ def receipt(request):
     last_price = Subquery(ReceiptLine.objects.filter(ingredient=OuterRef("pk")).order_by("-id").values("unit_price")[:1])
     return render(request, "inventory/receipt.html", {
         "suppliers": Supplier.objects.filter(is_active=True), "rows": range(RECEIPT_ROWS),
-        "ingredients": _ingredients().annotate(last_price=last_price),
+        "ingredients": _purchasable().annotate(last_price=last_price),
         "open_pos": PurchaseOrder.objects.exclude(status__in=[PurchaseOrder.Status.DELIVERED,
                                                               PurchaseOrder.Status.CANCELLED]).select_related("ingredient", "supplier"),
         "sources": SupplierPayment.Source.choices, "operation_key": uuid.uuid4().hex,
@@ -272,7 +304,7 @@ def purchase_orders(request):
     return render(request, "inventory/purchase_orders.html", {
         "waiting": waiting, "late": sum(1 for po in waiting if po.state == S.LATE),
         "done": done[:200 if show_all else 15], "done_total": done.count(), "show_all": show_all,
-        "suppliers": Supplier.objects.filter(is_active=True), "ingredients": _ingredients(),
+        "suppliers": Supplier.objects.filter(is_active=True), "ingredients": _purchasable(),
         "today": today, "operation_key": uuid.uuid4().hex, "can_setup": user_can(request.user, Cap.MASTER_INVENTORY),
     })
 
@@ -297,14 +329,23 @@ def payables(request):
         item.late_days = -item.days
     overdue = [x for x in items if x.days < 0]
     soon = [x for x in items if 0 <= x.days <= 7]
+    # Đã trả: lọc theo tháng trả và nhà cung cấp để đối chiếu với sổ của nhà cung cấp.
+    month = parse_month(request.GET.get("thang")) or today.replace(day=1)
+    next_month = (month + timedelta(days=32)).replace(day=1)
+    paid = (SupplierPayment.objects.filter(paid_on__gte=month, paid_on__lt=next_month)
+            .select_related("payable__supplier", "payable__receipt", "actor").order_by("-paid_on", "-created_at"))
+    supplier = request.GET.get("ncc", "")
+    if supplier.isdigit():
+        paid = paid.filter(payable__supplier_id=int(supplier))
+    paid = list(paid)
     return render(request, "inventory/payables.html", {
         "items": items, "sources": SupplierPayment.Source.choices, "default_source": SupplierPayment.Source.TRANSFER,
         "shift_cash": SupplierPayment.Source.SHIFT_CASH, "shift_open": Shift.objects.operating() is not None,
         "today": today, "total": sum(x.left for x in items),
         "overdue": len(overdue), "overdue_sum": sum(x.left for x in overdue),
         "soon": len(soon), "soon_sum": sum(x.left for x in soon),
-        "recent": SupplierPayment.objects.select_related("payable__supplier", "payable__receipt", "actor")
-                  .order_by("-created_at")[:8],
+        "paid": paid, "paid_sum": sum(x.amount for x in paid), "month": month, "supplier": supplier,
+        "suppliers": Supplier.objects.filter(pk__in=Payable.objects.values("supplier_id")).order_by("name"),
     })
 
 

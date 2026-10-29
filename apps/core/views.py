@@ -83,9 +83,10 @@ def home(request):
         selling = MenuItem.objects.sellable().count()
         tables = Table.objects.filter(is_active=True).count()
         ingredients = Ingredient.objects.filter(is_active=True).count()
-        # Số 0 ở nhân viên, món đang bán, bàn, nguyên vật liệu nghĩa là quán chưa bán được: tô màu để Chủ quán khai báo.
+        open_shifts = Shift.objects.filter(status=Shift.Status.OPEN).count()
+        # Số 0 ở ca đang mở, nhân viên, món đang bán, bàn, nguyên vật liệu nghĩa là quán chưa bán được: tô màu để Chủ quán khai báo.
         context["master_data"] = [
-            ("Ca làm việc", md("ca"), f"{Shift.objects.filter(status=Shift.Status.OPEN).count()} ca đang mở", False),
+            ("Ca làm việc", md("ca"), f"{open_shifts} ca đang mở", not open_shifts),  # không có ca thì không thu tiền được
             ("Nhân viên", md("nhan-vien"), f"{staff} đang làm", not staff),
             ("Món và giá", md("mon"), f"{selling} đang bán" + (f", {drafts} đang soạn" if drafts else ""),
              bool(drafts) or not selling),

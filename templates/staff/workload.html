@@ -32,7 +32,7 @@
   <div class="table-wrap"><table class="data-table table-stack">
     <thead><tr><th scope="col">Khung giờ</th><th scope="col" class="num">Đơn</th><th scope="col" class="num">Ly</th><th scope="col" class="num">Tải</th><th scope="col" class="num">Chờ món</th><th scope="col" class="num">Tồn quầy</th>{% for label in role_headers %}<th scope="col" class="num">{{ label }} có mặt</th>{% endfor %}<th scope="col">Đánh giá</th></tr></thead>
     <tbody>{% for f in frames %}
-    <tr><th scope="row" class="nowrap">{{ f.start|date:"H" }}–{{ f.end|date:"H" }} giờ</th><td class="num" data-label="Đơn">{{ f.orders }}</td><td class="num" data-label="Ly">{{ f.cups }}</td><td class="num" data-label="Tải">{{ f.load }}</td>
+    <tr><th scope="row" class="nowrap">{{ f.label }}</th><td class="num" data-label="Đơn">{{ f.orders }}</td><td class="num" data-label="Ly">{{ f.cups }}</td><td class="num" data-label="Tải">{{ f.load }}</td>
       <td class="num" data-label="Chờ món">{% if f.median_wait is not None %}{{ f.median_wait }} phút{% else %}–{% endif %}</td><td class="num" data-label="Tồn quầy">{{ f.backlog }}</td>
       {% for p in f.presence_cells %}<td class="num" data-label="{{ p.label }} có mặt">{{ p.n }}</td>{% endfor %}
       <td data-label="Đánh giá">{% if f.overloaded %}<span class="pill pill-danger">Quá tải</span>{% elif f.cups %}<span class="pill pill-ok">Đạt chuẩn</span>{% else %}<span class="muted">Không có đơn</span>{% endif %}</td></tr>

@@ -9,6 +9,7 @@ Hai yêu cầu chạy thử hai chức năng ra quyết định là kế hoạch
 | Kế hoạch mua | 1,24 lần thiếu mỗi tháng trên 18 nguyên liệu mô phỏng; quy ra cả quán khoảng 3,4 lần mỗi tháng, trong khi BO-02 chỉ cho 1 lần | 0,36 lần mỗi tháng (giảm 71%); quy ra cả quán khoảng 0,9 lần. Đổi lại xoài và bơ hết hạn nhiều hơn 3 đến 5 điểm phần trăm |
 | Gợi ý số người | Gợi ý 116 giờ công mỗi ngày, gấp 2,2 lần lịch hiện nay (53 giờ), vì năng suất tự học chỉ bằng 1/3 sức làm thật | 57 giờ mỗi ngày khi Chủ quán đặt sức làm, 61 giờ khi để hệ thống tự ước lượng. 96% số giờ đạt chuẩn chờ 10 phút; giờ đông đạt chuẩn tăng từ 74% lên 90–92% |
 | Xếp người theo đăng ký | Cách tham lam (ô khan hiếm trước) | Giữ nguyên: so với lời giải tối ưu trên 40 tuần ngẫu nhiên, chỉ 2 tuần thiếu 1 chỗ |
+| Dự báo cho kế hoạch mua (27/10) | Ước tính Chủ quán, trung bình cùng thứ, mô hình Bayes động cho từng nguyên liệu | Năm cách và dự báo phân cấp, chọn theo sai số, đổi khi Chủ quán duyệt: 0,38 lần thiếu mỗi tháng, sai số tổng số ly 7 ngày 4,3% đến 4,7% (mục 2.7) |
 
 Hai mô hình được đưa vào hệ thống:
 
@@ -23,7 +24,7 @@ Hai quán giả lập nằm ngay trong mã, không đọc hay ghi cơ sở dữ 
 
 | Quán giả lập | Tệp | Lệnh chạy lại |
 |---|---|---|
-| Mua nguyên liệu: một năm, 18 nguyên liệu tiêu biểu của thực đơn LAM | `apps/forecast/simulation.py` | `python manage.py mo_phong_ke_hoach_mua --hat-giong 1,2,3,4,5` (thêm `--cach truoc-2610` để chạy cách cũ) |
+| Mua nguyên liệu: một năm, 18 nguyên liệu tiêu biểu của thực đơn LAM | `apps/forecast/simulation.py` | `python manage.py mo_phong_ke_hoach_mua --hat-giong 1,2,3,4,5` (thêm `--cach truoc-2610` để chạy cách cũ, `--cach khong-phan-cap` hoặc `--cach thoi-quen` để so, mục 2.7) |
 | Chia ca: từng khách, từng ly, từng người trong ngày | `apps/schedule/simulation.py` | `python manage.py mo_phong_xep_ca --hat-giong 1,2,3` (thêm `--tai 1.3` để thử ngày đông hơn 30%) |
 
 Mỗi cách được chạy với nhiều hạt giống ngẫu nhiên (5 cho mua hàng, 3 cho chia ca). Bảng dưới đây ghi số trung bình.
@@ -42,7 +43,7 @@ Quán bán trung bình khoảng 185 ly mỗi ngày theo tỷ trọng nhóm món 
 - Ước tính tuần ban đầu của Chủ quán lệch tới ±20%.
 - Nhà cung cấp giao trễ một ngày với xác suất 8%; mua gấp chỉ được một nửa số lần.
 
-Mỗi tối hệ thống chạy đúng hàm dự báo và hàm chính sách đang dùng (`methods.forecast_ingredient`, `policy.compute`), và Chủ quán giả lập làm theo đề xuất. Ly thiếu nguyên liệu thì không bán được; mỗi nguyên liệu tính tối đa một trường hợp thiếu mỗi ngày (BRU-26). Hàng dùng lô cũ trước, lô quá hạn bị bỏ cuối ngày.
+Mỗi tối hệ thống chạy đúng hàm dự báo và hàm chính sách đang dùng (`hierarchy.build`, `methods.forecast_series`, `policy.compute`), và Chủ quán giả lập làm theo đề xuất. Ly thiếu nguyên liệu thì không bán được; mỗi nguyên liệu tính tối đa một trường hợp thiếu mỗi ngày (BRU-26). Hàng dùng lô cũ trước, lô quá hạn bị bỏ cuối ngày.
 
 ### 2.2. Kết quả cách cũ
 
@@ -106,6 +107,30 @@ Không mức phục vụ nào vừa ít thiếu vừa ít bỏ cho hai món này
 3. **Dùng xoài đông lạnh hoặc cốt xoài** (để lâu) cho sinh tố, giữ xoài tươi cho món cần quả tươi.
 
 Hệ thống vẫn để Chủ quán đặt mức phục vụ riêng cho từng nguyên liệu; số Chủ quán đặt luôn được ưu tiên.
+
+### 2.7. Cấu hình lại dự báo theo phân tích chọn mô hình (27/10/2026)
+
+Sau khi Hai gửi phân tích "Lựa chọn mô hình dự báo và quản lý nguyên vật liệu cho LAM Coffee", phần dự báo của kế hoạch mua được cấu hình lại: bình quân theo loại ngày, bình quân có trọng số cùng thứ, Holt-Winters, TSB cho hàng bán lác đác, dự báo phân cấp (tổng số ly × tỷ trọng món × định mức nhiều tầng), tồn an toàn theo phân vị sai số và chặn theo hạn dùng (THIET_KE_MUA_NGUYEN_LIEU.md mục 4.4, 6.3). Chạy lại cùng quán giả lập, hạt giống 1, 2, 3, mỗi lần 364 ngày:
+
+| Cách (`--cach`) | Lần thiếu mỗi tháng (18 nguyên liệu) | Ly mất | Xoài hết hạn | Bơ hết hạn |
+|---|---|---|---|---|
+| `thoi-quen`: Chủ quán đặt theo thói quen | 20,93 / 17,55 / 18,96 | 2,63% / 2,33% / 3,23% | 5,7% / 13,4% / 20,8% | 4,9% / 8,1% / 4,6% |
+| Bản ngay trước khi cấu hình lại (E2 ở mục 2.4) | 0,58 / 0,25 / 0,49 | 0,07% / 0,01% / 0,04% | 24,0% / 35,9% / 42,7% | 12,3% / 12,0% / 11,7% |
+| `khong-phan-cap`: dự báo mới, bỏ phân cấp | 0,33 / 0,41 / 0,49 | 0,02% / 0,02% / 0,02% | 26,9% / 36,5% / 43,2% | 10,6% / 10,5% / 9,6% |
+| **`hien-tai`: dự báo mới (đang dùng)** | **0,08 / 0,49 / 0,58** | **0,00% / 0,02% / 0,03%** | **27,7% / 36,0% / 42,9%** | **10,8% / 10,5% / 10,0%** |
+
+Độ chính xác của dự báo mới trên ba cấp, đánh giá riêng:
+
+- Tổng số ly cả quán, sai số tổng 7 ngày (WAPE): 4,3% / 4,5% / 4,7%.
+- Số ly từng món, sai số 1 ngày: 42,1% / 44,1% / 43,4%. Một món một ngày vốn nhiễu; cộng theo nguyên liệu và theo cửa sổ mua thì sai số nhỏ hơn nhiều.
+- Nguyên liệu dùng cho nhiều món (cà phê, sữa đặc, kem béo, đường): sai số khoảng 5% đến 8%; trái cây: chanh, tắc 11% đến 25%, cam khoảng 30%, xoài 43% đến 62%.
+- PH (phân cấp) được chọn ở 4 trong 54 lượt nguyên liệu; còn lại là LN, HW, WMA hoặc M0 chạy thẳng trên chuỗi nguyên liệu. Vì vậy PH là một ứng viên ngang hàng chứ không ép dùng.
+
+Cách đọc:
+
+- Số lần thiếu trung bình 0,38 lần mỗi tháng, ngang bản trước (0,44) và trong BO-02; ly mất giảm nhẹ. Bơ bị bỏ ít hơn khoảng 1,5 điểm phần trăm nhờ tồn an toàn theo phân vị và chặn theo hạn dùng.
+- Xoài vẫn bị bỏ 28% đến 43%, như bản trước. Nguyên nhân là cấu trúc: túi 4 quả, hạn 5 ngày, quán dùng khoảng 0,8 quả mỗi ngày (hạt giống 3). Để không thiếu, lúc còn khoảng 3 quả đã phải đặt thêm túi 4 quả, mà 5 ngày quán chỉ dùng được khoảng 4 quả. Cách đặt theo thói quen bỏ ít hơn chỉ vì để hết xoài 37 đến 46 ngày mỗi năm. Hạ tồn an toàn thêm sẽ đổi hỏng lấy thiếu, trái BO-02, nên hệ thống không tự làm; cách gỡ vẫn là ba hướng ở mục 2.6, cần Hai chọn.
+- Bán thành phẩm (cà phê cốt, nước đường, foam) không có trong quán giả lập: phần này được kiểm bằng kiểm thử tự động (`apps/forecast/tests/test_semi.py`) và chạy thử trên bản sao dữ liệu mẫu.
 
 ## 3. Gợi ý số người cần cho từng ca
 

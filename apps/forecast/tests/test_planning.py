@@ -180,57 +180,142 @@ class MethodStageTests(PlanBase):
 
 
 class SeriesMethodTests(SimpleTestCase):
-    def series(self, days, level=lambda j: 1000.0, weekend=1.4):
-        start = date(2026, 1, 5)
+    def series(self, days, level=lambda j: 1000.0, weekend=1.4, start=date(2026, 1, 5)):
         out = []
         for j in range(days):
             d = start + timedelta(days=j)
             out.append((d, level(j) * (weekend if d.weekday() >= 5 else 1.0), "ok"))
         return out
 
-    def test_summer_drop_m1_and_m2_catch_up(self):
+    def test_weighted_same_weekday_and_day_type_average(self):
+        s = self.series(56, level=lambda j: 100.0 + j)  # thứ Hai 05/01/2026 là j = 0
+        end = s[-1][0]
+        wma = methods.wma_table(s, end)
+        mondays = [100.0 + j for j in (49, 42, 35, 28)]  # 4 thứ Hai gần nhất, mới nhất trước
+        self.assertAlmostEqual(wma[0], 0.4 * mondays[0] + 0.3 * mondays[1] + 0.2 * mondays[2] + 0.1 * mondays[3])
+        ln = methods.ln_table(s, end)
+        recent = s[-28:]
+        weekdays = [x for d, x, _ in recent if d.weekday() < 5]
+        self.assertAlmostEqual(ln[False], sum(weekdays) / len(weekdays))
+        gaps = [(d, x if d.weekday() != 0 or d > end - timedelta(days=14) else None,
+                 "ok" if d.weekday() != 0 or d > end - timedelta(days=14) else "bo_qua") for d, x, _ in s]
+        two = methods.wma_table(gaps, end)  # thứ Hai chỉ còn 2 lần: chia lại trọng số 0,4 / 0,3
+        self.assertAlmostEqual(two[0], (0.4 * mondays[0] + 0.3 * mondays[1]) / 0.7)
+
+    def test_level_drop_weighted_average_and_holt_winters_catch_up(self):
         s = self.series(105, level=lambda j: 1000.0 if j < 84 else 750.0)
         today = s[-1][0] + timedelta(days=1)
         weekday = next(today + timedelta(days=j) for j in range(7) if (today + timedelta(days=j)).weekday() == 2)
-        m1 = methods._predict(s, "M1", None, [weekday], 0.95, 0.99)[weekday.isoformat()]
-        m2 = methods._predict(s, "M2", None, [weekday], 0.95, 0.99)[weekday.isoformat()]
-        self.assertLess(m1, 950)  # trung bình 8 tuần bắt kịp dần
-        self.assertLess(m2, 850)  # mô hình động bắt kịp nhanh hơn
-        fc = methods.forecast_ingredient(s, today=today, horizon=14, decision_h=2)
+        wma = methods.predictor(s, "WMA")(weekday)
+        hw = methods.predictor(s, "HW")(weekday)
+        ln = methods.predictor(s, "LN")(weekday)
+        self.assertAlmostEqual(wma, 775.0)  # ba tuần mới 750, tuần thứ tư còn 1000 với trọng số 0,1
+        self.assertLess(hw, 850)
+        self.assertLess(ln, 850)
+        fc = methods.forecast_series(s, today=today, horizon=14, candidates=("LN", "WMA", "HW"), decision_h=2)
         self.assertEqual(fc["stage"], "mo_hinh")
-        self.assertTrue(fc["sigma_label"])
+        self.assertTrue(fc["auto_pick"])  # chưa có lựa chọn: tự chọn lần đầu theo sai số
+        self.assertIn(fc["method"], ("LN", "WMA", "HW"))
+
+    def test_holt_winters_needs_eight_weeks(self):
+        self.assertIsNone(methods.predictor(self.series(50), "HW"))
+        self.assertIsNotNone(methods.predictor(self.series(60), "HW"))
+
+    def test_stages_follow_amount_of_data(self):
+        est = (6000, 7000, 8000)
+        short = self.series(10)
+        today = short[-1][0] + timedelta(days=1)
+        fc = methods.forecast_series(short, today=today, horizon=7, estimate=est, candidates=("LN", "WMA"))
+        self.assertEqual((fc["method"], fc["stage"]), ("M0", methods.STAGE_OWNER))
+        mid = self.series(35)
+        today = mid[-1][0] + timedelta(days=1)
+        fc = methods.forecast_series(mid, today=today, horizon=7, estimate=est, candidates=("LN", "WMA"))
+        self.assertEqual((fc["method"], fc["stage"]), ("WMA", methods.STAGE_EARLY))  # đủ 4 tuần: cùng thứ
+        self.assertAlmostEqual(fc["prior_weight"], 7 / 42, places=3)  # ước tính nặng như 7 ngày dữ liệu
+        fc = methods.forecast_series(self.series(20), today=self.series(20)[-1][0] + timedelta(days=1), horizon=7,
+                                     candidates=("LN", "WMA"))
+        self.assertEqual(fc["method"], "LN")  # chưa đủ 4 lần mỗi thứ: theo loại ngày
+
+    def test_intermittent_series_uses_tsb(self):
+        start = date(2026, 1, 5)
+        s = [(start + timedelta(days=j), 6.0 if j % 4 == 0 else 0.0, "ok") for j in range(80)]
+        cls = methods.demand_class(s, s[-1][0])
+        self.assertTrue(cls["intermittent"])
+        self.assertEqual(cls["kind"], "lac_dac")
+        value = methods.predictor(s, "TSB")(s[-1][0] + timedelta(days=1))
+        self.assertAlmostEqual(value, 1.5, delta=0.4)  # khoảng 1 ngày có bán mỗi 4 ngày × 6
+        steady = methods.demand_class(self.series(80), date(2026, 3, 25))
+        self.assertFalse(steady["intermittent"])
 
     def test_biased_methods_are_dropped_with_warning(self):
-        s = self.series(120, level=lambda j: 1000.0 + 3 * j)  # xu hướng tăng đều: cả hai đều dự báo thấp
+        s = self.series(120, level=lambda j: 1000.0 + 6 * j)  # xu hướng tăng đều: bình quân luôn dự báo thấp
         today = s[-1][0] + timedelta(days=1)
-        fc = methods.forecast_ingredient(s, today=today, horizon=14, decision_h=2, previous_method="M1")
+        fc = methods.forecast_series(s, today=today, horizon=14, candidates=("LN", "WMA"), decision_h=2,
+                                     approved="LN")
         self.assertTrue(any("lệch hệ thống" in w for w in fc["warnings"]))
-        self.assertIn(fc["method"], ("M1", "M2"))
+        self.assertIn(fc["method"], ("LN", "WMA"))
 
-    def test_switch_only_on_five_percent_gain_over_four_weeks(self):
+    def test_switch_is_only_proposed_after_five_percent_gain_over_four_weeks(self):
         start = date(2026, 3, 1)
-        inc = [(start + timedelta(days=j), {2: 100.0}) for j in range(40)]
-        close = [(d, {2: 97.0}) for d, _ in inc]
-        better = [(d, {2: 90.0}) for d, _ in inc]
+        inc = [(start + timedelta(days=j), {2: (100.0, 0.0)}) for j in range(40)]
+        close = [(d, {2: (97.0, 0.0)}) for d, _ in inc]
+        better = [(d, {2: (90.0, 0.0)}) for d, _ in inc]
         self.assertAlmostEqual(methods._recent_gain(inc, close, 2, 28), 0.03)
         self.assertAlmostEqual(methods._recent_gain(inc, better, 2, 28), 0.10)
         self.assertIsNone(methods._recent_gain(inc[:20], better[:20], 2, 28))  # chưa đủ 4 tuần
         flat = self.series(120)
         today = flat[-1][0] + timedelta(days=1)
 
-        def fake(series, method, **kw):
-            err = {"M1": 100.0, "M2": 97.0 if kw.get("_close", True) else 90.0}[method]
-            origins = [(start + timedelta(days=j), {h: err * (1 if j % 2 else -1) for h in range(1, 11)})
-                       for j in range(60)]
-            return {"origins": origins, "by_h": methods.summarize(origins)}
+        def fake(series, method, cfg=methods.DEFAULT, **kw):
+            err = {"LN": 100.0, "WMA": 97.0 if kw.get("_close", True) else 90.0}[method]
+            origins = [(start + timedelta(days=j), {h: (1000.0 + err * (1 if j % 2 else -1), 1000.0)
+                                                    for h in range(1, 32)}) for j in range(60)]
+            return {"origins": origins, "by_h": methods.summarize(origins), "predictions": {}}
 
         with mock.patch.object(methods, "rolling", side_effect=fake):
-            kept = methods.forecast_ingredient(flat, today=today, horizon=7, decision_h=2, previous_method="M1")
-        self.assertEqual(kept["method"], "M1")  # chỉ thấp hơn 3%: giữ phương pháp đang dùng
+            kept = methods.forecast_series(flat, today=today, horizon=7, decision_h=2, candidates=("LN", "WMA"),
+                                           approved="LN")
+        self.assertEqual((kept["method"], kept["proposal"]), ("LN", None))  # chỉ thấp hơn 3%: không đề xuất
         with mock.patch.object(methods, "rolling",
-                               side_effect=lambda series, method, **kw: fake(series, method, _close=False)):
-            switched = methods.forecast_ingredient(flat, today=today, horizon=7, decision_h=2, previous_method="M1")
-        self.assertEqual(switched["method"], "M2")
+                               side_effect=lambda series, method, cfg=methods.DEFAULT, **kw: fake(
+                                   series, method, _close=False)):
+            proposed = methods.forecast_series(flat, today=today, horizon=7, decision_h=2, candidates=("LN", "WMA"),
+                                               approved="LN")
+            auto = methods.forecast_series(flat, today=today, horizon=7, decision_h=2, candidates=("LN", "WMA"),
+                                           approved="LN", cfg=methods.with_overrides(methods.DEFAULT,
+                                                                                     auto_switch=True))
+        # BRU-37: cách tốt hơn 10% chỉ được đề xuất, chờ Chủ quán duyệt; không tự đổi
+        self.assertEqual(proposed["method"], "LN")
+        self.assertEqual((proposed["proposal"]["method"], proposed["proposal"]["gain"]), ("WMA", 0.1))
+        self.assertEqual(auto["method"], "WMA")
+
+
+class HierarchyTests(SimpleTestCase):
+    def test_total_split_by_item_shares_and_recipe(self):
+        from apps.forecast import hierarchy
+
+        start = date(2026, 1, 5)
+        days = [start + timedelta(days=j) for j in range(70)]
+        a = [(d, 60.0, "ok") for d in days]
+        b = [(d, 40.0 if d.weekday() < 5 else 80.0, "ok") for d in days]
+        total = [(d, a[i][1] + b[i][1], "ok") for i, d in enumerate(days)]
+        items = [hierarchy.Item("a", a, {"milk": 30.0}), hierarchy.Item("b", b, {"milk": 10.0, "tea": 5.0}),
+                 hierarchy.Item("new", [(d, 0.0, "ok") for d in days], {"tea": 4.0}, judgement={False: 5, True: 5})]
+        today = days[-1] + timedelta(days=1)
+        h = hierarchy.build(total, items, today=today, horizon=7)
+        sat = next(today + timedelta(days=j) for j in range(7) if (today + timedelta(days=j)).weekday() == 5).isoformat()
+        cups = h["today"][sat]
+        self.assertAlmostEqual(sum(cups.values()), h["total"]["daily"][sat])  # tổng các món bằng tổng cả quán
+        self.assertAlmostEqual(cups["b"] / cups["a"], 80 / 60, places=6)
+        self.assertGreater(cups["new"], 0)  # món mới chưa bán: theo nhận định của Chủ quán
+        external, daily = hierarchy.ingredient_forecast(h, items, "milk")
+        self.assertAlmostEqual(daily[sat], cups["a"] * 30 + cups["b"] * 10)
+        self.assertTrue(external)
+        origin = sorted(external)[-1]
+        self.assertTrue(all(iso > origin for iso in external[origin]))  # dự báo của gốc chỉ cho ngày sau gốc
+        self.assertEqual(hierarchy.ingredient_forecast(h, items, "coffee"), (None, None))
+        shares = hierarchy.group_shares(items, "milk", {"a": 100, "b": 100})
+        self.assertEqual(shares, {None: 1.0})
 
 
 class PlanRunTests(PlanBase):

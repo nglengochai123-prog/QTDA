@@ -336,9 +336,11 @@ def decide(user, operation_key, request_id, approve, note=""):
                 before, after = apply_effects(req, user)
             except stock.InsufficientStock as error:
                 # Đổi món mà món mới không đủ nguyên liệu: không duyệt được, yêu cầu vẫn chờ (AC-04).
+                semi = [s["ingredient"] for s in error.shortages if s.get("semi")]
                 raise ValidationError("Không đủ nguyên liệu cho món thay thế: " + "; ".join(
                     f"{s['ingredient']} cần {s['needed']} {s['unit']}, còn {s['available']}" for s in error.shortages)
-                    + ". Từ chối yêu cầu hoặc nhập thêm hàng rồi duyệt lại.")
+                    + ". Từ chối yêu cầu hoặc nhập thêm hàng rồi duyệt lại."
+                    + (f" {', '.join(semi)} là bán thành phẩm: làm thêm mẻ ở Kho › Làm bán thành phẩm." if semi else ""))
             req.status = Status.APPROVED
         else:
             req.status = Status.REJECTED

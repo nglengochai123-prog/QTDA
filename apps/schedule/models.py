@@ -1,5 +1,7 @@
 """Đăng ký ca và lịch làm việc (FR-38, FR-39, BRU-28 đến BRU-30)."""
 
+from datetime import datetime, time, timedelta
+
 from django.conf import settings
 from django.db import models
 
@@ -23,12 +25,26 @@ class WorkShift(StoreScopedModel):
     def __str__(self):
         return f"{self.name} {self.date:%d/%m} {self.start:%H:%M}–{self.end:%H:%M}"
 
+    def _minutes(self):
+        """(phút bắt đầu, phút kết thúc) trong ngày; ca kết thúc lúc 0 giờ là hết ngày (24 giờ)."""
+        a = self.start.hour * 60 + self.start.minute
+        b = self.end.hour * 60 + self.end.minute
+        return a, (b if b > a else 24 * 60)
+
     @property
     def hours(self):
-        return (self.end.hour * 60 + self.end.minute - self.start.hour * 60 - self.start.minute) / 60
+        a, b = self._minutes()
+        return (b - a) / 60
+
+    @property
+    def end_datetime(self):
+        """Lúc kết thúc ca (naive); ca kết thúc lúc 0 giờ thì là 0 giờ ngày hôm sau."""
+        a, b = self._minutes()
+        return datetime.combine(self.date, time.min) + timedelta(minutes=b)
 
     def overlaps(self, other):
-        return self.date == other.date and self.start < other.end and other.start < self.end
+        (a, b), (c, d) = self._minutes(), other._minutes()
+        return self.date == other.date and a < d and c < b
 
 
 class RoleNeed(models.Model):

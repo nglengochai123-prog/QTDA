@@ -10,6 +10,12 @@
     <a class="btn btn-primary btn-sm" href="{% url 'orders:cashier' %}">Tải lại danh sách</a></div>
 </div>
 {% include "shifts/_overrun.html" with shift=operating_shift %}
+{% if not operating_shift %}
+<div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
+  <div><strong>Chưa có ca đang mở nên chưa thu tiền được.</strong>
+    {% if request.user.is_owner %}Thêm ca ở <a href="{% url 'masterdata:create' 'ca' %}">Quản trị › Ca làm việc</a>; biểu mẫu gợi ý sẵn giờ theo ca gần nhất.{% else %}Báo Chủ quán mở ca rồi tải lại trang này.{% endif %}</div>
+</div>
+{% endif %}
 {% include "shifts/_refunds.html" %}
 {% if bills %}
 <div class="bill-grid">

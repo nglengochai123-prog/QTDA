@@ -1,36 +1,56 @@
 {% extends "base.html" %}
+{% load loi_thuong %}
 {% block title %}Dự báo nhu cầu · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <header class="page-head">
-  <div><h1>Dự báo nhu cầu</h1><p class="page-sub">Số ly dự kiến bán của từng món và kích cỡ. Số trong ngoặc là mức thấp và cao: khoảng 8 trong 10 ngày số bán nằm trong đó. Khi chưa có nhiều ngày bán, dự báo dựa vào nhận định của Chủ quán.</p></div>
+  <div><h1>Dự báo nhu cầu</h1><p class="page-sub">Số ly dự kiến bán trong những ngày tới.{% if rel %} Cập nhật {{ rel.issued_at|date:"H:i d/m" }}.{% endif %}</p></div>
   <div class="page-tools">
-    {% if rel %}<span class="muted">Cập nhật {{ rel.issued_at|date:"H:i d/m/Y" }} · {{ rel.horizon_days }} ngày tới</span>{% endif %}
-    <form method="post" data-once>{% csrf_token %}<button class="btn btn-primary" type="submit">Cập nhật dự báo</button></form>
+    <a class="btn btn-quiet btn-sm" href="{% url 'forecast:plans' %}">Kế hoạch mua</a>
+    <form method="post" data-once>{% csrf_token %}<button class="btn btn-quiet btn-sm" type="submit">Cập nhật dự báo</button></form>
   </div>
 </header>
 {% if rows %}
+<div class="stats stats-4">
+  {% if t_today %}<div class="stat"><p class="stat-label">Hôm nay</p><p class="stat-value">{{ t_today.0|floatformat:"0g" }} <small>ly</small></p>
+    <p class="stat-note">thường từ {{ t_today.1|floatformat:"0g" }} đến {{ t_today.2|floatformat:"0g" }} ly</p></div>{% endif %}
+  {% if t_tomorrow %}<div class="stat"><p class="stat-label">Ngày mai, {{ tomorrow|ngay_thu }}</p><p class="stat-value">{{ t_tomorrow.0|floatformat:"0g" }} <small>ly</small></p>
+    <p class="stat-note">thường từ {{ t_tomorrow.1|floatformat:"0g" }} đến {{ t_tomorrow.2|floatformat:"0g" }} ly</p></div>{% endif %}
+  {% if t_week %}<div class="stat"><p class="stat-label">7 ngày tới</p><p class="stat-value">{{ t_week.0|floatformat:"0g" }} <small>ly</small></p>
+    {% if week_delta is not None %}<p class="stat-note"><span class="stat-delta {% if week_delta >= 0 %}up{% else %}down{% endif %}" title="7 ngày qua bán {{ sold7|floatformat:'0g' }} ly; so theo bình quân mỗi ngày có bán"><span aria-hidden="true">{% if week_delta >= 0 %}▲{% else %}▼{% endif %}</span> {% if week_delta >= 0 %}hơn{% else %}kém{% endif %} 7 ngày qua {{ week_delta_abs }}%</span></p>{% endif %}
+    {% if peak %}<p class="stat-note">Đông nhất {{ peak.day|ngay_thu }}, khoảng {{ peak.mean|floatformat:"0g" }} ly</p>{% endif %}</div>{% endif %}
+  <a class="stat{% if order_now %} stat-danger{% elif order_soon %} stat-warn{% endif %}" href="{% url 'forecast:plans' %}"><p class="stat-label">Nguyên liệu cần đặt</p>
+    <p class="stat-value">{{ order_now|add:order_soon }}</p>
+    <p class="stat-note">{% if order_now %}{{ order_now }} cần đặt ngay{% if order_soon %}, {{ order_soon }} trong 2 ngày{% endif %}{% elif order_soon %}đặt trong 2 ngày tới{% elif has_plans %}Đủ hàng cho những ngày tới{% else %}Chưa tính kế hoạch mua{% endif %}</p></a>
+</div>
+
 {% if trend_chart %}<section class="card">
-  <div class="card-head"><div><h2>Tổng số ly: đã bán và dự báo</h2><p class="card-sub">Ba tuần qua và 14 ngày tới. Ngày đóng cửa để trống.</p></div></div>
-  <div class="card-body">{% include "reports/charts/line.html" with c=trend_chart label="Tổng số ly đã bán và dự báo" %}</div>
+  <div class="card-head"><div><h2>Tổng số ly mỗi ngày</h2><p class="card-sub">Những ngày đã bán và hai tuần tới. Dải mờ là khoảng thường gặp: khoảng 8 trong 10 ngày số bán nằm trong dải.</p></div></div>
+  <div class="card-body"><div class="chart-wide-only">{% include "reports/charts/line.html" with c=trend_chart label="Tổng số ly đã bán và dự kiến hai tuần tới" %}</div><div class="chart-narrow-only">{% include "reports/charts/line.html" with c=trend_narrow label="Tổng số ly đã bán và dự kiến hai tuần tới" fit=True %}</div></div>
 </section>{% endif %}
-{% if ranges_chart %}<section class="card">
-  <div class="card-head"><div><h2>Nhu cầu 7 ngày tới theo món</h2><p class="card-sub">Chấm là số dự kiến, dải là mức thấp đến cao.</p></div></div>
-  <div class="card-body">{% include "reports/charts/ranges.html" with c=ranges_chart label="Nhu cầu 7 ngày tới theo món, dự kiến và mức thấp đến cao" %}</div>
+
+{% if item_rows %}<section class="card">
+  <div class="card-head"><div><h2>7 ngày tới theo món</h2><p class="card-sub">Số ly dự kiến của từng món, nhiều nhất ở trên.</p></div></div>
+  <div class="card-body">
+    {% include "reports/charts/legend.html" with items=size_legend %}
+    <ul class="barlist" aria-label="Số ly dự kiến 7 ngày tới theo món">{% for x in item_rows %}
+      <li tabindex="0" data-tip="{{ x.tip }}"><span class="barlist-label">{{ x.name }}</span>
+        <span class="barlist-track" aria-hidden="true">{% for p in x.parts %}<span class="barlist-seg s-{{ p.slot }}" style="width:{{ p.pct|stringformat:'.2f' }}%"></span>{% endfor %}</span>
+        <span class="barlist-value">{{ x.total|floatformat:"0g" }}</span></li>{% endfor %}
+    </ul>
+  </div>
+  <details class="card-more"><summary>Xem từng món và cỡ: hôm nay, ngày mai, 7 ngày tới</summary>
+    <div class="table-wrap"><table class="data-table compact table-stack">
+      <thead><tr><th scope="col">Món</th><th scope="col" class="num">Hôm nay</th><th scope="col" class="num">Ngày mai</th><th scope="col" class="num">7 ngày tới</th><th scope="col" class="num">Thường từ – đến</th></tr></thead>
+      <tbody>{% for r in rows %}<tr>
+        <th scope="row"><a href="{% url 'forecast:series' r.s.pk %}">{{ r.s.size.item.name }} {{ r.s.size.name }}</a>{% if r.s.limitations %} <span class="chip chip-warn" title="{{ r.s.limitations|join:' ' }}">Lưu ý</span>{% endif %}</th>
+        <td class="num" data-label="Hôm nay">{% if r.today %}{{ r.today.mean|floatformat:"0g" }}{% else %}–{% endif %}</td>
+        <td class="num" data-label="Ngày mai">{% if r.tomorrow %}{{ r.tomorrow.mean|floatformat:"0g" }}{% else %}–{% endif %}</td>
+        <td class="num" data-label="7 ngày tới">{% if r.week %}<strong>{{ r.week.0|floatformat:"0g" }}</strong>{% else %}–{% endif %}</td>
+        <td class="num muted" data-label="Thường từ – đến">{% if r.week %}{{ r.week.1|floatformat:"0g" }} – {{ r.week.2|floatformat:"0g" }}{% endif %}</td>
+      </tr>{% endfor %}</tbody>
+    </table></div>
+  </details>
 </section>{% endif %}
-<section class="card"><div class="card-head"><h2>Chi tiết theo món</h2></div>
-<div class="table-wrap"><table class="data-table table-stack">
-  <thead><tr><th scope="col">Món</th><th scope="col" class="num">Ngày đã bán</th>
-    <th scope="col" class="num">Ngày mai</th><th scope="col" class="num">3 ngày tới</th><th scope="col" class="num">7 ngày tới</th><th scope="col">Hạn chế</th></tr></thead>
-  <tbody>{% for r in rows %}<tr>
-    <th scope="row"><a href="{% url 'forecast:series' r.s.pk %}">{{ r.s.size.item.name }} {{ r.s.size.name }}</a></th>
-    <td class="num" data-label="Ngày đã bán">{{ r.s.eligible_days }}</td>
-    <td class="num" data-label="Ngày mai">{% if r.tomorrow %}{{ r.tomorrow.mean|floatformat:"1g" }} <span class="muted">({{ r.tomorrow.q10 }}–{{ r.tomorrow.q90 }})</span>{% endif %}</td>
-    <td class="num" data-label="3 ngày tới">{% if r.t3 %}{{ r.t3.mean|floatformat:"0g" }} <span class="muted">({{ r.t3.q10 }}–{{ r.t3.q90 }})</span>{% endif %}</td>
-    <td class="num" data-label="7 ngày tới">{% if r.t7 %}{{ r.t7.mean|floatformat:"0g" }} <span class="muted">({{ r.t7.q10 }}–{{ r.t7.q90 }})</span>{% endif %}</td>
-    <td data-label="Hạn chế">{% if r.s.limitations %}<span class="text-warn">{{ r.s.limitations|length }} lưu ý</span>{% else %}–{% endif %}</td>
-  </tr>{% endfor %}</tbody>
-</table></div></section>
-<p class="page-note">"3 ngày tới" và "7 ngày tới" tính từ hôm nay.</p>
 {% else %}
 <div class="empty"><p><strong>Chưa có dự báo.</strong></p><p>Nhập <a href="{% url 'masterdata:list' 'nhan-dinh' %}">nhận định của Chủ quán</a> cho các món đang bán rồi bấm Cập nhật dự báo.</p></div>
 {% endif %}

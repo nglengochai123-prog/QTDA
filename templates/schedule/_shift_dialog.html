@@ -62,7 +62,7 @@
 
     <footer class="sheet-foot sheet-foot-split">
       <form method="post" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}"><input type="hidden" name="shift" value="{{ s.pk }}">
-        <button class="btn btn-ghost btn-danger-text" name="action" value="delete_shift" data-confirm="Xóa {{ s.name }} {{ s.date|date:'d/m' }}?">Xóa ca</button></form>
+        <button class="btn btn-ghost btn-danger-text" name="action" value="delete_shift" data-confirm="Xóa {{ s.name }} {{ s.date|date:'d/m' }}?{% if card.registered_total %} {{ card.registered_total }} người đã đăng ký ca này sẽ được báo ca bị bỏ.{% endif %}">Xóa ca</button></form>
       <button class="btn btn-quiet" type="button" data-close>Xong</button>
     </footer>
   </div>

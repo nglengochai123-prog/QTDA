@@ -63,9 +63,18 @@ class Weekday(models.IntegerChoices):
     SUN = 6, "Chủ nhật"
 
 
+class IngredientKind(models.TextChoices):
+    PURCHASED = "mua_vao", "Mua vào"
+    SEMI = "ban_thanh_pham", "Bán thành phẩm quán tự làm"
+
+
 class Ingredient(StoreScopedModel):
     name = models.CharField("Tên nguyên vật liệu", max_length=120)
     unit = models.CharField("Đơn vị tính", max_length=10, choices=Unit.choices)
+    kind = models.CharField(
+        "Loại", max_length=16, choices=IngredientKind.choices, default=IngredientKind.PURCHASED,
+        help_text="Bán thành phẩm (cà phê cốt, nước đường, foam) do quán làm theo mẻ từ nguyên liệu mua vào: món bán ra "
+                  "trừ bán thành phẩm, ghi mẻ làm thì trừ nguyên liệu gốc. Bán thành phẩm không lên kế hoạch mua.")
     pack_size = models.DecimalField("Quy cách đóng gói", max_digits=12, decimal_places=2,
                                     validators=[MinValueValidator(Decimal("0.01"))],
                                     help_text="Lượng trong một đơn vị mua, theo đơn vị tính. Ví dụ hộp 1.000 ml.")
@@ -155,6 +164,10 @@ class Ingredient(StoreScopedModel):
         if self.issue_rule == IssueRule.LIFO and self.shelf_life_days:
             raise ValidationError({"issue_rule": "Hàng có hạn dùng không xuất theo kiểu nhập sau, xuất trước: lô cũ sẽ "
                                                  "nằm lại tới khi hỏng. Để trống hoặc chọn hết hạn trước, xuất trước."})
+
+    @property
+    def is_semi(self):
+        return self.kind == IngredientKind.SEMI
 
     @property
     def rule(self):
@@ -327,6 +340,108 @@ class RecipeLine(TimeStampedModel):
         return super().delete(*args, **kwargs)
 
 
+class SemiRecipe(StoreScopedModel):
+    """Định mức một mẻ bán thành phẩm: nguyên liệu cho một mẻ và lượng thu được mỗi mẻ (định mức nhiều tầng).
+
+    Ví dụ 500 g cà phê bột ra 1.000 ml cà phê cốt (1 ml cốt = 0,5 g bột); 1.000 g đường ra 1.600 ml nước đường.
+    Thành phần có thể là bán thành phẩm khác (foam dùng nước đường), không được vòng lại chính nó."""
+
+    product = models.OneToOneField(Ingredient, verbose_name="Bán thành phẩm", on_delete=models.PROTECT,
+                                   related_name="semi_recipe", limit_choices_to={"kind": IngredientKind.SEMI})
+    batch_output = models.DecimalField(
+        "Lượng thu được mỗi mẻ", max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))],
+        help_text="Theo đơn vị tính của bán thành phẩm.")
+    yield_measured = models.BooleanField(
+        "Đã cân đo lượng thu được", default=False,
+        help_text="Chưa cân đo thực tế (ví dụ foam đánh bông) thì lượng nguyên liệu gốc suy ra chỉ là ước tính và kế "
+                  "hoạch mua có cảnh báo.")
+    note = models.CharField("Ghi chú", max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = "Định mức bán thành phẩm"
+        verbose_name_plural = "Định mức bán thành phẩm"
+        ordering = ["product__name"]
+
+    def __str__(self):
+        from apps.core.numbers import fmt
+
+        return f"{self.product.name}: mẻ {fmt(self.batch_output)} {self.product.get_unit_display()}"
+
+    def clean(self):
+        super().clean()
+        if self.product_id and not self.product.is_semi:
+            raise ValidationError({"product": "Chỉ khai định mức mẻ cho nguyên liệu loại Bán thành phẩm."})
+
+    def per_unit(self):
+        """{nguyên liệu: lượng cho một đơn vị bán thành phẩm}."""
+        out = {}
+        for line in self.lines.all():
+            out[line.ingredient_id] = out.get(line.ingredient_id, 0.0) + float(line.quantity) / float(self.batch_output)
+        return out
+
+
+class SemiRecipeLine(models.Model):
+    recipe = models.ForeignKey(SemiRecipe, verbose_name="Định mức", on_delete=models.CASCADE, related_name="lines")
+    ingredient = models.ForeignKey(Ingredient, verbose_name="Nguyên liệu", on_delete=models.PROTECT,
+                                   related_name="semi_uses")
+    quantity = models.DecimalField("Lượng mỗi mẻ", max_digits=12, decimal_places=2,
+                                   validators=[MinValueValidator(Decimal("0.01"))])
+
+    class Meta:
+        verbose_name = "Dòng định mức bán thành phẩm"
+        verbose_name_plural = "Dòng định mức bán thành phẩm"
+        constraints = [models.UniqueConstraint(fields=["recipe", "ingredient"], name="uniq_semi_line_ingredient")]
+
+    def __str__(self):
+        from apps.core.numbers import fmt
+
+        return f"{fmt(self.quantity)} {self.ingredient.get_unit_display()} {self.ingredient.name}"
+
+    def clean(self):
+        if not (self.recipe_id and self.ingredient_id):
+            return
+        product = self.recipe.product_id
+        if self.ingredient_id == product or product in semi_components(self.ingredient_id):
+            raise ValidationError({"ingredient": "Thành phần này dẫn ngược về chính bán thành phẩm đang khai."})
+
+
+def semi_components(ingredient_id, depth=0):
+    """Mọi nguyên liệu nằm trong định mức mẻ của một bán thành phẩm, qua mọi tầng."""
+    if depth > 6:
+        return set()
+    out = set()
+    for ing in SemiRecipeLine.objects.filter(recipe__product_id=ingredient_id).values_list("ingredient_id", flat=True):
+        out.add(ing)
+        out |= semi_components(ing, depth + 1)
+    return out
+
+
+class SemiBatch(StoreScopedModel):
+    """Một lần làm bán thành phẩm: trừ nguyên liệu gốc theo định mức mẻ, cộng bán thành phẩm vào kho thành một lô."""
+
+    product = models.ForeignKey(Ingredient, verbose_name="Bán thành phẩm", on_delete=models.PROTECT,
+                                related_name="semi_batches")
+    batches = models.DecimalField("Số mẻ", max_digits=8, decimal_places=2,
+                                  validators=[MinValueValidator(Decimal("0.01"))])
+    expected_output = models.DecimalField("Lượng thu theo định mức", max_digits=12, decimal_places=2)
+    actual_output = models.DecimalField("Lượng thu thực tế", max_digits=12, decimal_places=2)
+    usage = models.JSONField("Nguyên liệu đã dùng", default=dict)
+    lot = models.ForeignKey("StockLot", verbose_name="Lô bán thành phẩm", on_delete=models.PROTECT, null=True,
+                            blank=True, related_name="+")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người làm", on_delete=models.PROTECT,
+                              related_name="+")
+    operation_key = models.CharField("Mã nghiệp vụ", max_length=64, unique=True)
+    note = models.CharField("Ghi chú", max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = "Mẻ bán thành phẩm"
+        verbose_name_plural = "Mẻ bán thành phẩm"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.product.name} · {self.batches} mẻ"
+
+
 class IngredientStock(TimeStampedModel):
     """Số dư tồn của một nguyên liệu (BRU-18), cập nhật cùng giao dịch với mỗi biến động.
 
@@ -361,6 +476,7 @@ class StockMovement(StoreScopedModel):
         RECEIPT = "nhap_hang", "Nhập hàng"
         WASTE = "hao_hut", "Hao hụt xuất kho"
         COUNT = "kiem_ke", "Điều chỉnh theo kiểm kê"
+        PRODUCE = "lam_btp", "Làm bán thành phẩm"
 
     ingredient = models.ForeignKey(Ingredient, verbose_name="Nguyên vật liệu", on_delete=models.PROTECT,
                                    related_name="movements")
@@ -591,6 +707,7 @@ class StockLot(StoreScopedModel):
         OPENING = "ton_dau_ky", "Tồn đầu kỳ"
         COUNT = "kiem_ke", "Dư khi kiểm kê"
         BEFORE_LOTS = "truoc_lo", "Tồn trước khi theo dõi lô"
+        BATCH = "me_lam", "Mẻ làm bán thành phẩm"
 
     ingredient = models.ForeignKey(Ingredient, verbose_name="Nguyên vật liệu", on_delete=models.PROTECT,
                                    related_name="lots")

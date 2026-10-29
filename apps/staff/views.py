@@ -72,7 +72,7 @@ def workload(request):
     for frame in frames:
         frame["presence_cells"] = [{"label": label, "n": n} for label, n in zip(roles, frame["presence_list"])]
     labels = [f"{f['start']:%H}h" for f in frames]
-    hours = [f"{f['start']:%H}–{f['end']:%H} giờ" for f in frames]
+    hours = [f["label"] for f in frames]  # khung cuối ghi 23–24 giờ, không phải 23–00
     cups_chart = charts.stacked_columns(labels, [
         {"name": "Khung đạt chuẩn", "values": [0 if f["overloaded"] else f["cups"] for f in frames], "slot": 1},
         {"name": "Khung quá tải", "values": [f["cups"] if f["overloaded"] else 0 for f in frames], "slot": "critical"}],

@@ -326,7 +326,12 @@ class SeasonalAdjustment(StoreScopedModel):
 
     ingredient = models.ForeignKey("inventory.Ingredient", verbose_name="Nguyên vật liệu", on_delete=models.PROTECT,
                                    null=True, blank=True, related_name="seasonal_adjustments",
-                                   help_text="Để trống: áp cho mọi nguyên liệu.")
+                                   help_text="Để trống: áp theo nhóm món bên dưới, hoặc cho mọi nguyên liệu.")
+    menu_group = models.ForeignKey(
+        "catalog.MenuGroup", verbose_name="Nhóm món", on_delete=models.PROTECT, null=True, blank=True,
+        related_name="+",
+        help_text="Mùa ảnh hưởng một nhóm món (ví dụ trà, nước ép tăng khi nóng): mỗi nguyên liệu chỉ nhận phần thay "
+                  "đổi tương ứng với tỷ lệ nó được dùng cho nhóm món này. Để trống cả hai ô: áp cho mọi nguyên liệu.")
     start = models.DateField("Từ ngày")
     end = models.DateField("Đến hết ngày")
     percent = models.SmallIntegerField("Thay đổi nhu cầu (%)", help_text="Ví dụ −15 là giảm 15%.")
@@ -348,7 +353,8 @@ class SeasonalAdjustment(StoreScopedModel):
         ordering = ["-start"]
 
     def __str__(self):
-        target = self.ingredient.name if self.ingredient_id else "Mọi nguyên liệu"
+        target = (self.ingredient.name if self.ingredient_id else f"Nhóm món {self.menu_group.name}"
+                  if self.menu_group_id else "Mọi nguyên liệu")
         return f"{target}: {self.percent:+d}% từ {self.start:%d/%m/%Y} đến {self.end:%d/%m/%Y}"
 
     def clean(self):
@@ -362,10 +368,45 @@ class SeasonalAdjustment(StoreScopedModel):
             raise ValidationError("Ghi căn cứ của điều chỉnh.")
         if self.baseline_daily is not None and not self.ingredient_id:
             raise ValidationError("Nền ngoài mùa chỉ nhập cho điều chỉnh riêng một nguyên liệu.")
+        if self.ingredient_id and self.menu_group_id:
+            raise ValidationError("Chọn một nguyên liệu hoặc một nhóm món, không chọn cả hai.")
         if self.is_active and self.start and self.end:
             overlap = (SeasonalAdjustment.objects.filter(is_active=True, start__lte=self.end, end__gte=self.start,
-                                                         ingredient_id=self.ingredient_id).exclude(pk=self.pk))
+                                                         ingredient_id=self.ingredient_id,
+                                                         menu_group_id=self.menu_group_id).exclude(pk=self.pk))
             clash = [o for o in overlap if not (self.independent and o.independent)]
             if clash:
                 raise ValidationError(f"Trùng thời gian với điều chỉnh cùng phạm vi: {clash[0]}. Sửa khoảng ngày, hoặc "
                                       f"đánh dấu cả hai là nguyên nhân độc lập nếu tác động cộng dồn.")
+
+
+class ForecastChoice(StoreScopedModel):
+    """Cách dự báo đang dùng cho một chuỗi: tổng số ly cả quán hoặc tiêu hao một nguyên liệu (BRU-21, BRU-37).
+
+    Khi chuỗi đủ dữ liệu để đánh giá, hệ thống chọn lần đầu cách có sai số nhỏ nhất và ghi lại. Sau đó không tự đổi:
+    cách khác tốt hơn rõ rệt chỉ được ghi thành đề xuất, Chủ quán duyệt đổi hoặc giữ nguyên. Chỉ thêm, không sửa; bản
+    mới thay bản cũ, bản cũ giữ để truy vết. Tên cách tính là mã nội bộ, không hiện trên giao diện."""
+
+    class Source(models.TextChoices):
+        AUTO = "tu_chon", "Tự chọn lần đầu theo đánh giá"
+        APPROVED = "duyet_doi", "Chủ quán duyệt đổi"
+        KEPT = "giu_nguyen", "Chủ quán giữ nguyên"
+
+    series_key = models.CharField("Chuỗi", max_length=40, db_index=True, help_text="tong hoặc nl:<mã nguyên liệu>")
+    ingredient = models.ForeignKey("inventory.Ingredient", verbose_name="Nguyên vật liệu", on_delete=models.PROTECT,
+                                   null=True, blank=True, related_name="+")
+    method = models.CharField("Cách tính", max_length=10)
+    source = models.CharField("Nguồn", max_length=12, choices=Source.choices)
+    evidence = models.JSONField("Kết quả đánh giá lúc quyết định", default=dict)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người quyết định", on_delete=models.PROTECT,
+                                   null=True, blank=True, related_name="+")
+    superseded_at = models.DateTimeField("Bị thay lúc", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Cách dự báo đang dùng"
+        verbose_name_plural = "Cách dự báo đang dùng"
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        target = self.ingredient.name if self.ingredient_id else "Tổng số ly cả quán"
+        return f"{target} · {self.get_source_display()} · {self.created_at:%d/%m/%Y}"

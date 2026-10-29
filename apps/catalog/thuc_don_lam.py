@@ -38,6 +38,17 @@ BASES = {
                     "Bột kem trứng": 10 / _FOAM_ML}),
 }
 
+# Khi theo dõi bán thành phẩm trong kho (nhap_thuc_don_lam --ban-thanh-pham): tên trong kho, lượng thu mỗi mẻ (ml),
+# nguyên liệu mỗi mẻ, đã cân đo lượng thu hay chưa. Foam chưa cân đo: 390 ml là ước tính theo thể tích pha.
+SEMI = {
+    "cf": ("Cà phê cốt", D(1000), {"Cà phê bột": D(500)}, True),
+    "nước đường": ("Nước đường", D(1600), {"Đường cát": D(1000)}, True),
+    "foam muối": ("Foam muối", _FOAM_ML, {"Sữa đặc": D(100), "Kem béo Rich": D(200), "Sữa tươi": D(90),
+                                          "Muối": D(5)}, False),
+    "foam trứng": ("Foam trứng", _FOAM_ML, {"Sữa đặc": D(100), "Kem béo Rich": D(200), "Sữa tươi": D(90),
+                                            "Bột kem trứng": D(10)}, False),
+}
+
 # Nhóm tùy chọn có nguyên liệu: nhóm -> các tùy chọn (bắt buộc chọn một)
 OPTION_GROUPS = {
     "Vị kem": ["Dừa", "Socola"],
@@ -156,12 +167,16 @@ GENERAL_NOTES = [
 ]
 
 
-def expand(lines):
-    """Quy bán thành phẩm ra nguyên liệu gốc; trả {nguyên liệu: lượng} làm tròn 2 chữ số."""
+def expand(lines, semi=False):
+    """Quy bán thành phẩm ra nguyên liệu gốc; trả {nguyên liệu: lượng} làm tròn 2 chữ số. semi=True giữ bán thành
+    phẩm làm một dòng định mức riêng (tên trong kho theo SEMI)."""
     out = {}
     for name, qty in lines:
         qty = D(qty)
-        parts = BASES[name][1] if name in BASES else {name: D(1)}
+        if semi and name in SEMI:
+            parts = {SEMI[name][0]: D(1)}
+        else:
+            parts = BASES[name][1] if name in BASES else {name: D(1)}
         for ing, per in parts.items():
             out[ing] = out.get(ing, D(0)) + qty * per
     return {k: v.quantize(D("0.01")) for k, v in out.items()}

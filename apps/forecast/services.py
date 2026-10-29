@@ -592,7 +592,8 @@ def orders_needed(now=None):
     if rel is None:
         return []
     out = []
-    for ing in Ingredient.objects.filter(is_active=True).select_related("stock", "main_supplier"):
+    for ing in Ingredient.objects.filter(is_active=True).exclude(kind="ban_thanh_pham").select_related(
+            "stock", "main_supplier"):
         st = ordering_status(ing, rel, now)
         if st.get("need_order"):
             out.append(st)

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Độ chính xác dự báo · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div><div class="head-title"><h1><a class="back" href="{% url 'forecast:plans' %}" aria-label="Quay lại kế hoạch mua"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg></a>Độ chính xác của dự báo</h1></div>
+  <p class="page-sub">Dự báo các tuần đã qua được so lại với thực tế mỗi ngày. Số càng nhỏ càng tốt.{% if run %} Tính lúc {{ run.started_at|date:"H:i d/m" }}.{% endif %}</p></div>
+</header>
+
+<div class="stats stats-4">
+  <div class="stat"><p class="stat-label">Sai số tổng số ly cả quán</p>
+    <p class="stat-value">{% if total and total.wape_pct is not None %}{{ total.wape_pct }}%{% else %}<small>Chưa đủ dữ liệu</small>{% endif %}</p>
+    <p class="stat-note">tổng 7 ngày{% if total.item_pct is not None %}; từng món, mỗi ngày {{ total.item_pct }}%{% endif %}{% if total.provisional %} · số tạm, chưa đủ 8 tuần{% endif %}</p></div>
+  <div class="stat"><p class="stat-label">Số ngày bán đã học</p><p class="stat-value">{{ total.eligible_days|default:0 }}</p><p class="stat-note">ngày có bán, không tính ngày thiếu hàng</p></div>
+  <div class="stat{% if figures.stockout_days %} stat-warn{% endif %}"><p class="stat-label">Ngày thiếu hàng, 8 tuần qua</p><p class="stat-value">{{ figures.stockout_days }}</p>
+    <p class="stat-note">{% if figures.stockout_items %}ở {{ figures.stockout_items }} nguyên liệu{% else %}không có nguyên liệu nào thiếu{% endif %}</p></div>
+  <div class="stat{% if figures.expired_items %} stat-warn{% endif %}"><p class="stat-label">Có hàng hư hỏng, hết hạn</p><p class="stat-value">{{ figures.expired_items|length }} <small>nguyên liệu</small></p>
+    <p class="stat-note">{% if figures.expired_items %}{% for r in figures.expired_items|slice:":2" %}{{ r.ing.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if figures.expired_items|length > 2 %}, …{% endif %}{% else %}trong 8 tuần qua{% endif %}</p></div>
+</div>
+
+{% if measured %}<section class="card">
+  <div class="card-head"><div><h2>Sai số theo nguyên liệu</h2><p class="card-sub">Lượng dùng 7 ngày dự báo trước lệch bao nhiêu phần trăm so với thực tế. Thanh dài là nguyên liệu khó đoán hơn.</p></div></div>
+  <div class="card-body">
+    <ul class="barlist" aria-label="Sai số tổng 7 ngày theo nguyên liệu">{% for r in measured %}
+      <li tabindex="0" data-tip="{{ r.tip }}"><span class="barlist-label">{{ r.ing.name }}</span>
+        <span class="barlist-track" aria-hidden="true"><span class="barlist-seg s-1" style="width:{{ r.pct|stringformat:'.1f' }}%"></span></span>
+        <span class="barlist-value">{{ r.wape|floatformat:"1g" }}%{% if not r.measured %} <small>tạm</small>{% endif %}</span></li>{% endfor %}
+    </ul>
+  </div>
+</section>{% endif %}
+
+<section class="card"><div class="card-head"><div><h2>Chi tiết từng nguyên liệu</h2><p class="card-sub">Tính trong 8 tuần gần nhất.{% if unused %} {{ unused }} nguyên liệu chưa dùng tới nên chưa có số.{% endif %}</p></div></div>
+  {% if rows %}
+  <div class="table-wrap"><table class="data-table table-stack">
+    <thead><tr><th scope="col">Nguyên liệu</th>
+      <th scope="col" class="num">Sai số tuần</th><th scope="col">Thực tế so với dự báo</th>
+      <th scope="col" class="num">Ngày thiếu hàng</th><th scope="col" class="num">Hư hỏng, hết hạn</th>
+      <th scope="col" class="num">Hao hụt pha chế</th><th scope="col" class="num">Sổ kho lệch định mức</th></tr></thead>
+    <tbody>{% for r in rows %}<tr>
+      <th scope="row"><a href="{% url 'forecast:plan' r.ing.pk %}">{{ r.ing.name }}</a></th>
+      <td class="num" data-label="Sai số tuần">{% if r.wape is not None %}{{ r.wape }}%{% if not r.measured %} <span class="chip">Tạm</span>{% endif %}{% else %}–{% endif %}</td>
+      <td data-label="Thực tế so với dự báo">{% if r.wape is None %}–{% elif r.bias > 0 %}dùng nhiều hơn {{ r.bias }}%{% elif r.bias < 0 %}dùng ít hơn {{ r.bias|stringformat:".1f"|slice:"1:" }}%{% else %}sát dự báo{% endif %}</td>
+      <td class="num" data-label="Ngày thiếu hàng">{{ r.stockout_days }}</td>
+      <td class="num" data-label="Hư hỏng, hết hạn">{% if r.expired %}{{ r.expired|floatformat:"-1g" }} {{ r.unit }}{% if r.expired_pct %} <span class="muted">({{ r.expired_pct }}%)</span>{% endif %}{% else %}0{% endif %}</td>
+      <td class="num" data-label="Hao hụt pha chế">{{ r.waste_pct }}%</td>
+      <td class="num" data-label="Sổ kho lệch định mức">{% if r.recon_pct is not None %}<span class="{% if r.recon_flag %}text-danger{% endif %}">{{ r.recon_pct }}%</span>{% else %}–{% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="card-more-note card-foot">Hao hụt pha chế là pha hỏng, đổ vỡ so với lượng bán. Sổ kho lệch định mức so lượng trừ kho khi pha chế với lượng tính từ món bán theo định mức; lệch trên 1% (tô đỏ) thì nên xem lại định mức hoặc cách ghi.</p>
+  {% else %}<div class="empty-cell">Chưa có kế hoạch mua. Tính lại ở trang <a href="{% url 'forecast:plans' %}">Kế hoạch mua</a>.</div>{% endif %}
+</section>
+{% endblock %}

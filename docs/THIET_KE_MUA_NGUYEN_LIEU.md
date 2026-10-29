@@ -176,31 +176,36 @@ Tầm dự báo là tham số cấu hình, không cố định 14 ngày. Có hai
 
 Tham số hiện có giới hạn tầm tối đa 60 ngày được giữ.
 
-### 4.4. Phương pháp dự báo và vai trò của Bayes
+### 4.4. Phương pháp dự báo
 
-Bayes là một phương pháp dự báo, không phải công thức điểm đặt hàng lại. Mọi phương pháp dưới đây đều chỉ cung cấp nhu cầu kỳ vọng theo ngày và thước đo sai số; chính sách tồn kho ở mục 6 dùng chung các đầu ra đó.
+*Cập nhật 27/10/2026: cấu hình lại theo phân tích "Lựa chọn mô hình dự báo và quản lý nguyên vật liệu cho LAM Coffee". Mô hình tuyến tính động Bayes (M2 cũ) vẫn dùng cho dự báo số ly theo món phục vụ sắp ca (DU_BAO.md), không còn dùng cho kế hoạch mua. Bản mô tả đầy đủ cho Chủ quán: "Mô hình dự báo và mua nguyên liệu LAM Coffee".*
 
-| Phương pháp | Mô tả | Khi dùng |
-| --- | --- | --- |
-| M0. Ước tính của Chủ quán | Chủ quán cho lượng mua thường lệ mỗi tuần, mức thấp và mức cao; phân bổ theo ngày bằng hồ sơ ngày trong tuần | Khi chưa đủ dữ liệu, và làm tiên nghiệm cho M2 |
-| M1. Trung bình theo thứ | Trung bình tiêu hao cùng thứ trong 4 đến 8 tuần gần nhất, chỉ trên ngày đủ điều kiện | Phương pháp đơn giản bắt buộc phải so sánh |
-| M2. Mô hình tuyến tính động Bayes | Trạng thái mức và hệ số theo thứ, cập nhật mỗi ngày đủ điều kiện, hệ số chiết khấu mức 0,95 và mùa vụ 0,99 lấy theo tham số hiện có | Khi có đủ dữ liệu và thắng M1 trong đánh giá |
+Mọi phương pháp dưới đây chỉ cung cấp nhu cầu kỳ vọng theo ngày và sai số đo được; chính sách tồn kho ở mục 6 dùng chung các đầu ra đó. Mã nguồn: `apps/forecast/methods.py`, `apps/forecast/hierarchy.py`.
 
-**Tiên nghiệm từ kinh nghiệm Chủ quán.** Chủ quán thường nhớ theo đơn vị mua, ví dụ mỗi tuần khoảng 20 hộp sữa một lít, tuần thấp 16 hộp, tuần cao 25 hộp. Thiết kế quy đổi sang đơn vị chuẩn, lấy mức thường lệ làm trung bình tuần và coi khoảng thấp đến cao là khoảng tin cậy 90%, nên độ lệch chuẩn tiên nghiệm của tổng tuần bằng độ rộng khoảng chia 3,29. Trong ví dụ này trung bình 20.000 ml mỗi tuần và độ lệch chuẩn khoảng 2.740 ml. Độ bất định được ghi rõ trên màn hình, không ẩn đi. Cách làm này cùng tinh thần với hàm chuyển nhận định chuyên gia sang tiên nghiệm Gamma đã có trong mã.
+| Mã | Phương pháp | Mô tả | Khi dùng |
+| --- | --- | --- | --- |
+| M0 | Ước tính của Chủ quán | Lượng tuần thường lệ, thấp, cao; phân bổ theo hồ sơ thứ trong tuần | Dưới 14 ngày dữ liệu; món mới; dữ liệu bị chặn nhiều |
+| LN | Bình quân theo loại ngày | Trung bình ngày thường (thứ Hai đến thứ Sáu) và cuối tuần trong 28 ngày gần nhất | Vài tuần dữ liệu, chưa đủ 4 lần cho mỗi thứ |
+| WMA | Bình quân có trọng số cùng thứ | 4 lần gần nhất của cùng thứ trong 8 tuần, trọng số 0,4 / 0,3 / 0,2 / 0,1 | Từ 4 tuần |
+| HW | Holt-Winters cộng tính, mùa 7 ngày | Mức, xu hướng tắt dần φ = 0,9, hệ số theo thứ; α, β, γ chọn trên lưới bằng sai số một bước trên dữ liệu trước gốc | Từ 56 ngày học được |
+| TSB | Teunter, Syntetos và Babai (2011) | Làm trơn riêng xác suất có bán và lượng khi có bán | Nhu cầu lác đác hoặc thưa thớt (ADI > 1,32) |
+| PH | Phân cấp | Tổng số ly cả quán (LN, WMA hoặc HW) × tỷ trọng từng món (WMA riêng, TSB cho món lác đác) × định mức nhiều tầng | Khi có dữ liệu theo món |
 
-**Bộ dữ liệu mô phỏng 6 tháng** chỉ dùng để kiểm thử kỹ thuật: mô hình chạy, không lỗi số, cập nhật đúng khi bỏ qua ngày đóng cửa. Kết quả trên dữ liệu đó không phải bằng chứng về độ chính xác trên dữ liệu thật của quán.
+**Phân cấp.** Tổng số ly cả quán được dự báo trước và chọn cách theo sai số tổng 7 ngày. Dự báo riêng từng món chỉ dùng làm tỷ trọng, nên tổng các món luôn bằng tổng cả quán. Lượng nguyên liệu bằng tổng theo món của số ly nhân lượng mỗi ly, gồm tùy chọn theo tỷ lệ khách chọn 8 tuần và bán thành phẩm quy ra nguyên liệu gốc (mục 5.4). PH là một ứng viên ngang hàng các cách chạy thẳng trên chuỗi nguyên liệu, không được ép dùng.
 
-**Chọn phương pháp.** Phương pháp được chọn cho từng nguyên liệu theo sai số của tổng nhu cầu trong cửa sổ bảo vệ, đo bằng đánh giá gốc dự báo trượt ở mục 12. Theo BRU-37, phương pháp chỉ được thay khi sai số thấp hơn rõ rệt trong một khoảng đủ dài; thiết kế đề xuất thấp hơn ít nhất 5% trên ít nhất 4 tuần gốc dự báo, ghi là giả định cấu hình.
+**Tiên nghiệm từ kinh nghiệm Chủ quán.** Chủ quán thường nhớ theo đơn vị mua, ví dụ mỗi tuần khoảng 20 hộp sữa một lít, tuần thấp 16 hộp, tuần cao 25 hộp. Thiết kế quy đổi sang đơn vị chuẩn, lấy mức thường lệ làm trung bình tuần và coi khoảng thấp đến cao là khoảng tin cậy 90%, nên độ lệch chuẩn của tổng tuần bằng độ rộng khoảng chia 3,29. Trong ví dụ này trung bình 20.000 ml mỗi tuần và độ lệch chuẩn khoảng 2.740 ml.
 
-**Khi dữ liệu ngắn.** Ba giai đoạn theo BRU-21 được ánh xạ như sau:
+**Chọn phương pháp (BRU-21, BRU-37).** Mỗi chuỗi được đánh giá cuốn chiếu trên 84 ngày gốc gần nhất, mỗi gốc chỉ dùng dữ liệu có tới hết ngày gốc. Cửa sổ quyết định là R + ℓ ngày của nguyên liệu. Cách có dưới 8 gốc hoặc có độ chệch vượt 0,5 RMSE bị loại. Lần đầu chuỗi đủ 56 ngày, hệ thống chọn cách có MAE nhỏ nhất và ghi lại lựa chọn kèm bằng chứng. Sau đó chỉ đổi khi Chủ quán duyệt: cách khác có MAE thấp hơn ít nhất 5% trên các gốc của 4 tuần gần nhất thì được ghi thành đề xuất trên trang Kế hoạch mua. Đề xuất chỉ hiện khi lựa chọn hiện tại đã có từ 4 tuần trở lên. Tham số `forecast_auto_switch` trong `apps/core/params.py` bằng 1 thì đổi tự động.
 
-| Giai đoạn | Số ngày đủ điều kiện | Nhu cầu kỳ vọng | Sai số dùng cho tồn an toàn | Nhãn hiển thị |
+**Khi dữ liệu ngắn.** Ba giai đoạn theo BRU-21:
+
+| Giai đoạn | Số ngày học được | Nhu cầu kỳ vọng | Sai số dùng cho tồn an toàn | Nhãn hiển thị |
 | --- | --- | --- | --- | --- |
 | Ước tính ban đầu | Dưới 14 | M0 | Từ khoảng thấp cao của Chủ quán | Tạm thời, theo ước tính Chủ quán |
-| Thống kê bước đầu | 14 đến 55 | M1, hoặc M2 có tiên nghiệm M0 | Độ lệch phần dư nhân căn số ngày, có ghi nhãn | Thống kê bước đầu, độ tin cậy thấp |
-| Mô hình | Từ 56 | Phương pháp thắng trong đánh giá | Đo trực tiếp theo cửa sổ | Đã đánh giá |
+| Thống kê bước đầu | 14 đến 55 | PH nếu có, nếu không LN (dưới 28 ngày) hoặc WMA; trộn với M0 theo trọng số n / (n + 7) cho dữ liệu | σ một ngày nhân căn số ngày, có ghi nhãn | Thống kê bước đầu, độ tin cậy thấp |
+| Mô hình | Từ 56 | Cách đã chọn hoặc đã duyệt | Đo trực tiếp theo cửa sổ; từ 20 gốc dùng phân vị sai số | Đã đánh giá |
 
-Khi dữ liệu ngắn, hệ thống không hiển thị khoảng tin cậy hẹp như thể đã chắc chắn; nhãn giai đoạn luôn đi kèm con số.
+Khi dữ liệu ngắn, hệ thống không hiển thị khoảng tin cậy hẹp như thể đã chắc chắn; nhãn giai đoạn luôn đi kèm con số. Tên phương pháp và tham số không hiện trên giao diện; Chủ quán chỉ thấy kết quả, nhãn tạm và đề xuất đổi cách.
 
 ## 5. Luồng dữ liệu và định nghĩa đại lượng
 
@@ -209,7 +214,7 @@ Khi dữ liệu ngắn, hệ thống không hiển thị khoảng tin cậy hẹ
 Luồng xử lý gồm năm bước, chạy lại toàn bộ mỗi ngày sau khi chốt ngày, và chạy riêng phần chính sách cho một nguyên liệu sau mỗi biến động tồn của nguyên liệu đó.
 
 1. **Dựng chuỗi tiêu hao.** Từ dòng món có tính tiền của ngày đủ điều kiện, quy đổi qua định mức sang lượng nguyên liệu theo ngày; tính riêng tỷ lệ hủy sau pha chế, tỷ lệ hao hụt vận hành và chênh lệch kiểm kê có hệ thống; gắn cờ ngày đóng cửa, chưa chốt và hết hàng.
-2. **Dự báo.** Chạy M0, M1, M2 cho từng nguyên liệu, cho nhu cầu kỳ vọng theo ngày trong tầm hiển thị.
+2. **Dự báo.** Dự báo tổng số ly cả quán và số ly từng món (phân cấp), rồi đánh giá các cách ở mục 4.4 trên chuỗi tiêu hao của từng nguyên liệu, cho nhu cầu kỳ vọng theo ngày trong tầm hiển thị.
 3. **Đo sai số cửa sổ.** Đánh giá gốc trượt cho độ lệch chuẩn sai số của tổng nhu cầu trong các cửa sổ 1 đến 10 ngày, chọn phương pháp.
 4. **Tính chính sách.** Đọc tồn, đơn đặt hàng, tham số nguyên liệu; dựng dòng tồn dự kiến theo ngày; tính vị thế tồn, tồn an toàn, điểm đặt hàng lại, mức tồn mục tiêu, ngày rủi ro, ngày phải đặt và lượng đề xuất.
 5. **Trình Chủ quán.** Ghi kết quả vào bảng kế hoạch nguyên liệu có khóa chống trùng, đồng bộ cảnh báo, hiển thị đề xuất. Chỉ khi Chủ quán xác nhận mới tạo đơn đặt hàng ở trạng thái Nháp.
@@ -262,21 +267,39 @@ Trong đó U b là tiêu hao của ly có tính tiền, U h là tiêu hao của 
 
 | Thành phần | Cách đưa vào nhu cầu | Lý do |
 | --- | --- | --- |
-| Tiêu hao bán hàng U b | Dự báo ngẫu nhiên bằng M0, M1 hoặc M2 | Thành phần lớn nhất và biến động nhất |
+| Tiêu hao bán hàng U b | Dự báo bằng cách đã chọn ở mục 4.4 (M0, LN, WMA, HW, TSB hoặc PH) | Thành phần lớn nhất và biến động nhất |
 | Hủy sau pha chế U h | Cộng tỷ lệ U h chia U b của 8 tuần gần nhất, nhân với dự báo U b | Nguyên liệu đã thực sự mất; theo BRU-18 không tạo biến động mới nhưng đã nằm trong tiêu hao pha chế |
 | Hao hụt vận hành H vh, gồm pha hỏng, đổ vỡ và lý do khác | Cộng tỷ lệ theo U b, loại trừ sự cố đơn lẻ do Chủ quán đánh dấu | Lặp lại theo khối lượng công việc |
 | Hao hụt do tồn kho H tk, gồm hư hỏng và hết hạn | Không cộng vào nhu cầu; dùng làm chỉ số đánh giá quyết định ở mục 12 | Là hệ quả của việc mua dư; cộng vào nhu cầu sẽ làm mua dư hơn và hỏng thêm |
 | Kiểm kê K | Chỉ cộng khi âm liên tiếp ít nhất 4 lần kiểm kê, tính theo tỷ lệ trên U b | Chênh lệch ngẫu nhiên không phải nhu cầu; chênh lệch có hệ thống cho thấy định mức thực tế cao hơn khai báo |
+| Bán thành phẩm đổ bỏ, hủy (mục 5.4) | Phần nguyên liệu gốc nằm trong bán thành phẩm bị đổ bỏ (kể cả hết hạn cuối ngày) hoặc ly hủy dùng bán thành phẩm, tính thành tỷ lệ r btp trên U b | Nguyên liệu gốc đã thật sự tiêu khi làm mẻ; hết hạn của chính nguyên liệu mua vào vẫn không cộng |
 
 ```latex
-d(t) = \hat{U}^{b}_t\,\big(1 + r_h + r_{vh} + r_{k}\big)
+d(t) = \hat{U}^{b}_t\,\big(1 + r_h + r_{vh} + r_{k} + r_{btp}\big)
 ```
 
 Phép kiểm đối soát bắt buộc: trên dữ liệu lịch sử, tổng U b cộng U h tính lại từ dòng món phải bằng tổng biến động pha chế trong sổ, sai lệch trên 1% thì báo lỗi dữ liệu. Nhờ phép kiểm này, ly hủy sau pha chế không bị tính hai lần và cũng không bị bỏ sót, khắc phục chỗ lệch hiện tại giữa chuỗi bán và chuỗi tiêu hao thực tế.
 
 ### 5.4. Định mức khi dựng chuỗi
 
-Chuỗi lịch sử được dựng lại bằng cấu hình món, kích cỡ và tùy chọn của từng dòng nhân với định mức có hiệu lực tại ngày được dự báo, không phải định mức tại ngày bán. Nhờ vậy, khi giảm lượng sữa trong một món từ tuần sau, dự báo cho tuần sau đã phản ánh định mức mới ngay, không cần chờ mô hình học lại. Khi không có định mức hẹn ngày, kết quả trùng với lượng dùng đã chụp trên dòng đơn. Tùy chọn được tính đầy đủ từ dòng đơn thật, không còn quy tắc bỏ tùy chọn không bán trong 56 ngày. Phần quy đổi bán thành phẩm sang nguyên liệu thô tiếp tục theo quy tắc sẵn có của thực đơn.
+Chuỗi lịch sử được dựng lại bằng cấu hình món, kích cỡ và tùy chọn của từng dòng nhân với định mức có hiệu lực tại ngày được dự báo, không phải định mức tại ngày bán. Nhờ vậy, khi giảm lượng sữa trong một món từ tuần sau, dự báo cho tuần sau đã phản ánh định mức mới ngay, không cần chờ mô hình học lại. Khi không có định mức hẹn ngày, kết quả trùng với lượng dùng đã chụp trên dòng đơn. Tùy chọn được tính đầy đủ từ dòng đơn thật, không còn quy tắc bỏ tùy chọn không bán trong 56 ngày. Bán thành phẩm quán tự làm theo mẻ được quy đổi như mục 5.4.1.
+
+#### 5.4.1. Bán thành phẩm và định mức nhiều tầng
+
+*Thêm 27/10/2026.* Nguyên liệu có loại "Bán thành phẩm quán tự làm" (cà phê cốt, nước đường, foam) có định mức mẻ: một mẻ dùng bao nhiêu nguyên liệu và thu được bao nhiêu (`SemiRecipe`, `SemiRecipeLine` trong `apps/inventory/models.py`). Định mức mẻ có thể dùng bán thành phẩm khác (foam dùng nước đường); định mức vòng lặp bị chặn khi nhập.
+
+| Bán thành phẩm | Một mẻ | Thu được | Quy đổi |
+| --- | --- | --- | --- |
+| Cà phê cốt | 500 g cà phê bột | 1.000 ml | 1 ml = 0,5 g |
+| Nước đường | 1.000 g đường cát | 1.600 ml | 1 ml = 0,625 g |
+| Foam muối, foam trứng | sữa đặc, kem béo, sữa tươi, muối hoặc bột kem trứng | 390 ml, chưa cân đo | theo tỷ lệ |
+
+- **Không trừ hai lần.** Ghi mẻ làm (trang Kho › Làm bán thành phẩm) trừ nguyên liệu gốc và nhập bán thành phẩm thành lô có hạn dùng và giá vốn; bán ly chỉ trừ bán thành phẩm. Biến động kho loại `lam_btp`, lô nguồn `me_lam`.
+- **Nhu cầu nguyên liệu gốc.** Khi dựng chuỗi U b, định mức món được bung qua mọi tầng (`RecipeBook.explode` trong `apps/forecast/usage.py`): U b của bán thành phẩm là lượng cần làm, U b của nguyên liệu gốc gồm phần đi qua bán thành phẩm. Phần bán thành phẩm đổ bỏ vào r btp (mục 5.3).
+- **Tồn quy đổi.** Bán thành phẩm còn trong kho được tính vào tồn có thể dùng của nguyên liệu gốc theo định mức mẻ (`planning.semi_equivalent`), nên không mua thừa.
+- **Không lên kế hoạch mua** cho bán thành phẩm và không nhập từ nhà cung cấp được. Thay vào đó trang Làm bán thành phẩm gợi ý số mẻ: nhu cầu phần còn lại của hôm nay (sau giờ đóng cửa thì cho ngày mai) trừ tồn có thể dùng, chia lượng mỗi mẻ, làm tròn lên.
+- **Lượng thu chưa cân đo** (foam): kế hoạch của mọi nguyên liệu làm ra bán thành phẩm đó có cảnh báo cho tới khi Chủ quán cân một mẻ thật và đánh dấu "Đã cân đo lượng thu được".
+- Đối soát tiêu hao (mục 5.3) vẫn so lượng trực tiếp với sổ kho, vì món bán ra chỉ trừ bán thành phẩm; sổ kho và báo cáo kho tính phần làm bán thành phẩm vào tiêu hao của nguyên liệu gốc.
 
 ### 5.5. Ngày đóng cửa, ngày chưa chốt và ngày hết hàng
 
@@ -332,13 +355,19 @@ SS(W) = k\,\sigma(W), \qquad s = \mu(W_s) + SS(W_s), \qquad S = \mu(W_S) + SS(W_
 
 **Quy tắc kích hoạt.** Cần đặt khi IP(W s) nhỏ hơn hoặc bằng s. Vị thế tồn dùng cùng cửa sổ với s, nên hàng đang về sau cuối cửa sổ không được tính. Không kích hoạt chỉ dựa trên tồn vật lý.
 
-**Khi dùng phân phối dự báo.** Nếu phương pháp dự báo cho phân phối của tổng cửa sổ, ví dụ M2 bằng mô phỏng đường, thì điểm đặt hàng lại là phân vị tại mức phục vụ và tồn an toàn chỉ là con số suy ra để hiển thị:
+**Tồn an toàn theo phân vị sai số (cập nhật 27/10/2026).** Khi cửa sổ h có từ 20 gốc đánh giá trở lên (`forecast_quantile_min`), tồn an toàn lấy trực tiếp từ phân vị CSL của sai số thực tế cộng dồn h ngày (thực tế trừ dự báo) trong đánh giá cuốn chiếu, nhân hệ số hao hụt; phân vị âm lấy 0. Cách này không giả định sai số có phân phối chuẩn. Chưa đủ gốc thì dùng kσ như công thức trên. Mỗi nguyên liệu chỉ dùng một trong hai cách, và không cộng thêm kσ vào phân vị.
 
 ```latex
-s = q_{CSL}\big(X(W_s)\big), \qquad SS(W_s) = s - \mu(W_s)
+SS(W) = \max\big(0,\; q_{CSL}(e_h)\big)\cdot(1 + r), \qquad e_h = X(W) - \hat{X}(W)
 ```
 
-Không cộng thêm kσ vào phân vị. Mỗi nguyên liệu chỉ dùng một trong hai cách. Cách phân vị chỉ được bật khi độ phủ thực tế của phân vị đó trong đánh giá gốc trượt nằm trong khoảng CSL cộng trừ 3 điểm phần trăm; nếu không, dùng trung bình cộng kσ đo được. Một cửa sổ duy nhất được dùng cho cả cột kỳ vọng và cột phân vị, sửa lệch một ngày hiện nay.
+**Chặn theo hạn dùng.** Với nguyên liệu có hạn dùng L, tồn an toàn là phần còn trên kệ khi lô sau về; theo hạn trước xuất trước, nó phải dùng hết trong L − T ngày sau đó. Tồn an toàn vượt nhu cầu của khoảng này chỉ làm hàng hết hạn mà không bảo vệ được gì, nên bị giới hạn và kế hoạch ghi rõ mức phục vụ thực tế thấp hơn CSL:
+
+```latex
+SS \le \mu\big(\ell + T,\; \ell + L\big)
+```
+
+Vị thế tồn trừ phần dự kiến hết hạn trong cửa sổ theo chính sách EWA của Broekmeulen và van Donselaar 2009, và cộng tồn quy đổi trong bán thành phẩm (mục 5.4.1).
 
 ### 6.4. Mức phục vụ
 
@@ -506,14 +535,14 @@ Mọi lần tính đều là đọc và ghi kết quả tính toán; không lầ
 | Hành động | Mua, Mua bổ sung, Thúc giao, Chưa cần mua |
 | Đơn liên quan | Các đơn đã được tính vào vị thế tồn hoặc bị loại ra |
 | Lý do | Một đến hai câu tự sinh từ số liệu |
-| Giai đoạn dữ liệu và phương pháp | Ước tính ban đầu, Thống kê bước đầu hoặc Mô hình; M0, M1 hoặc M2 |
+| Giai đoạn dữ liệu | Ước tính ban đầu, Thống kê bước đầu hoặc Mô hình; tên phương pháp và tham số không hiển thị, chỉnh trong `apps/core/params.py` |
 | Thời điểm cập nhật | Thời điểm tính và mã phiên bản dữ liệu |
 
 Mẫu câu lý do, ví dụ với sữa tươi ở mục 10: Tồn có thể dùng 3.900 ml, đủ tới khoảng giữa ngày thứ Bảy. Lô 2.000 ml đã đặt về thứ Hai, sau ngày dự kiến hết nên không được tính. Cần đặt trong hôm nay 7 hộp để hàng về trước thứ Bảy.
 
 ### 9.2. Màn hình và thao tác
 
-Màn hình tổng hợp liệt kê nguyên liệu theo thứ tự ngày phải đặt, nhóm Đặt ngay lên đầu, kế đến Đặt trong 2 ngày, cuối cùng là Đủ hàng. Màn hình chi tiết của một nguyên liệu có biểu đồ dòng tồn dự kiến theo ngày với đường mức an toàn, các lô đang về đánh dấu trên trục thời gian, và bảng dự báo tuần, tháng.
+Màn hình tổng hợp mở đầu bằng bốn ô đếm Đặt ngay, Đặt trong 2 ngày, Theo dõi, Đủ hàng, rồi liệt kê nguyên liệu theo thứ tự ngày phải đặt, mỗi nhóm một bảng (đề xuất, đặt chậm nhất, còn đủ dùng). Nhóm Đủ hàng gập lại, tách riêng nguyên liệu chưa dùng tới. Màn hình chi tiết của một nguyên liệu có khung quyết định ở đầu, bốn ô số, biểu đồ tồn cuối ngày 14 ngày tới so hai trường hợp "nếu không đặt thêm" và "nếu đặt hôm nay theo đề xuất" với vạch ngày có thể thiếu, và bảng dự báo tuần, tháng.
 
 Chủ quán có bốn thao tác, đều ghi người và thời điểm:
 
@@ -647,7 +676,7 @@ Nếu giữa tuần có một đơn đặt lớn ngoài dự kiến làm ngày r
 | Trạng thái đơn đặt hàng | Thêm Nháp và Đã hủy, ngày chuyển sang Đã đặt, cảnh báo nhận vượt | Sửa |
 | Ngày hết hạn trên dòng phiếu nhập | Tùy chọn, chuẩn bị cho theo dõi lô về sau | Mới |
 | Chuỗi tiêu hao nguyên liệu theo ngày | Bảng lưu sẵn gồm U b, U h, hao hụt theo nhóm, cờ ngày | Mới |
-| Phương pháp M1 và M2 cho chuỗi nguyên liệu | Trung bình theo thứ; mô hình tuyến tính động Bayes với mức và hệ số theo thứ | Mới |
+| Các cách dự báo cho chuỗi nguyên liệu | LN, WMA, Holt-Winters, TSB và dự báo phân cấp theo món nhân định mức (mục 4.4) | Mới, cấu hình lại 27/10/2026 |
 | Thống kê sai số cửa sổ | σ h, độ chệch, độ phủ cho h từ 1 đến 10 theo nguyên liệu và phương pháp | Mới |
 | Bộ tính chính sách | Cửa sổ, IP, SS, s, S, dòng tồn, ngày rủi ro, ngày phải đặt, số lượng, hành động | Mới, thay phần tính đề xuất hiện tại |
 | Bảng kế hoạch nguyên liệu | Kết quả mỗi lần tính, khóa duy nhất theo mục 8.4 | Mới |
@@ -678,7 +707,7 @@ Chất lượng dự báo và chất lượng quyết định tồn kho được
 | CRPS | Chấm toàn bộ phân phối dự báo, theo Gneiting và Raftery 2007 |
 | Độ phủ của khoảng 80% và phân vị CSL | Khoảng dự báo có trung thực không |
 
-Phương pháp M2 chỉ được dùng cho một nguyên liệu khi thắng M1 theo quy tắc ở mục 4.4. Nếu không thắng, hệ thống dùng M1, đây là kết quả chấp nhận được và không phải lỗi.
+Ba cấp được đánh giá riêng: tổng số ly cả quán (WAPE tổng 7 ngày), số ly từng món (WAPE 1 ngày) và tiêu hao từng nguyên liệu ở cửa sổ quyết định. Cách đơn giản (LN, WMA) thắng cách phức tạp là kết quả chấp nhận được, không phải lỗi; cách được chọn là cách có sai số nhỏ nhất trên dữ liệu của chính quán.
 
 ### 12.2. Chất lượng quyết định tồn kho
 
@@ -705,7 +734,7 @@ Bộ dữ liệu mô phỏng 6 tháng chỉ dùng để kiểm thử mã và ki�
 | Kịch bản | Thiết lập | Kết quả mong đợi |
 | --- | --- | --- |
 | Tăng cuối tuần | Thứ Bảy, Chủ nhật gấp 1,4 lần ngày thường | Kiểm tra tối thứ Năm kích hoạt đặt dù tồn đủ cho một ngày thường; số lượng tính theo tổng từng ngày |
-| Giảm mùa hè hoặc nghỉ hè của sinh viên | Mức nhu cầu giảm 25% trong 3 tuần | M1 và M2 bắt kịp; lượng đề xuất giảm; độ chệch được cảnh báo nếu kéo dài |
+| Giảm mùa hè hoặc nghỉ hè của sinh viên | Mức nhu cầu giảm 25% trong 3 tuần | Các cách dự báo bắt kịp; lượng đề xuất giảm; độ chệch được cảnh báo nếu kéo dài |
 | Nhà cung cấp giao trễ | Đơn quá ngày giao | Đơn chuyển Giao chậm, bị loại khỏi hàng đang về, xuất hiện Thúc giao hoặc Mua bổ sung |
 | Giao một phần | Đặt 10 hộp, nhận 6 | Chỉ 4 hộp còn lại được tính |
 | Đã có lô đang về | Lô về trước ngày rủi ro, và trường hợp lô về sau ngày rủi ro như mục 10.1 | Trường hợp đầu không đề xuất; trường hợp sau đề xuất mua và không bị lô đó che |

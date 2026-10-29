@@ -18,7 +18,8 @@ GROUP_TONES = {"Tổng quan": "blue", "Bán hàng": "orange", "Ca và nhân sự
 # Mục không có biểu tượng cùng tên dùng biểu tượng ở đây (templates/partials/icons.html).
 ICONS = {"fc_overview": "forecast", "fc_plans": "po", "fc_prior": "bulb", "fc_season": "sun", "fc_history": "upload",
          "md_ca": "shift", "md_nhan-vien": "people", "md_mon": "brand", "md_nhom-mon": "tag", "md_tuy-chon": "sliders",
-         "md_ban": "table", "md_nguyen-lieu": "stock", "md_dinh-muc": "beaker", "md_nha-cung-cap": "truck", "md_ly-do": "note"}
+         "md_ban": "table", "md_nguyen-lieu": "stock", "md_dinh-muc": "beaker", "md_nha-cung-cap": "truck", "md_ly-do": "note",
+         "semi": "beaker", "md_ban-thanh-pham": "beaker"}
 
 # Một dòng mô tả cho thẻ chức năng ở trang chủ: nói chức năng dùng để làm gì, không nói cách tính.
 DESCRIPTIONS = {
@@ -47,6 +48,7 @@ DESCRIPTIONS = {
     "receipt": "Ghi hàng nhận từ nhà cung cấp",
     "count": "Đếm tồn thực tế và ghi chênh lệch",
     "waste": "Ghi hàng hư, hết hạn, đổ vỡ",
+    "semi": "Ghi mẻ cà phê cốt, nước đường, foam đã làm",
     "po": "Đơn đặt nhà cung cấp và hàng đang về",
     "payables": "Công nợ nhà cung cấp và thanh toán",
     "ledger": "Mọi lần nhập, xuất, điều chỉnh kho",
@@ -70,6 +72,7 @@ DESCRIPTIONS = {
     "md_ban": "Danh sách bàn của quán",
     "md_nguyen-lieu": "Đơn vị, quy cách, hạn dùng, nhà cung cấp",
     "md_dinh-muc": "Lượng nguyên liệu cho mỗi ly",
+    "md_ban-thanh-pham": "Nguyên liệu cho một mẻ và lượng thu được",
     "md_nha-cung-cap": "Liên hệ và thời gian giao hàng",
     "md_ly-do": "Lý do dùng khi hủy, đổi món, chuyển bàn",
     "log": "Ai đã làm gì, lúc nào",
@@ -84,9 +87,9 @@ def navigation(request):
     # Mục đánh dấu desktop chỉ hiện trên máy tính (thanh dưới điện thoại giữ tối đa 4 mục).
     desktop_only = {"bar", "data", "log", "cashier", "status", "exceptions", "cases", "params", "backup", "workload",
                     "revenue", "control_report", "materials", "dashboard", "lookup", "ledger", "lots", "pick", "receipt",
-                    "count", "waste", "po", "payables", "stock_report"} | {
+                    "count", "waste", "semi", "po", "payables", "stock_report"} | {
         "md_ca", "md_nhan-vien", "md_mon", "md_nhom-mon", "md_tuy-chon", "md_ban", "md_nguyen-lieu", "md_dinh-muc",
-        "md_nha-cung-cap", "md_ly-do", "schedule", "fc_overview", "fc_plans", "fc_prior", "fc_season", "fc_history"}
+        "md_ban-thanh-pham", "md_nha-cung-cap", "md_ly-do", "schedule", "fc_overview", "fc_plans", "fc_prior", "fc_season", "fc_history"}
     # Nhóm điều hướng theo nghiệp vụ (DESIGN.md: bố cục quản trị); trên điện thoại chỉ hiện tối đa 5 mục.
     groups = [
         (None, [("home", "Trang chủ", reverse("core:home"), None),
@@ -117,6 +120,7 @@ def navigation(request):
                  ("receipt", "Phiếu nhập", reverse("inventory:receipt"), Cap.STOCK_OPERATIONS),
                  ("count", "Kiểm kê", reverse("inventory:count"), Cap.STOCK_OPERATIONS),
                  ("waste", "Hao hụt", reverse("inventory:waste"), Cap.STOCK_OPERATIONS),
+                 ("semi", "Làm bán thành phẩm", reverse("inventory:semi"), Cap.STOCK_OPERATIONS),
                  ("po", "Đặt hàng", reverse("inventory:purchase_orders"), Cap.STOCK_CONFIRM_ORDERING),
                  ("payables", "Phải trả", reverse("inventory:payables"), Cap.STOCK_CONFIRM_ORDERING),
                  ("ledger", "Sổ kho", reverse("inventory:ledger"), Cap.VIEW_DASHBOARD),
@@ -144,6 +148,8 @@ def navigation(request):
             ("md_ban", "Bàn", reverse("masterdata:list", args=["ban"]), Cap.MASTER_DATA),
             ("md_nguyen-lieu", "Nguyên vật liệu", reverse("masterdata:list", args=["nguyen-lieu"]), Cap.MASTER_INVENTORY),
             ("md_dinh-muc", "Định mức", reverse("masterdata:list", args=["dinh-muc"]), Cap.MASTER_INVENTORY),
+            ("md_ban-thanh-pham", "Định mức bán thành phẩm", reverse("masterdata:list", args=["ban-thanh-pham"]),
+             Cap.MASTER_INVENTORY),
             ("md_nha-cung-cap", "Nhà cung cấp", reverse("masterdata:list", args=["nha-cung-cap"]), Cap.MASTER_INVENTORY),
             ("md_ly-do", "Lý do điều chỉnh", reverse("masterdata:list", args=["ly-do"]), Cap.MASTER_DATA),
             ("log", "Nhật ký", reverse("masterdata:audit_log"), Cap.AUDIT_LOG)]),

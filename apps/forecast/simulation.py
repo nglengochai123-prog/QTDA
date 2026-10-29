@@ -4,8 +4,9 @@ Mục đích: kiểm tra quyết định mua chứ không chỉ sai số dự b�
 1. Sáng: hàng đặt trước đó về (có thể trễ một ngày).
 2. Trong ngày: khách gọi món theo nhu cầu thật của "thế giới"; ly nào thiếu nguyên liệu thì không bán được, mỗi nguyên
    liệu thiếu tính tối đa một trường hợp mỗi ngày (BRU-26). Dùng lô cũ trước (FIFO).
-3. Tối: bỏ lô hết hạn; hệ thống chỉ thấy tiêu hao đã bán và cờ hết hàng (như usage.series_for), chạy đúng các hàm
-   dự báo và chính sách đang dùng (methods.forecast_ingredient, policy.compute); Chủ quán giả lập làm theo đề xuất.
+3. Tối: bỏ lô hết hạn; hệ thống chỉ thấy số ly đã bán theo món, tiêu hao đã bán và cờ hết hàng (như usage.series_for,
+   hierarchy.from_usage), chạy đúng các hàm dự báo và chính sách đang dùng (hierarchy.build, methods.forecast_series,
+   policy.compute); Chủ quán giả lập làm theo đề xuất và duyệt mọi đề xuất đổi cách dự báo.
 
 Thế giới giả lập có những thứ hệ thống không biết trước: thứ trong tuần, mùa hè, Tết đóng cửa, ngày lễ, mức bán trôi
 dần, cú sốc thời tiết chung cả ngày, phân tán lớn hơn Poisson, ước tính tuần của Chủ quán lệch so với thật.
@@ -19,7 +20,7 @@ import random
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from . import methods, policy
+from . import hierarchy, methods, policy
 
 # ---------------- thế giới ----------------
 
@@ -210,8 +211,8 @@ class Rules:
     b_review: int = 7
     b_weekday: int = 6  # Chủ nhật
     horizon: int = 35
-    delta_level: float = 0.95
-    delta_season: float = 0.99
+    candidates: tuple = ("LN", "WMA", "HW")  # cách tính trực tiếp trên chuỗi nguyên liệu được đánh giá
+    hierarchy: bool = True  # thêm cách phân cấp: tổng số ly × tỷ trọng món × định mức
     stockout_target: float = None  # thử nghiệm: số lần thiếu cho phép mỗi tháng chia đều cho từng nguyên liệu
     csl_by_group: dict = None  # thử nghiệm: {"A": %, "B": %} thay cho CSL theo trọng yếu
     aging: bool = True  # cho bộ tính biết các lô đang có và hạn dùng (EWA)
@@ -220,6 +221,8 @@ class Rules:
 
 # Cách tính trước 26/10/2026: CSL 95% trọng yếu, 90% còn lại cho mọi nhóm, không theo dõi hạn của lô.
 BEFORE_2610 = Rules(csl_normal=90, csl_long_life=0, aging=False, label="Trước 26/10/2026")
+# Chỉ dự báo trực tiếp trên chuỗi nguyên liệu, không có cách phân cấp: để thấy phần đóng góp của dự báo theo món.
+NO_HIERARCHY = Rules(hierarchy=False, label="Không dự báo phân cấp")
 
 
 def owner_estimate(world, ing, rnd, start_j=0, weeks=4):
@@ -254,6 +257,12 @@ class Store:
         self.lots = {s.name: [] for s in specs}
         self.orders = {s.name: [] for s in specs}
         self.series = {s.name: [] for s in specs}
+        self.item_series = {name: [] for name in world.items}
+        self.total_series = []
+        self.choice = {}  # cách dự báo đang dùng theo chuỗi (Chủ quán giả lập duyệt mọi đề xuất)
+        self.hw = {}  # tham số Holt-Winters chọn lại mỗi tuần để mô phỏng chạy nhanh
+        self.h, self.h_items = None, []
+        self.last_fc = {}
         self.k = {s.name: _new_kpi() for s in specs}
         self.months = {}
         self.lost_cups = 0
@@ -294,7 +303,7 @@ class Store:
                 self.orders[name].remove(o)
         closed = self.w.closed(j)
         demand = {} if closed else self.w.demand(j)
-        sold_usage, out_today, blocked_cups = self._serve(j, d, demand)
+        sold_usage, out_today, blocked_cups, sold_cups = self._serve(j, d, demand)
         for name in self.specs:
             for o in [o for o in self.orders[name] if o.actual == d and o.midday]:
                 self.orders[name].remove(o)  # lô giữa ngày đã nhận trong _serve
@@ -321,6 +330,14 @@ class Store:
             self.series[name].append((d, sold_usage.get(name, 0.0) if status == "ok" else None, status))
         m["lost_cups"] += sum(blocked_cups.values())
         m["cups"] += sum(demand.values())
+        for name in self.w.items:
+            st = "dong_cua" if closed else "bo_qua" if name in blocked_cups else "ok"
+            self.item_series[name].append((d, float(sold_cups.get(name, 0)) if st == "ok" else None, st))
+        lost = sum(blocked_cups.values()) / max(sum(demand.values()), 1)
+        st = "dong_cua" if closed else "bo_qua" if lost >= 0.2 else "ok"
+        self.total_series.append((d, float(sum(sold_cups.values())) if st == "ok" else None, st))
+        if j < self.w.days - 1 and self.owner == "system":
+            self._hierarchy(d)
         if j < self.w.days - 1:
             for name, s in self.specs.items():
                 self._plan(s, d)
@@ -329,7 +346,7 @@ class Store:
         """Bán từng ly theo thứ tự ngẫu nhiên; lô về giữa ngày nhận khi qua nửa số ly."""
         cups = [i for i, n in demand.items() for _ in range(n)]
         self.rnd.shuffle(cups)
-        used, out, blocked = {}, set(), {}
+        used, out, blocked, sold = {}, set(), {}, {}
         half = len(cups) // 2
         for idx, item in enumerate(cups):
             if idx == half:
@@ -348,12 +365,13 @@ class Store:
             for k, v in need.items():
                 self._take(k, v)
                 used[k] = used.get(k, 0.0) + v
+            sold[item] = sold.get(item, 0) + 1
         if half == 0:
             for name in self.specs:
                 for o in self.orders[name]:
                     if o.actual == d and o.midday:
                         self._receive(name, o.qty, d)
-        return used, out, blocked
+        return used, out, blocked, sold
 
     def _indirect(self, name, blocked, demand):
         """Bị chặn gián tiếp: món bị ngừng vì thiếu nguyên liệu khác chiếm từ 20% tiêu hao dự kiến (usage._indirect)."""
@@ -382,6 +400,39 @@ class Store:
         self.lots[name].append(Lot(qty, expires))
         self.k[name]["received"] += qty
 
+    # ----- dự báo -----
+    def _hw_params(self, key, series, today):
+        """Tham số Holt-Winters của một chuỗi, chọn lại mỗi 7 ngày (hệ thống thật chọn lại mỗi lần tính)."""
+        cached = self.hw.get(key)
+        if cached and (today - cached[1]).days < 7:
+            return cached[0]
+        obs = [(t, x) for t, x, st in series if st == "ok"]
+        params = methods.hw_fit(obs) if len(obs) >= methods.DEFAULT.hw_min_days else None
+        self.hw[key] = (params, today)
+        return params
+
+    def _decide(self, key, fc, today):
+        """Ghi cách tự chọn lần đầu; Chủ quán giả lập duyệt mọi đề xuất đổi (BRU-37), mỗi chuỗi tối đa một lần trong 4
+        tuần như planning._hold_proposal."""
+        if fc.get("stage") != methods.STAGE_MODEL or not fc.get("method"):
+            return
+        if key not in self.choice and fc.get("auto_pick"):
+            self.choice[key] = (fc["method"], today)
+        elif fc.get("proposal") and key in self.choice and (today - self.choice[key][1]).days >= 28:
+            self.choice[key] = (fc["proposal"]["method"], today)
+
+    def approved(self, key):
+        return self.choice[key][0] if key in self.choice else None
+
+    def _hierarchy(self, today):
+        items = [hierarchy.Item(name, self.item_series[name], it["usage"], group=it["group"])
+                 for name, it in self.w.items.items()]
+        self.h = hierarchy.build(self.total_series, items, today=today, horizon=self.rules.horizon,
+                                 approved=self.approved("tong"),
+                                 hw_params=self._hw_params("tong", self.total_series, today))
+        self.h_items = items
+        self._decide("tong", self.h["total"], today)
+
     # ----- quyết định mua -----
     def _plan(self, s, today):
         if self.owner == "habit":
@@ -395,10 +446,18 @@ class Store:
         series = self.series[s.name]
         recent = [st for _, _, st in series[-56:] if st != "dong_cua"]
         blocked = sum(1 for st in recent if st == "bo_qua") / len(recent) if recent else 0.0
-        fc = methods.forecast_ingredient(
-            series, today=today, horizon=r.horizon, estimate=self.estimate[s.name], estimate_since=self.w.start,
-            delta_level=r.delta_level, delta_season=r.delta_season, decision_h=R + s.lead, target_h=T + s.lead,
-            k=k, csl=csl, blocked_share=blocked)
+        external, external_daily = (hierarchy.ingredient_forecast(self.h, self.h_items, s.name) if self.h and r.hierarchy
+                                    else (None, None))
+        cls = methods.demand_class(series, today) if series else None
+        candidates = list(r.candidates) + (["TSB"] if cls and cls["intermittent"] else []) + \
+            (["PH"] if external_daily is not None else [])
+        fc = methods.forecast_series(
+            series, today=today, horizon=r.horizon, candidates=candidates, approved=self.approved(s.name),
+            estimate=self.estimate[s.name], estimate_since=self.w.start, external=external,
+            external_daily=external_daily, decision_h=R + s.lead, target_h=T + s.lead, k=k, csl=csl,
+            blocked_share=blocked, hw_params=self._hw_params(s.name, series, today) if "HW" in candidates else None)
+        self._decide(s.name, fc, today)
+        self.last_fc[s.name] = (fc, R + s.lead)
         self.k[s.name]["methods"][fc.get("method")] = self.k[s.name]["methods"].get(fc.get("method"), 0) + 1
         if not fc.get("method"):
             return
@@ -418,7 +477,7 @@ class Store:
             today=today, daily=daily, sigma=fc.get("sigma", []), csl=csl, available=self.on_hand(s.name),
             physical=self.on_hand(s.name), lots=lots, excluded=excluded, f0=0.0, group=g, review_days=R,
             target_days=T, review_weekday=r.b_weekday, exposure=s.lead, pack=s.pack, unit=s.unit, moq=s.moq,
-            shelf_life=s.shelf, capacity=s.capacity, quantiles=quantile_mode(fc, csl),
+            shelf_life=s.shelf, capacity=s.capacity, quantiles=quantile_mode(fc),
             sigma_measured=fc.get("sigma_measured"),
             on_hand_lots=[(x.qty, x.expires) for x in self.lots[s.name]] if r.aging else None)
         res = policy.compute(inp)
@@ -471,13 +530,27 @@ class Store:
                 "stockout_days": k["stockout_days"], "fill_rate": k["used"] / k["demand"] if k["demand"] else 1.0,
                 "expired_share": k["expired"] / k["received"] if k["received"] else 0.0,
                 "cover_days": k["on_hand_sum"] / k["days"] / (k["demand"] / k["days"]) if k["demand"] else None,
-                "orders": k["orders"], "methods": dict(k["methods"]), "expedited": k["expedited"]}
+                "orders": k["orders"], "methods": dict(k["methods"]), "expedited": k["expedited"],
+                **_accuracy(*self.last_fc.get(name, ({}, 1)))}
         total_days = sum(self.months[m]["days"] for m in months)
+        tfc = (self.h or {}).get("total") or {}
         return {"label": self.rules.label if self.owner == "system" else "Cách làm cũ (theo thói quen)",
+                "total": {**_accuracy(tfc, hierarchy.TOTAL_DECISION_H), "item_wape_1": (self.h or {}).get("item_wape")},
                 "months": {m: dict(self.months[m]) for m in months},
                 "stockouts_per_month": sum(self.months[m]["stockouts"] for m in months) / total_days * 30,
                 "lost_cup_share": self.lost_cups / self.cups if self.cups else 0.0,
                 "ingredients": per_ing}
+
+
+def _accuracy(fc, h):
+    """Cách tính cuối cùng và sai số cuốn chiếu của nó ở cửa sổ quyết định: WAPE (tổng sai số tuyệt đối / tổng thực
+    tế) và độ chệch tương đối (dương là dự báo thấp hơn thực tế)."""
+    st = ((fc.get("errors") or {}).get(fc.get("method")) or {}).get(str(h)) or {}
+    mean = None
+    if st.get("wape") and st.get("mae"):
+        mean = st["mae"] / st["wape"]
+    return {"method": fc.get("method"), "wape": st.get("wape"),
+            "bias_share": st["bias"] / mean if mean and st.get("bias") is not None else None}
 
 
 def _new_kpi():
@@ -485,10 +558,10 @@ def _new_kpi():
             "days": 0, "orders": 0, "ordered": 0.0, "methods": {}, "expedited": 0}
 
 
-def quantile_mode(fc, csl, band=0.03):
-    """Như planning._quantile_mode với dải mặc định 3 điểm phần trăm."""
-    q, cov = fc.get("error_quantiles") or {}, fc.get("quantile_coverage") or {}
-    ok = {int(h): v for h, v in q.items() if cov.get(h) is not None and abs(cov[h] - csl / 100) <= band}
+def quantile_mode(fc, need=methods.DEFAULT.quantile_min):
+    """Như planning._quantile_mode: phân vị sai số khi đủ gốc đánh giá, không âm."""
+    q, n = fc.get("error_quantiles") or {}, fc.get("quantile_n") or {}
+    ok = {int(h): max(v, 0.0) for h, v in q.items() if n.get(h, 0) >= need}
     return {"by_h": ok} if ok else None
 
 

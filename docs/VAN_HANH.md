@@ -196,11 +196,44 @@ Get-NetTCPConnection -LocalPort 8765 -State Listen | ForEach-Object { Stop-Proce
 4. Tác vụ định kỳ bằng cron: `* * * * * cd /srv/lamcoffee && .venv/bin/python manage.py chay_dinh_ky >> logs/dinh_ky.log 2>&1` và `30 23 * * * cd /srv/lamcoffee && .venv/bin/python manage.py sao_luu >> logs/sao_luu.log 2>&1`.
 5. Dừng: `systemctl stop` dịch vụ Gunicorn; khởi động lại sau cập nhật mã: `migrate`, `collectstatic`, `systemctl restart`.
 
+## 5a. Chủ quán quên mật khẩu hoặc bị tạm khóa
+
+Nhân viên quên mật khẩu hay bị khóa thì Chủ quán đặt lại hoặc mở khóa ở Quản trị › Nhân viên. Khi chính Chủ quán (và không còn Chủ quán nào khác) quên mật khẩu hoặc gõ sai 5 lần liên tiếp nên bị khóa 15 phút, làm trên máy chủ:
+
+```powershell
+.venv\Scripts\python.exe manage.py changepassword <tên đăng nhập>
+.venv\Scripts\python.exe manage.py mo_khoa_tai_khoan <tên đăng nhập>
+```
+
+Lệnh đầu đặt mật khẩu mới (gõ hai lần); lệnh sau mở khóa để đăng nhập được ngay, không phải chờ hết 15 phút. Lệnh mở khóa ghi nhật ký với người thực hiện là "dòng lệnh".
+
+## 5b. Cập nhật lên bản dự báo mới và bán thành phẩm (27/10/2026)
+
+Bản này thêm hai migration: `forecast 0007_lua_chon_cach_du_bao` (lưu cách dự báo đã chọn hoặc Chủ quán đã duyệt) và `inventory 0014_ban_thanh_pham` (loại nguyên liệu, định mức bán thành phẩm, mẻ làm). Sao lưu trước rồi mới chạy:
+
+```powershell
+.venv\Scripts\python.exe manage.py sao_luu
+.venv\Scripts\python.exe manage.py migrate
+```
+
+Quên bước này thì trang web không hiện lỗi kỹ thuật nữa mà hiện "Cần cập nhật cơ sở dữ liệu" kèm đúng các lệnh trên (thêm dòng `$env:SQLITE_NAME = "..."` nếu máy chủ đang chạy CSDL khác `db.sqlite3`, ví dụ dữ liệu nghiệm thu).
+
+Chưa khai bán thành phẩm thì mọi thứ chạy như cũ: món trừ thẳng nguyên liệu gốc. Khi quán muốn quản lý cà phê cốt, nước đường, foam, làm theo đúng thứ tự để kho không bị âm:
+
+1. Quản trị › Nguyên vật liệu: thêm nguyên liệu mới, Loại "Bán thành phẩm quán tự làm", đơn vị ml, hạn dùng (ví dụ cốt 2 ngày).
+2. Quản trị › Định mức bán thành phẩm: chọn bán thành phẩm, ghi "Lượng thu được mỗi mẻ" và nguyên liệu cho một mẻ (cốt: 500 g cà phê bột ra 1.000 ml; nước đường: 1.000 g đường ra 1.600 ml). Foam chưa cân thì để trống "Đã cân đo lượng thu được"; kế hoạch mua sẽ nhắc tới khi cân.
+3. Kho › Làm bán thành phẩm: ghi mẻ đầu tiên (trừ nguyên liệu gốc, nhập lô bán thành phẩm).
+4. Sau đó mới sửa định mức các món ở Quản trị › Định mức để dùng bán thành phẩm thay cho nguyên liệu gốc (ví dụ 40 ml cà phê cốt thay 20 g cà phê bột). Từ lúc đó bán ly chỉ trừ bán thành phẩm.
+
+Cơ sở dữ liệu mới nhập thực đơn LAM có thể tạo sẵn bán thành phẩm và định mức món dùng chúng: `manage.py nhap_thuc_don_lam --ban-thanh-pham`. Lệnh không đổi định mức của món đã có.
+
+Thuật toán và tham số dự báo không hiện trên giao diện; muốn chỉnh thì sửa `apps/core/params.py` rồi khởi động lại. Bản mô tả mô hình cho Chủ quán: tài liệu "Mô hình dự báo và mua nguyên liệu LAM Coffee".
+
 ## 6. Sao lưu và phục hồi (NFR-09)
 
 Yêu cầu: tự động hằng ngày ra nơi lưu trữ ngoài máy chủ, giữ tối thiểu 30 bản, mất dữ liệu tối đa 24 giờ, phục hồi không quá 4 giờ.
 
-**Cấu hình** trong `.env`: `LAM_BACKUP_DIR` (thư mục đích, nên là ổ ngoài hoặc thư mục được đồng bộ lên dịch vụ lưu trữ; để trống thì dùng `D:\QTDAackups`), `LAM_BACKUP_KEEP` (mặc định 30), `LAM_PG_BIN` (thư mục chứa `pg_dump` khi dùng PostgreSQL).
+**Cấu hình** trong `.env`: `LAM_BACKUP_DIR` (thư mục đích, nên là ổ ngoài hoặc thư mục được đồng bộ lên dịch vụ lưu trữ; để trống thì dùng `D:\QTDA\backups`), `LAM_BACKUP_KEEP` (mặc định 30), `LAM_PG_BIN` (thư mục chứa `pg_dump` khi dùng PostgreSQL).
 
 **Sao lưu tay:**
 
@@ -222,7 +255,7 @@ Kết quả từng lần ghi ở `logs\sao_luu.log`. Chưa tạo lịch này tr�
 
 ```powershell
 .venv\Scripts\python.exe manage.py phuc_hoi --danh-sach
-.venv\Scripts\python.exe manage.py phuc_hoi --vao backups	hu-phuc-hoi.sqlite3
+.venv\Scripts\python.exe manage.py phuc_hoi --vao backups\thu-phuc-hoi.sqlite3
 ```
 
 Bỏ tên tệp thì lấy bản mới nhất. Lệnh chép bản sao lưu vào đích riêng, kiểm tra toàn vẹn, kiểm tra cấu trúc khớp mã nguồn (`migrate --check`) và chạy `kiem_tra_toan_ven` trên đích đó. Lệnh từ chối nếu đích trùng CSDL đang chạy, hoặc đích đã có mà không thêm `--ghi-de`.

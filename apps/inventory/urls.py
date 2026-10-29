@@ -11,6 +11,7 @@ urlpatterns = [
     path("kho/bao-nhanh/<int:report_id>/xu-ly/", views.acknowledge, name="acknowledge"),
     path("kho/kiem-ke/", views.count, name="count"),
     path("kho/hao-hut/", views.waste, name="waste"),
+    path("kho/ban-thanh-pham/", views.semi, name="semi"),
     path("kho/phieu-nhap/", views.receipt, name="receipt"),
     path("kho/dat-hang/", views.purchase_orders, name="purchase_orders"),
     path("kho/phai-tra/", views.payables, name="payables"),

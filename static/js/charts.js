@@ -1,5 +1,7 @@
 // Chú thích khi rê chuột, chạm hoặc dùng bàn phím trên các cột và thanh của biểu đồ.
 (function () {
+  // Biểu đồ cuộn ngang trên điện thoại: mở ở phần mới nhất (bên phải) thay vì ngày cũ nhất.
+  document.querySelectorAll(".chart-box[data-scroll-end]").forEach(function (box) { box.scrollLeft = box.scrollWidth; });
   const tip = document.querySelector(".chart-tip");
   if (!tip) return;
   function show(el, x, y) {
@@ -10,7 +12,7 @@
     tip.style.top = Math.max(8, y - tip.offsetHeight - 10) + "px";
   }
   function hide() { tip.hidden = true; }
-  document.querySelectorAll(".chart-svg [data-tip]").forEach(function (el) {
+  document.querySelectorAll(".chart-svg [data-tip], .barlist [data-tip]").forEach(function (el) {
     el.addEventListener("pointermove", function (e) { show(el, e.clientX, e.clientY); });
     el.addEventListener("pointerleave", hide);
     el.addEventListener("focus", function () {

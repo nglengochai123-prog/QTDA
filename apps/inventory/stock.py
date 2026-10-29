@@ -113,7 +113,8 @@ def reserve(totals):
         if stock.available < needed:
             shortages.append({"ingredient_id": ingredient_id, "ingredient": stock.ingredient.name,
                               "unit": stock.ingredient.get_unit_display(),
-                              "needed": fmt_vn(needed), "available": fmt_vn(max(stock.available, 0))})
+                              "needed": fmt_vn(needed), "available": fmt_vn(max(stock.available, 0)),
+                              "semi": stock.ingredient.is_semi})
     if shortages:
         raise InsufficientStock(shortages)
     for ingredient_id, needed in totals.items():

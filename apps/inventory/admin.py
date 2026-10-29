@@ -4,7 +4,7 @@ from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import path, reverse
 
-from apps.accounts.permissions import Cap, OwnerOnlyAdminMixin, OwnerOnlyInlineMixin
+from apps.accounts.permissions import AppManagedAdminMixin, Cap, OwnerOnlyAdminMixin, OwnerOnlyInlineMixin
 from apps.audit.admin_mixins import AuditedAdminMixin
 from apps.audit.models import Action
 from apps.audit.services import record
@@ -23,13 +23,15 @@ class InventoryAdmin(OwnerOnlyAdminMixin, AuditedAdminMixin, admin.ModelAdmin):
 
 
 @admin.register(Supplier)
-class SupplierAdmin(InventoryAdmin):
+class SupplierAdmin(AppManagedAdminMixin, InventoryAdmin):
+    app_resource = "nha-cung-cap"
     list_display = ("name", "phone", "is_active")
     search_fields = ("name", "phone")
 
 
 @admin.register(Ingredient)
-class IngredientAdmin(InventoryAdmin):
+class IngredientAdmin(AppManagedAdminMixin, InventoryAdmin):
+    app_resource = "nguyen-lieu"
     list_display = ("name", "unit", "pack_size", "main_supplier", "lead_time_days", "safety_stock",
                     "safety_stock_is_provisional", "is_critical", "is_active")
     list_filter = ("is_critical", "is_active", "main_supplier")

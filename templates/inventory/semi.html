@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Làm bán thành phẩm · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head"><div><h1>Làm bán thành phẩm</h1><p class="page-sub">Ghi mỗi mẻ cà phê cốt, nước đường, foam vừa làm. Hệ thống trừ nguyên liệu gốc theo định mức mẻ và cộng bán thành phẩm vào kho thành một lô; món bán ra trừ bán thành phẩm nên nguyên liệu gốc không bị trừ hai lần.</p></div></header>
+{% if not rows %}<div class="empty"><p><strong>Chưa có bán thành phẩm.</strong></p><p>Khai nguyên liệu loại Bán thành phẩm và định mức mẻ của nó trong Danh mục{% if can_setup %}: <a href="{% url 'masterdata:list' 'ban-thanh-pham' %}">Định mức bán thành phẩm</a>{% endif %}.</p></div>{% endif %}
+{% for r in rows %}{% with i=r.ingredient rc=r.recipe %}
+<section class="panel semi-card" aria-labelledby="btp-{{ i.pk }}">
+  <h2 id="btp-{{ i.pk }}">{{ i.name }}{% if r.provisional %} <span class="chip">Tạm thời</span>{% endif %}</h2>
+  <dl class="figure-grid">
+    <div><dt>Tồn có thể dùng</dt><dd>{{ r.available|floatformat:"-1g" }} {{ i.get_unit_display }}</dd></div>
+    <div><dt>{% if r.for_today %}Cần đến hết hôm nay{% else %}Cần cho ngày mai{% endif %}</dt><dd>{% if r.need is not None %}{{ r.need|floatformat:"0g" }} {{ i.get_unit_display }}{% else %}<span class="muted">Chưa có dự báo</span>{% endif %}</dd></div>
+    <div class="figure-key"><dt>Nên làm</dt><dd>{% if r.batches is None %}–{% elif r.batches %}<strong>{{ r.batches }} mẻ</strong>{% else %}Đủ, chưa cần làm{% endif %}</dd></div>
+  </dl>
+  {% if rc %}<p class="muted">Một mẻ: {% for l in rc.lines.all %}{{ l.quantity|floatformat:"-2g" }} {{ l.ingredient.get_unit_display }} {{ l.ingredient.name }}{% if not forloop.last %}, {% endif %}{% endfor %} → {{ rc.batch_output|floatformat:"-2g" }} {{ i.get_unit_display }}{% if not rc.yield_measured %} (lượng thu được chưa cân đo){% endif %}.</p>
+  <form method="post" class="semi-form" data-once>{% csrf_token %}
+    <input type="hidden" name="operation_key" value="{{ r.operation_key }}"><input type="hidden" name="product" value="{{ i.pk }}">
+    <label class="field"><span>Số mẻ</span><input class="input" name="batches" inputmode="decimal" autocomplete="off" required value="{% if r.batches %}{{ r.batches }}{% else %}1{% endif %}"></label>
+    <label class="field"><span>Lượng thu thực tế ({{ i.get_unit_display }})</span><input class="input" name="actual" inputmode="decimal" autocomplete="off" placeholder="Để trống: theo định mức"></label>
+    <label class="field"><span>Ghi chú</span><input class="input" name="note" maxlength="255"></label>
+    <button class="btn btn-primary" type="submit">Ghi mẻ</button>
+  </form>
+  {% else %}<p class="muted">Chưa có định mức mẻ nên chưa ghi mẻ được.{% if can_setup %} <a href="{% url 'masterdata:list' 'ban-thanh-pham' %}">Khai định mức mẻ</a>.{% endif %}</p>{% endif %}
+</section>{% endwith %}{% endfor %}
+{% if recent %}
+<section class="panel" aria-labelledby="btp-recent">
+  <h2 id="btp-recent">Mẻ gần đây</h2>
+  <ul class="row-list">{% for b in recent %}
+    <li><span class="row-day">{{ b.created_at|date:"d/m" }}<small>{{ b.created_at|date:"H:i" }}</small></span>
+      <span class="row-main"><strong>{{ b.product.name }}</strong><small>{{ b.batches|floatformat:"-2g" }} mẻ{% if b.lot %} · lô {{ b.lot.code }}{% if b.lot.expiry_date %} · HSD {{ b.lot.expiry_date|date:"d/m" }}{% endif %}{% endif %} · {{ b.actor }}{% if b.note %} · {{ b.note }}{% endif %}</small></span>
+      <span class="num-cell">{{ b.actual_output|floatformat:"-2g" }} {{ b.product.get_unit_display }}</span></li>{% endfor %}
+  </ul>
+</section>{% endif %}
+{% endblock %}

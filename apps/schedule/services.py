@@ -487,29 +487,36 @@ def release_unfit(owner, user, today=None):
 
 @transaction.atomic
 def auto_assign(owner, week):
-    """Gợi ý xếp lịch theo đăng ký; giữ nguyên các ô Chủ quán đã xếp tay."""
-    Assignment.objects.filter(shift__date__gte=week, shift__date__lt=week + timedelta(days=7),
-                              source=Assignment.Source.SUGGESTED, removed_at__isnull=True).update(
-        removed_at=timezone.now(), remove_reason="Xếp lại theo gợi ý")
-    shifts = list(week_shifts(week))  # đọc sau khi bỏ các lượt gợi ý cũ để đếm đúng số đã xếp
+    """Gợi ý xếp lịch theo đăng ký; giữ nguyên các ô Chủ quán đã xếp tay.
+
+    Lượt gợi ý cũ trùng với kết quả mới được giữ nguyên, chỉ bỏ lượt không còn hợp và thêm lượt mới, nên xếp lại
+    sau khi đã công bố không làm lịch hiện là có thay đổi khi thực ra không đổi; người bị đổi ca được báo riêng.
+    Trả về số lượt thêm mới.
+    """
+    old = {(a.shift_id, a.user_id, a.role): a for a in _active_assignments(week)
+           if a.source == Assignment.Source.SUGGESTED}
+    shifts = list(week_shifts(week))
     taken = defaultdict(list)  # user_id -> [shift]
     hours = defaultdict(float)
     for a in _active_assignments(week):
-        taken[a.user_id].append(a.shift)
-        hours[a.user_id] += a.shift.hours
+        if a.source != Assignment.Source.SUGGESTED:
+            taken[a.user_id].append(a.shift)
+            hours[a.user_id] += a.shift.hours
     cells = []
     for s in shifts:
         needs = {n.role: n.needed for n in s.needs.all()}
         regs = [r for r in s.registrations.all() if r.cancelled_at is None]
         for role, need in needs.items():
-            have = sum(1 for a in s.assignments.all() if a.removed_at is None and a.role == role)
+            have = sum(1 for a in s.assignments.all() if a.removed_at is None and a.role == role
+                       and a.source != Assignment.Source.SUGGESTED)
             pool = [r for r in regs if r.role == role]
             if need > have:
                 cells.append((len(pool) / max(need - have, 1), s, role, need - have, pool))
     cells.sort(key=lambda c: (c[0], c[1].date, c[1].start))
-    made = 0
+    plan = []  # (shift, user, role)
     for _, s, role, missing, pool in cells:
-        pool = sorted(pool, key=lambda r: (hours[r.user_id], r.created_at))
+        # Người đang có lượt gợi ý ở ô này được ưu tiên giữ khi ngang nhau, để xếp lại không xáo trộn vô cớ.
+        pool = sorted(pool, key=lambda r: (hours[r.user_id], (s.pk, r.user_id, role) not in old, r.created_at))
         for reg in pool:
             if missing <= 0:
                 break
@@ -517,14 +524,36 @@ def auto_assign(owner, week):
                 continue
             if role not in user_roles(reg.user):
                 continue
-            Assignment.objects.create(shift=s, user=reg.user, role=role, source=Assignment.Source.SUGGESTED,
-                                      assigned_by=owner)
+            plan.append((s, reg.user, role))
             taken[reg.user_id].append(s)
             hours[reg.user_id] += s.hours
             missing -= 1
-            made += 1
-    record(Action.UPDATE, actor=owner, object_type="schedule.Assignment", after={"tuan": str(week), "xep": made},
+    keep = {(s.pk, u.pk, role) for s, u, role in plan}
+    now = timezone.now()
+    changes = defaultdict(list)  # user -> [(ngày, dòng thay đổi)]
+    for key, a in old.items():
+        if key not in keep:
+            a.removed_at, a.remove_reason = now, "Xếp lại theo gợi ý"
+            a.save(update_fields=["removed_at", "remove_reason", "updated_at"])
+            changes[a.user].append((a.shift.date, f"Bỏ ca {_shift_text(a.shift)}"))
+    made = 0
+    for s, user, role in plan:
+        if (s.pk, user.pk, role) in old:
+            continue
+        Assignment.objects.create(shift=s, user=user, role=role, source=Assignment.Source.SUGGESTED, assigned_by=owner)
+        changes[user].append((s.date, f"Thêm ca {_shift_text(s)} · {ROLE_LABEL[role]}"))
+        made += 1
+    record(Action.UPDATE, actor=owner, object_type="schedule.Assignment",
+           after={"tuan": str(week), "xep_moi": made, "bo": sum(1 for k in old if k not in keep)},
            reason="Gợi ý xếp lịch theo đăng ký")
+    if is_published(week):
+        from apps.core.push import notify_later
+
+        today = timezone.localdate()
+        for user, items in changes.items():
+            lines = [text for day, text in sorted(items) if day >= today]
+            if lines:
+                notify_later([user.pk], f"Lịch làm tuần {week:%d/%m} thay đổi", "; ".join(lines[:6]), "/lich/cua-toi/")
     return made
 
 
@@ -584,6 +613,7 @@ def replacements(shift, role, context=None):
 @transaction.atomic
 def publish(owner, week):
     rows, gaps = coverage(week)
+    previous = WeekPublish.objects.filter(week_start=week).order_by("-created_at").first()
     pub = WeekPublish.objects.create(week_start=week, published_by=owner, gaps=gaps)
     record(Action.STATUS_CHANGE, actor=owner, obj=pub, object_type="schedule.WeekPublish",
            after={"tuan": str(week), "con_thieu": len(gaps)})
@@ -597,6 +627,14 @@ def publish(owner, week):
         body = "; ".join(f"{a.shift.date:%d/%m} {a.shift.start:%H:%M}–{a.shift.end:%H:%M} {ROLE_LABEL[a.role]}"
                          for a in items[:6]) + ("…" if len(items) > 6 else "")
         notify_later([user_id], f"Lịch làm tuần {week:%d/%m}", body, "/lich/cua-toi/")
+    if previous is not None:
+        # Công bố lại: người có ca ở lần công bố trước mà nay không còn ca nào cũng phải được báo, không thì họ vẫn đi làm.
+        before = set(Assignment.objects.filter(shift__date__gte=week, shift__date__lt=week + timedelta(days=7),
+                                               created_at__lte=previous.created_at)
+                     .exclude(removed_at__lte=previous.created_at).values_list("user_id", flat=True))
+        dropped = sorted(before - set(per_user))
+        if dropped:
+            notify_later(dropped, f"Lịch làm tuần {week:%d/%m}", "Bạn không còn ca nào trong tuần này.", "/lich/cua-toi/")
     return pub
 
 

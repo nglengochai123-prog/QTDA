@@ -62,7 +62,7 @@ def _key(line, dim):
     local = timezone.localtime(order.payment.created_at)
     created = timezone.localtime(order.created_at)
     return {
-        "ngay": f"{local:%d/%m/%Y}", "khung_gio": f"{created:%H}–{(created + timedelta(hours=1)):%H} giờ",
+        "ngay": f"{local:%d/%m/%Y}", "khung_gio": f"{created:%H}–{created.hour + 1:02d} giờ",
         "ca": str(order.shift) if order.shift else "Không gắn ca", "nhom_mon": line.item.group.name,
         "mon": f"{line.item_name} {line.size_name}", "nhan_vien": str(order.created_by),
         "phuong_thuc": order.payment.get_method_display(),
@@ -213,10 +213,14 @@ def materials(start_day, end_day):
         for kind, total in period.values_list("kind").annotate(s=Sum("quantity")):
             sums[kind] = total
         closing = opening + sum(sums.values())
+        # Làm bán thành phẩm: phần làm ra cộng vào nhập của bán thành phẩm, nguyên liệu gốc đem làm tính vào tiêu hao.
+        made = period.filter(kind=StockMovement.Kind.PRODUCE, quantity__gt=0).aggregate(s=Sum("quantity"))["s"] or 0
+        used = sums[StockMovement.Kind.PRODUCE] - made
         rows.append({
             # Tồn đầu kỳ khai báo lần đầu trong kỳ (lúc bắt đầu dùng hệ thống) cộng vào tồn đầu.
-            "ingredient": ing, "opening": opening + sums[StockMovement.Kind.OPENING], "receipts": sums[StockMovement.Kind.RECEIPT],
-            "consumed": -sums[StockMovement.Kind.CONSUME], "post_prep": post_prep.get(ing.pk, Decimal(0)),
+            "ingredient": ing, "opening": opening + sums[StockMovement.Kind.OPENING],
+            "receipts": sums[StockMovement.Kind.RECEIPT] + made,
+            "consumed": -sums[StockMovement.Kind.CONSUME] - used, "post_prep": post_prep.get(ing.pk, Decimal(0)),
             "waste": -sums[StockMovement.Kind.WASTE], "count_adjust": sums[StockMovement.Kind.COUNT],
             "closing": closing, "shortages": shortages.get(ing.pk, 0),
         })
@@ -285,6 +289,54 @@ def _stock_summary(today):
             "below": below, "value": sum(d["value"] for d in view.values())}
 
 
+def _payments_stamp():
+    """Dấu phiên bản của số liệu đã thu tiền: đổi khi có lần thu, hủy thanh toán, hoàn tiền hay sửa đơn đã thu."""
+    from django.db.models import Count, Max
+
+    from apps.orders.models import Order, Payment
+    from apps.shifts.models import Refund
+
+    parts = [Payment.objects.aggregate(n=Count("id"), at=Max("updated_at")),
+             Refund.objects.aggregate(n=Count("id"), at=Max("updated_at")),
+             Order.objects.filter(payment__isnull=False).aggregate(n=Count("id"), at=Max("updated_at"))]
+    return "-".join(f"{p['n']}.{p['at'].timestamp() if p['at'] else 0}" for p in parts)
+
+
+def _sales_block(first, end, today):
+    """Doanh thu theo ngày và phân tích bán hàng của tháng: phần nặng nhất của bảng điều khiển.
+
+    Kết quả giữ trong bộ nhớ đệm tới khi có lần thu tiền mới (hoặc 10 phút), nên mở lại bảng điều khiển hay đổi qua lại
+    giữa các trang không phải tính lại toàn bộ dòng món của hai tháng.
+    """
+    from django.core.cache import cache
+
+    key = f"bang-dieu-khien:{first}:{end}:{today}:{_payments_stamp()}"
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+    lines = paid_lines(first, end)
+    by_day = revenue(first, end, "ngay", lines)
+    found = {r["key"]: r for r in by_day["rows"]}
+    days = []
+    d = first
+    while d <= end:
+        r = found.get(f"{d:%d/%m/%Y}", {"revenue": 0, "orders": 0, "cups": 0})
+        days.append({"day": d, "revenue": r["revenue"], "orders": r["orders"]})
+        d += timedelta(days=1)
+    from . import insights
+
+    # So với cùng các ngày của tháng trước (1–26/10 so với 1–26/09), không phải kỳ liền trước cùng độ dài.
+    prev_first = (first - timedelta(days=1)).replace(day=1)
+    prev_end = min(prev_first + (end - first), first - timedelta(days=1))
+    sales = insights.sales(first, end, prev=(prev_first, prev_end), today=today, lines=lines)
+    result = (by_day, days, sales)
+    try:
+        cache.set(key, result, 600)
+    except Exception:  # noqa: BLE001 - không lưu được bộ đệm thì vẫn trả số vừa tính
+        pass
+    return result
+
+
 def dashboard(today=None, month=None):
     """Bảng điều khiển theo tháng (bộ lọc `month` = ngày bất kỳ trong tháng cần xem)."""
     from apps.control.models import Alert, ExceptionCase
@@ -301,21 +353,7 @@ def dashboard(today=None, month=None):
     end = min(last, today) if first <= today else last
     control = monthly_control(month.year, month.month)
     shortages = ShortageCase.objects.filter(day__gte=first, day__lte=last).count()
-    lines = paid_lines(first, end)
-    by_day = revenue(first, end, "ngay", lines)
-    found = {r["key"]: r for r in by_day["rows"]}
-    days = []
-    d = first
-    while d <= end:
-        r = found.get(f"{d:%d/%m/%Y}", {"revenue": 0, "orders": 0, "cups": 0})
-        days.append({"day": d, "revenue": r["revenue"], "orders": r["orders"]})
-        d += timedelta(days=1)
-    from . import insights
-
-    # So với cùng các ngày của tháng trước (1–26/10 so với 1–26/09), không phải kỳ liền trước cùng độ dài.
-    prev_first = (first - timedelta(days=1)).replace(day=1)
-    prev_end = min(prev_first + (end - first), first - timedelta(days=1))
-    sales = insights.sales(first, end, prev=(prev_first, prev_end), today=today, lines=lines)
+    by_day, days, sales = _sales_block(first, end, today)
     revenue_chart = sales["trend_chart"]
     critical = []
     for ing in Ingredient.objects.filter(is_critical=True, is_active=True).select_related("stock"):

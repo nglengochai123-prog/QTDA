@@ -28,14 +28,30 @@ from .models import IngredientPlan, OrderSuggestion, PlanRun
 log = logging.getLogger(__name__)
 
 # Đổi khi cách tính thay đổi, để bản tính cũ không được trả lại cho cùng dữ liệu sau khi nâng cấp phần mềm.
-ENGINE_VERSION = "ke-hoach-mua-3"
+ENGINE_VERSION = "ke-hoach-mua-5"
 
-PARAM_KEYS = ("plan_csl_critical_percent", "plan_csl_normal_percent", "plan_csl_long_life_percent",
-              "plan_group_a_shelf_days", "plan_a_review_days",
-              "plan_a_target_days", "plan_b_review_days", "plan_b_review_weekday", "plan_horizon_days",
-              "plan_switch_gain_percent", "plan_switch_weeks", "plan_bias_limit_percent",
-              "plan_blocked_limit_percent", "plan_indirect_share_percent", "plan_reconcile_gap_permille",
-              "plan_quantile_band_points", "forecast_delta_level_percent", "forecast_delta_season_percent")
+PARAM_KEYS = tuple(k for k in params.DEFAULTS if k.startswith(("plan_", "forecast_")))
+TOTAL_KEY = "tong"
+
+
+def series_key(ingredient_id):
+    return f"nl:{ingredient_id}"
+
+
+def method_config():
+    """Tham số của các cách tính dự báo, đọc từ apps/core/params.py (chỉ sửa trong file, không hiện trên giao diện)."""
+    g = params.get
+    return methods.Config(
+        wma_weights=tuple(w / 100 for w in g("forecast_wma_weights_percent")), wma_weeks=g("forecast_wma_weeks"),
+        ln_days=g("forecast_ln_days"), hw_min_days=g("forecast_hw_min_days"),
+        hw_phi=g("forecast_hw_damping_percent") / 100, tsb_alpha=g("forecast_tsb_alpha_percent") / 100,
+        tsb_beta=g("forecast_tsb_beta_percent") / 100, adi_cut=g("forecast_adi_cut_hundredths") / 100,
+        cv2_cut=g("forecast_cv2_cut_hundredths") / 100, owner_days=g("forecast_owner_days"),
+        model_days=g("forecast_model_days"), prior_days=g("forecast_prior_days"),
+        min_origins=g("forecast_min_origins"), quantile_min=g("forecast_quantile_min"),
+        switch_gain=g("plan_switch_gain_percent") / 100, switch_days=7 * g("plan_switch_weeks"),
+        bias_limit=g("plan_bias_limit_percent") / 100, lookback=g("forecast_lookback_days"),
+        auto_switch=bool(g("forecast_auto_switch")))
 
 
 # ---------------- tham số theo nguyên liệu ----------------
@@ -85,20 +101,166 @@ def _digest(obj):
     return hashlib.sha256(json.dumps(obj, sort_keys=True, default=str).encode()).hexdigest()
 
 
+# ---------------- lựa chọn cách tính (BRU-21, BRU-37) ----------------
+
+def current_choices():
+    """{chuỗi: ForecastChoice đang dùng}."""
+    from .models import ForecastChoice
+
+    return {c.series_key: c for c in ForecastChoice.objects.filter(superseded_at__isnull=True).order_by("created_at", "id")}
+
+
+def _evidence(fc):
+    h = fc.get("decision_h")
+    return {"h": h, "ngay_hoc": fc.get("eligible_days"),
+            "mae": {m: (by.get(str(h)) or {}).get("mae") for m, by in (fc.get("errors") or {}).items()}}
+
+
+def _remember(key, ingredient, fc, choices, now):
+    """Ghi cách tự chọn lần đầu khi chuỗi vừa đủ dữ liệu để đánh giá. Không ghi đè lựa chọn đã có: sau lần đầu chỉ
+    Chủ quán đổi được (BRU-37)."""
+    from apps.core.models import Store
+
+    from .models import ForecastChoice
+
+    if fc.get("stage") != methods.STAGE_MODEL or not fc.get("method") or not fc.get("auto_pick"):
+        return
+    if key in choices:
+        return
+    store = ingredient.store if ingredient is not None else Store.get_default()
+    choices[key] = ForecastChoice.objects.create(
+        store=store, series_key=key, ingredient=ingredient, method=fc["method"], source=ForecastChoice.Source.AUTO,
+        evidence=_evidence(fc))
+
+
+def _hold_proposal(fc, choice, today, days):
+    """Đề xuất đổi cách chỉ đưa ra khi cách đang dùng đã được chọn từ `days` ngày trước trở lên (lần tự chọn đầu,
+    lần Chủ quán đổi hay giữ nguyên gần nhất): tránh đổi qua đổi lại, và không nhắc lại đề xuất vừa bị từ chối."""
+    if fc.get("proposal") and (choice is None or (today - timezone.localdate(choice.created_at)).days < days):
+        fc["proposal"] = None
+
+
+def decide_switch(user, key, accept, note=""):
+    """Chủ quán duyệt đổi sang cách dự báo được đề xuất, hoặc giữ cách đang dùng. Trả lựa chọn mới."""
+    from apps.audit.models import Action
+    from apps.audit.services import record
+    from apps.core.models import Store
+    from apps.inventory.models import Ingredient
+
+    from .models import ForecastChoice
+
+    ingredient = None
+    if key == TOTAL_KEY:
+        run = PlanRun.objects.filter(kind__in=[PlanRun.Kind.FULL, PlanRun.Kind.MANUAL]).first()
+        fc = ((run.summary or {}).get("tong") or {}) if run else {}
+    else:
+        ingredient = Ingredient.objects.filter(pk=int(key.split(":", 1)[1])).first()
+        plan = IngredientPlan.objects.filter(ingredient=ingredient, is_current=True).first() if ingredient else None
+        fc = plan.forecast if plan else {}
+    p = fc.get("proposal")
+    if not p:
+        raise ValidationError("Đề xuất này không còn; trang đã được tính lại.")
+    with transaction.atomic():
+        old = ForecastChoice.objects.select_for_update().filter(series_key=key, superseded_at__isnull=True)
+        current = old.first()
+        now = timezone.now()
+        old.update(superseded_at=now)
+        store = ingredient.store if ingredient is not None else Store.get_default()
+        evidence = {"de_xuat": p, "ghi_chu": (note or "")[:255]}
+        if accept:
+            choice = ForecastChoice.objects.create(store=store, series_key=key, ingredient=ingredient,
+                                                   method=p["method"], source=ForecastChoice.Source.APPROVED,
+                                                   evidence=evidence, decided_by=user)
+        else:
+            evidence["tu_choi"] = p["method"]
+            choice = ForecastChoice.objects.create(store=store, series_key=key, ingredient=ingredient,
+                                                   method=current.method if current else p["from"],
+                                                   source=ForecastChoice.Source.KEPT, evidence=evidence,
+                                                   decided_by=user)
+        target = ingredient.name if ingredient else "tổng số ly cả quán"
+        record(Action.UPDATE, actor=user, obj=choice, object_type="forecast.ForecastChoice",
+               after={"du_bao": target, "quyet_dinh": "Đổi cách dự báo" if accept else "Giữ cách dự báo",
+                      "sai_so_giam": f"{round(p['gain'] * 100)}%"}, reason=note or "")
+    return choice
+
+
+def proposals(today=None):
+    """Đề xuất đổi cách dự báo đang chờ Chủ quán: [(khóa, tên, mức giảm sai số, số tuần so)]."""
+    out = []
+    run = PlanRun.objects.filter(kind__in=[PlanRun.Kind.FULL, PlanRun.Kind.MANUAL]).first()
+    p = ((run.summary or {}).get("tong") or {}).get("proposal") if run else None
+    if p:
+        out.append({"key": TOTAL_KEY, "name": "Tổng số ly cả quán", "gain": p["gain"], "weeks": p["weeks"]})
+    for plan in current_plans().order_by("ingredient__name"):
+        p = (plan.forecast or {}).get("proposal")
+        if p:
+            out.append({"key": series_key(plan.ingredient_id), "name": plan.ingredient.name, "gain": p["gain"],
+                        "weeks": p["weeks"]})
+    return out
+
+
+# ---------------- phân loại ABC theo giá trị tiêu hao ----------------
+
+def abc_classes(values):
+    """{nguyên liệu: 'A' | 'B' | 'C'} theo giá trị tiêu hao 8 tuần (lượng × đơn giá nhập gần nhất): nhóm A chiếm tới
+    plan_abc_a_percent tổng giá trị, nhóm B tới plan_abc_b_percent, còn lại C. Chưa có giá thì xếp C."""
+    total = sum(v for v in values.values() if v)
+    a_cut, b_cut = params.get("plan_abc_a_percent") / 100, params.get("plan_abc_b_percent") / 100
+    out, acc = {}, 0.0
+    for ing, v in sorted(values.items(), key=lambda x: -(x[1] or 0)):
+        if not v or total <= 0:
+            out[ing] = "C"
+            continue
+        out[ing] = "A" if acc < a_cut else "B" if acc < b_cut else "C"
+        acc += v / total
+    return out
+
+
+def _unit_costs():
+    from apps.inventory.models import ReceiptLine
+
+    out = {}
+    for ing, price in ReceiptLine.objects.order_by("receipt__created_at", "pk").values_list("ingredient_id", "unit_price"):
+        out[ing] = price
+    return out
+
+
 # ---------------- dự báo theo nguyên liệu ----------------
 
-def build_forecasts(now=None, ingredients=None):
-    """Dự báo cho mọi nguyên liệu đang dùng từ chuỗi tiêu hao; lưu chuỗi vào bảng tiêu hao theo ngày."""
+def build_forecasts(now=None, ingredients=None, report=None):
+    """Dự báo cho mọi nguyên liệu đang dùng; lưu chuỗi tiêu hao theo ngày. `report` (dict) nhận tóm tắt dự báo tổng số
+    ly cả quán để lưu vào lần tính.
+
+    Mỗi nguyên liệu được đánh giá trên chính chuỗi tiêu hao của nó với các cách: bình quân theo loại ngày, bình quân có
+    trọng số cùng thứ, Holt-Winters, TSB (khi bán lác đác) và phân cấp từ tổng số ly × tỷ trọng món × định mức."""
     from apps.inventory.models import Ingredient
+
+    from . import hierarchy
 
     now = now or timezone.now()
     today = timezone.localdate(now)
     data = usage.build(today, now=now)
     usage.save(data)
     horizon = params.get("plan_horizon_days")
-    dl = params.get("forecast_delta_level_percent") / 100
-    ds = params.get("forecast_delta_season_percent") / 100
-    out = {}
+    cfg_m = method_config()
+    choices = current_choices()
+    total, items, recent = hierarchy.from_usage(data, now)
+    total_choice = choices.get(TOTAL_KEY)
+    h = hierarchy.build(total, items, today=today, horizon=horizon, cfg=cfg_m,
+                        approved=total_choice.method if total_choice else None,
+                        owner_days=params.get("forecast_item_owner_days"))
+    tfc = h["total"]
+    _hold_proposal(tfc, total_choice, today, cfg_m.switch_days)
+    _remember(TOTAL_KEY, None, tfc, choices, now)
+    if report is not None:
+        st7 = ((tfc.get("errors") or {}).get(tfc.get("method")) or {}).get("7") or {}
+        report["tong"] = {"stage": tfc.get("stage"), "provisional": tfc.get("provisional"),
+                          "eligible_days": tfc.get("eligible_days"), "proposal": tfc.get("proposal"),
+                          "wape_7": st7.get("wape"), "bias_7": st7.get("bias"), "item_wape_1": h.get("item_wape"),
+                          "items": len(items)}
+    costs = _unit_costs()
+    out, values = {}, {}
+    unmeasured = _unmeasured_yields(data["book"])
     qs = Ingredient.objects.filter(is_active=True)
     if ingredients is not None:
         qs = qs.filter(pk__in=ingredients)
@@ -106,52 +268,95 @@ def build_forecasts(now=None, ingredients=None):
         cfg = settings_for(ing)
         series = usage.series_for(data, ing.pk)
         rates = usage.rates(data, ing.pk)
-        prev = (IngredientPlan.objects.filter(ingredient=ing, is_current=True).values_list("forecast", flat=True)
-                .first() or {})
-        fc = methods.forecast_ingredient(
-            series, today=today, horizon=horizon, estimate=cfg["estimate"],
+        if not ing.is_semi:
+            values[ing.pk] = rates["ub_8w"] * costs[ing.pk] if ing.pk in costs else None
+        external, external_daily = hierarchy.ingredient_forecast(h, items, ing.pk)
+        cls = methods.demand_class(series, series[-1][0], cfg_m) if series else None
+        candidates = ["LN", "WMA", "HW"] + (["TSB"] if cls and cls["intermittent"] else []) + \
+                     (["PH"] if external_daily is not None else [])
+        key = series_key(ing.pk)
+        choice = choices.get(key)
+        decision_h = cfg["R"] + cfg["exposure"]
+        fc = methods.forecast_series(
+            series, today=today, horizon=horizon, cfg=cfg_m, candidates=candidates,
+            approved=choice.method if choice else None, estimate=cfg["estimate"],
             # Ước tính không rõ thời điểm thì coi như mới có hôm nay: không dùng để đánh giá quá khứ.
-            estimate_since=cfg["estimate_since"] or today, delta_level=dl, delta_season=ds,
-            previous_method=prev.get("method"), decision_h=cfg["R"] + cfg["exposure"],
-            target_h=cfg["T"] + cfg["exposure"],
-            k=policy.k_for(cfg["csl"]), csl=cfg["csl"], blocked_share=rates["blocked_share"],
-            blocked_limit=params.get("plan_blocked_limit_percent") / 100,
-            switch_gain=params.get("plan_switch_gain_percent") / 100, switch_days=7 * params.get("plan_switch_weeks"),
-            bias_limit=params.get("plan_bias_limit_percent") / 100)
+            estimate_since=cfg["estimate_since"] or today, external=external, external_daily=external_daily,
+            decision_h=decision_h, target_h=cfg["T"] + cfg["exposure"], csl=cfg["csl"],
+            k=policy.k_for(cfg["csl"]), blocked_share=rates["blocked_share"],
+            blocked_limit=params.get("plan_blocked_limit_percent") / 100)
+        fc["decision_h"] = decision_h
+        _hold_proposal(fc, choice, today, cfg_m.switch_days)
+        if any(v for _, v, st in series if st == "ok"):  # chưa từng dùng thì chưa có gì để chọn
+            _remember(key, ing, fc, choices, now)
         days = [today + timedelta(days=j) for j in range(horizon)]
         fc.update(first_day=today.isoformat(), rates=rates, factor=rates["factor"],
                   recipe_ratio={d.isoformat(): r for d, r in usage.recipe_ratio(data, ing.pk, days, now).items()},
-                  seasonal=seasonal_for(ing, today, days[-1], series, fc), season_current=season_current(fc, today))
+                  seasonal=seasonal_for(ing, today, days[-1], series, hierarchy.group_shares(items, ing.pk, recent)),
+                  season_current=season_current(fc, today))
         fc["warnings"].extend(season_warnings(fc["seasonal"]))
-        if prev.get("m2_init") and fc.get("m2_init") and prev["m2_init"] != fc["m2_init"]:
-            fc["warnings"].append("Cách khởi tạo M2 vừa đổi (ước tính Chủ quán có hiệu lực mới); sai số đã được đo lại "
-                                  "theo cách khởi tạo mới, kết quả đánh giá cũ không còn áp dụng.")
+        fc["semi"] = ing.is_semi
+        names = [name for semi_id, (name, parts) in unmeasured.items() if ing.pk == semi_id or ing.pk in parts]
+        if names:
+            fc["warnings"].append("Lượng thu mỗi mẻ của " + ", ".join(names) + " chưa cân đo thực tế: phần nhu cầu đi "
+                                  "qua bán thành phẩm này là ước tính.")
         if rates["recon"]["flag"]:
             fc["warnings"].append(
                 f"Đối soát lệch {rates['recon']['gap'] * 100:.1f}%".replace(".", ",")
                 + f": tiêu hao tính từ dòng bán và hủy sau pha chế {rates['recon']['sold_plus_voided']:,.0f} khác sổ kho "
                   f"{rates['recon']['ledger']:,.0f}.".replace(",", "."))
+        out[ing.pk] = fc
+    abc = abc_classes(values)
+    for pk, fc in out.items():
+        fc["abc"] = abc.get(pk, "C") if not fc.get("semi") else ""
         fc.pop("version", None)
         fc["version"] = _digest(fc)[:16]
-        out[ing.pk] = fc
     return out
 
 
-def seasonal_for(ing, first, last, series=(), fc=None):
-    """Điều chỉnh theo mùa của Chủ quán còn hiệu lực trong tầm dự báo (riêng nguyên liệu hoặc chung).
+def _unmeasured_yields(book):
+    """{bán thành phẩm chưa cân đo lượng thu mỗi mẻ: (tên, mọi thành phần qua các tầng)}."""
+    from apps.inventory.models import SemiRecipe
+
+    out = {}
+    for r in SemiRecipe.objects.filter(yield_measured=False, product__is_active=True).select_related("product"):
+        out[r.product_id] = (r.product.name, set(book.explode({r.product_id: 1.0})) - {r.product_id})
+    return out
+
+
+def semi_equivalent(ing):
+    """Lượng nguyên liệu gốc đang nằm trong bán thành phẩm còn trong kho (quy theo định mức mẻ). Nhu cầu nguyên liệu
+    gốc tính cả phần đi qua bán thành phẩm, nên phần đã làm sẵn được tính như tồn có thể dùng."""
+    from apps.inventory.models import IngredientStock
+
+    book = usage.RecipeBook()
+    total = 0.0
+    for st in IngredientStock.objects.filter(ingredient__kind="ban_thanh_pham", ingredient__is_active=True):
+        left = float(st.physical - st.reserved)
+        if left > 0:
+            total += book.explode({st.ingredient_id: left}).get(ing.pk, 0.0)
+    return round(total, 2)
+
+
+def seasonal_for(ing, first, last, series=(), shares=None):
+    """Điều chỉnh theo mùa của Chủ quán còn hiệu lực trong tầm dự báo: riêng nguyên liệu, theo nhóm món hoặc chung.
 
     Mức Chủ quán đặt là thay đổi so với nền ngoài mùa. Nền lấy theo thứ tự: số Chủ quán nhập có căn cứ (chỉ cho điều
     chỉnh riêng một nguyên liệu), hoặc trung bình ngày đủ điều kiện trong 28 ngày trước khi mùa bắt đầu (cần ít nhất 14
     ngày). Khi mùa đã bắt đầu mà không xác định được nền thì ghi trạng thái và không áp, vì không biết mô hình đã học
-    mùa tới đâu. Cách gộp các điều chỉnh cùng ngày ở `season_factor`."""
+    mùa tới đâu. Điều chỉnh theo nhóm món chỉ giữ khi nguyên liệu có được dùng cho nhóm đó, kèm tỷ lệ tiêu hao của
+    nguyên liệu dành cho nhóm (`shares`). Cách gộp các điều chỉnh cùng ngày ở `season_target`."""
     from django.db.models import Q
 
     from .models import SeasonalAdjustment
 
+    shares = shares or {}
     rows = (SeasonalAdjustment.objects.filter(is_active=True, start__lte=last, end__gte=first)
             .filter(Q(ingredient=ing) | Q(ingredient__isnull=True)).order_by("start", "pk"))
     out = []
     for a in rows:
+        if a.menu_group_id and not shares.get(a.menu_group_id):
+            continue
         if a.ingredient_id and a.baseline_daily:
             baseline, source = float(a.baseline_daily), "chu_quan"
         else:
@@ -160,6 +365,8 @@ def seasonal_for(ing, first, last, series=(), fc=None):
         started = a.start <= first
         out.append({"id": a.pk, "start": a.start.isoformat(), "end": a.end.isoformat(), "percent": a.percent,
                     "basis": a.basis, "ingredient": a.ingredient_id, "independent": a.independent,
+                    "menu_group": a.menu_group_id, "share": round(shares.get(a.menu_group_id, 1.0), 4)
+                    if a.menu_group_id else None,
                     "created_at": a.created_at.isoformat(), "started": started,
                     "baseline": round(baseline, 2) if baseline else None, "baseline_source": source,
                     "status": ("chua_xac_dinh_nen" if started and baseline is None else
@@ -175,24 +382,65 @@ def season_current(fc, first):
     return sum(vals) / len(vals) if len(vals) == 7 else None
 
 
-def applicable_seasons(seasonal, iso):
-    """Các điều chỉnh dùng cho một ngày. Điều chỉnh riêng của nguyên liệu thay thế điều chỉnh chung. Nhiều điều chỉnh
-    cùng phạm vi chỉ cộng tác động khi Chủ quán đã xác nhận tất cả là nguyên nhân độc lập; nếu không chỉ dùng điều
-    chỉnh ghi gần nhất."""
-    active = [a for a in seasonal or [] if a["start"] <= iso <= a["end"]]
-    use = [a for a in active if a["ingredient"]] or [a for a in active if not a["ingredient"]]
+def _pick(use):
+    """Nhiều điều chỉnh cùng phạm vi chỉ cộng tác động khi Chủ quán đã xác nhận tất cả là nguyên nhân độc lập; nếu
+    không chỉ dùng điều chỉnh ghi gần nhất."""
     if len(use) > 1 and not all(a.get("independent") for a in use):
-        use = [max(use, key=lambda a: a["created_at"])]
+        return [max(use, key=lambda a: a["created_at"])]
     return use
+
+
+def applicable_seasons(seasonal, iso):
+    """Các điều chỉnh dùng cho một ngày. Điều chỉnh riêng của nguyên liệu thay thế mọi điều chỉnh khác; điều chỉnh
+    theo nhóm món thay điều chỉnh chung cho phần tiêu hao của nhóm đó."""
+    active = [a for a in seasonal or [] if a["start"] <= iso <= a["end"]]
+    specific = [a for a in active if a["ingredient"]]
+    if specific:
+        return _pick(specific)
+    groups = {}
+    for a in active:
+        if a.get("menu_group"):
+            groups.setdefault(a["menu_group"], []).append(a)
+    general = [a for a in active if not a["ingredient"] and not a.get("menu_group")]
+    return [a for lst in groups.values() for a in _pick(lst)] + _pick(general)
+
+
+def season_target(use):
+    """Hệ số thay đổi tổng hợp so với nền: nhóm món nào có điều chỉnh riêng thì phần tiêu hao của nhóm đó nhận mức của
+    nhóm; phần còn lại nhận điều chỉnh chung (nếu có)."""
+    if not use:
+        return 1.0
+    if any(a["ingredient"] for a in use):
+        target = 1.0
+        for a in use:
+            target *= 1 + a["percent"] / 100
+        return target
+    change, covered = 0.0, 0.0
+    groups = {}
+    for a in use:
+        if a.get("menu_group"):
+            groups.setdefault(a["menu_group"], []).append(a)
+    for lst in groups.values():
+        t = 1.0
+        for a in lst:
+            t *= 1 + a["percent"] / 100
+        share = lst[0].get("share") or 0.0
+        change += share * (t - 1)
+        covered += share
+    general = [a for a in use if not a.get("menu_group")]
+    if general:
+        t = 1.0
+        for a in general:
+            t *= 1 + a["percent"] / 100
+        change += max(0.0, 1 - covered) * (t - 1)
+    return 1 + change
 
 
 def season_factor(fc, iso):
     use = applicable_seasons(fc.get("seasonal"), iso)
     if not use:
         return 1.0
-    target = 1.0
-    for a in use:
-        target *= 1 + a["percent"] / 100
+    target = season_target(use)
     first = min(use, key=lambda a: a["start"])
     if not first.get("started"):
         return target  # mùa chưa bắt đầu: mô hình chưa thể học mùa, áp đủ
@@ -210,13 +458,13 @@ def season_warnings(seasonal):
     specific = [a for a in seasonal or [] if a["ingredient"]]
     for g in [a for a in seasonal or [] if not a["ingredient"]]:
         if any(x["start"] <= g["end"] and g["start"] <= x["end"] for x in specific):
-            out.append(f"Điều chỉnh chung {g['percent']:+d}% bị điều chỉnh riêng của nguyên liệu thay thế trong phần "
-                       f"thời gian trùng.")
+            out.append(f"Điều chỉnh {'theo nhóm món' if g.get('menu_group') else 'chung'} {g['percent']:+d}% bị điều "
+                       f"chỉnh riêng của nguyên liệu thay thế trong phần thời gian trùng.")
     return out
 
 
 def demand(fc, t):
-    """d(t) = Û b(t) × (1 + r h + r vh + r k) × hệ số đổi định mức của ngày t × điều chỉnh mùa của Chủ quán."""
+    """d(t) = Û b(t) × (1 + r h + r vh + r k + r btp) × hệ số đổi định mức của ngày t × điều chỉnh mùa của Chủ quán."""
     base = fc.get("daily", {}).get(t.isoformat())
     if base is None:
         return None
@@ -270,7 +518,8 @@ def committed(ing):
         for line in (slip.payload or {}).get("lines", []):
             try:
                 size = ItemSize.objects.get(pk=line.get("size"))
-                per = book.usage(size.item_id, size.pk, tuple(int(o) for o in line.get("options") or ()), now)
+                per = book.usage(size.item_id, size.pk, tuple(int(o) for o in line.get("options") or ()), now,
+                                 explode=True)
                 total += per.get(ing.pk, 0.0) * int(line.get("quantity") or 1)
             except (ItemSize.DoesNotExist, TypeError, ValueError):
                 continue
@@ -316,6 +565,7 @@ def compute(ing, fc, now=None, run=None):
     stock = IngredientStock.objects.filter(ingredient=ing).first()
     physical = float(stock.physical) if stock else 0.0
     reserved = float(stock.reserved) if stock else 0.0
+    semi = semi_equivalent(ing)
     c = committed(ing)
     po_rows = PurchaseOrder.objects.filter(ingredient=ing)
     parts = {
@@ -323,23 +573,23 @@ def compute(ing, fc, now=None, run=None):
         "don_dat": [po_rows.count(), str(max(po_rows.values_list("updated_at", flat=True), default=""))],
         "du_bao": fc.get("version"), "tham_so": params_version(ing, cfg),
         # f0 làm tròn 2 chữ số: cùng dữ liệu nhưng phần nhu cầu còn lại của hôm nay đổi thì tính lại.
-        "ton": [physical, reserved, c], "con_lai_hom_nay": round(f0, 2), "cach_tinh": ENGINE_VERSION,
+        "ton": [physical, reserved, c, semi], "con_lai_hom_nay": round(f0, 2), "cach_tinh": ENGINE_VERSION,
     }
     data_hash = _digest(parts)
     existing = IngredientPlan.objects.filter(ingredient=ing, calc_date=today, data_hash=data_hash).first()
     if existing:
         return existing
-    result = evaluate(ing, cfg, fc, today, f0, physical, reserved, c)
+    result = evaluate(ing, cfg, fc, today, f0, physical, reserved, c, semi)
     plan = _save(ing, today, now, data_hash, parts, fc, result, run)
     return plan
 
 
-def evaluate(ing, cfg, fc, today, f0, physical, reserved, c):
-    """Chạy bộ tính với dự báo đã có; không ghi gì."""
+def evaluate(ing, cfg, fc, today, f0, physical, reserved, c, semi=0.0):
+    """Chạy bộ tính với dự báo đã có; không ghi gì. semi: lượng quy đổi đang nằm trong bán thành phẩm đã làm."""
     lots, excluded, _ = _lots(ing, today)
     if not fc.get("method"):
         return {"action": policy.NO_DATA, "reason": "; ".join(fc.get("warnings") or ["Chưa đủ dữ liệu."]),
-                "available": physical - reserved, "physical": physical, "reserved": reserved, "lots": lots,
+                "available": physical - reserved + semi, "physical": physical, "reserved": reserved, "lots": lots,
                 "excluded": excluded}
     horizon = params.get("plan_horizon_days")
     daily = {}
@@ -353,7 +603,7 @@ def evaluate(ing, cfg, fc, today, f0, physical, reserved, c):
     quantiles = _quantile_mode(fc, cfg, factor)
     aging = on_hand_lots(ing)
     inp = policy.Inputs(
-        today=today, daily=daily, sigma=sigma, csl=cfg["csl"], available=physical - reserved, physical=physical,
+        today=today, daily=daily, sigma=sigma, csl=cfg["csl"], available=physical - reserved + semi, physical=physical,
         reserved=reserved, committed=c, lots=lots, excluded=excluded, f0=f0, group=cfg["group"],
         review_days=cfg["R"], target_days=cfg["T"], review_weekday=cfg["weekday"], exposure=cfg["exposure"],
         pack=cfg["pack"], pack_label=cfg["pack_label"], unit=cfg["unit"], moq=cfg["moq"], shelf_life=cfg["shelf"],
@@ -364,19 +614,17 @@ def evaluate(ing, cfg, fc, today, f0, physical, reserved, c):
     result = policy.compute(inp)
     result["periods"] = periods(daily, sigma, today, f0, cfg, fc.get("sigma_measured") or [])
     result["settings"] = cfg
+    if semi:
+        result["semi_equivalent"] = semi
     return result
 
 
 def _quantile_mode(fc, cfg, factor):
-    """Cách phân vị chỉ bật khi độ phủ thực tế của phân vị nằm trong CSL ± 3 điểm ở cả hai cửa sổ."""
-    q, cov = fc.get("error_quantiles") or {}, fc.get("quantile_coverage") or {}
-    band = params.get("plan_quantile_band_points") / 100
-    target = cfg["csl"] / 100
-    ok = {}
-    for h, qv in q.items():
-        c = cov.get(h, cov.get(str(h)))
-        if c is not None and abs(c - target) <= band:
-            ok[int(h)] = qv * factor
+    """Tồn an toàn theo phân vị sai số cửa sổ khi đã có đủ gốc đánh giá (forecast_quantile_min); chưa đủ thì bộ tính
+    dùng kσ. Phân vị âm (dự báo thường cao hơn thực tế) lấy 0: tồn an toàn không âm."""
+    q, n = fc.get("error_quantiles") or {}, fc.get("quantile_n") or {}
+    need = params.get("forecast_quantile_min")
+    ok = {int(h): max(float(qv), 0.0) * factor for h, qv in q.items() if (n.get(h, n.get(str(h))) or 0) >= need}
     return {"by_h": ok} if ok else None
 
 
@@ -454,22 +702,78 @@ def run_full(now=None, user=None, kind=PlanRun.Kind.FULL):
 
     now = now or timezone.now()
     run = PlanRun.objects.create(kind=kind, started_at=now, triggered_by=user)
-    forecasts = build_forecasts(now)
-    counts = {}
+    report = {}
+    forecasts = build_forecasts(now, report=report)
+    counts, semi = {}, {}
     for ing in Ingredient.objects.filter(is_active=True, pk__in=forecasts).select_related("main_supplier"):
+        if ing.is_semi:
+            semi[str(ing.pk)] = semi_outlook(forecasts[ing.pk], timezone.localdate(now))
+            continue
         plan = compute(ing, forecasts[ing.pk], now, run)
         counts[plan.action] = counts.get(plan.action, 0) + 1
-    run.summary = {"nguyen_lieu": len(forecasts), "hanh_dong": counts}
+    IngredientPlan.objects.filter(is_current=True, ingredient__kind="ban_thanh_pham").update(
+        is_current=False, superseded_at=now)
+    run.summary = {"nguyen_lieu": len(forecasts) - len(semi), "hanh_dong": counts, "ban_thanh_pham": semi, **report}
     run.save(update_fields=["summary", "updated_at"])
     return run
 
 
+def semi_outlook(fc, today, days=3):
+    """Nhu cầu bán thành phẩm vài ngày tới (đã gồm hủy, pha hỏng và đổ bỏ) để gợi ý số mẻ cần làm."""
+    out = []
+    for j in range(days):
+        t = today + timedelta(days=j)
+        v = demand(fc, t) if fc.get("method") else None
+        out.append([t.isoformat(), round(v, 1) if v is not None else None])
+    return {"daily": out, "provisional": bool(fc.get("provisional")), "warnings": fc.get("warnings", [])[:3]}
+
+
+def production_suggestions(now=None):
+    """Bán thành phẩm cần làm: nhu cầu phần còn lại của hôm nay (sau giờ đóng cửa thì cho ngày mai) theo lần tính toàn
+    bộ gần nhất, trừ tồn có thể dùng, quy ra số mẻ nguyên (làm tròn lên)."""
+    import math
+
+    from apps.inventory.models import Ingredient, SemiRecipe
+    from apps.inventory.stock import ensure_stock_rows
+
+    ensure_stock_rows()
+    now = now or timezone.now()
+    today = timezone.localdate(now)
+    last = PlanRun.objects.filter(kind__in=[PlanRun.Kind.FULL, PlanRun.Kind.MANUAL]).order_by("-started_at").first()
+    outlook = (last.summary or {}).get("ban_thanh_pham", {}) if last else {}
+    recipes = {r.product_id: r for r in SemiRecipe.objects.prefetch_related("lines__ingredient")}
+    f0 = remaining_today(now)
+    day = today if f0 > 0 else today + timedelta(days=1)
+    out = []
+    for ing in Ingredient.objects.filter(kind="ban_thanh_pham", is_active=True).select_related("stock").order_by("name"):
+        o = outlook.get(str(ing.pk)) or {}
+        daily = dict((d, v) for d, v in o.get("daily", []))
+        base = daily.get(day.isoformat())
+        need = None if base is None else base * (f0 if day == today else 1.0)
+        available = float(ing.stock.available)
+        recipe = recipes.get(ing.pk)
+        batches = None
+        if need is not None and recipe is not None:
+            gap = need - available
+            batches = math.ceil(gap / float(recipe.batch_output) - 1e-9) if gap > 0 else 0
+        out.append({"ingredient": ing, "recipe": recipe, "available": available, "need": need,
+                    "for_today": day == today, "batches": batches, "provisional": o.get("provisional", False)})
+    return out
+
+
 def recompute(ingredient_id, now=None):
-    """Tính lại chính sách cho một nguyên liệu với dự báo của lần tính toàn bộ gần nhất."""
+    """Tính lại chính sách cho một nguyên liệu với dự báo của lần tính toàn bộ gần nhất. Bán thành phẩm không có kế
+    hoạch mua: tồn của nó đổi thì tính lại các nguyên liệu gốc của nó (tồn quy đổi đã đổi)."""
     from apps.inventory.models import Ingredient
 
     ing = Ingredient.objects.filter(pk=ingredient_id, is_active=True).first()
     if ing is None:
+        return None
+    if ing.is_semi:
+        from apps.inventory.models import semi_components
+
+        for comp in semi_components(ing.pk):
+            recompute(comp, now)
         return None
     last = IngredientPlan.objects.filter(ingredient=ing).order_by("-calculated_at", "-id").first()
     if last is None or not last.forecast:
@@ -524,7 +828,7 @@ def on_movement(sender, instance, created, **kwargs):
 # ---------------- đọc cho màn hình và cảnh báo ----------------
 
 def current_plans():
-    return (IngredientPlan.objects.filter(is_current=True, ingredient__is_active=True)
+    return (IngredientPlan.objects.filter(is_current=True, ingredient__is_active=True, ingredient__kind="mua_vao")
             .select_related("ingredient", "ingredient__main_supplier"))
 
 

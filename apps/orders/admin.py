@@ -1,8 +1,6 @@
 from django.contrib import admin
 
-from apps.accounts.permissions import OwnerOnlyAdminMixin
-from apps.audit.admin_mixins import AuditedAdminMixin
-from apps.core.models import Store
+from apps.accounts.permissions import AppManagedAdminMixin, OwnerOnlyAdminMixin
 
 from .models import AdjustmentReason, Order, OrderLine
 
@@ -49,17 +47,9 @@ class OrderAdmin(OwnerOnlyAdminMixin, admin.ModelAdmin):
 
 
 @admin.register(AdjustmentReason)
-class AdjustmentReasonAdmin(OwnerOnlyAdminMixin, AuditedAdminMixin, admin.ModelAdmin):
-    """Chủ quán tự sửa danh mục lý do điều chỉnh; lý do đã dùng thì ngừng dùng thay vì xóa (BRU-08)."""
+class AdjustmentReasonAdmin(AppManagedAdminMixin, admin.ModelAdmin):
+    """Chủ quán sửa danh mục lý do điều chỉnh ở mục Dữ liệu nền; lý do đã dùng thì ngừng dùng thay vì xóa (BRU-08)."""
 
+    app_resource = "ly-do"
     list_display = ("name", "sort_order", "is_active")
-    list_editable = ("sort_order", "is_active")
     exclude = ("store",)
-
-    def save_model(self, request, obj, form, change):
-        if getattr(obj, "store_id", None) is None:
-            obj.store = request.user.store or Store.get_default()
-        super().save_model(request, obj, form, change)
-
-    def has_delete_permission(self, request, obj=None):
-        return False

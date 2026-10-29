@@ -60,7 +60,7 @@ def day_frames(day, now=None):
         over = bool((med is not None and med > standard) or backlog > backlog_limit)
         if not in_frame and (not backlog or not open_hour <= hour < close_hour):
             continue  # ngoài giờ mở cửa, món tồn từ tối trước không phải tải của khung đó
-        frames.append({"start": f_start, "end": f_end, "orders": len({l.order_id for l in in_frame}), "cups": cups,
+        frames.append({"start": f_start, "end": f_end, "label": f"{hour:02d}–{hour + 1:02d} giờ", "orders": len({l.order_id for l in in_frame}), "cups": cups,
                        "load": Decimal(load).quantize(Decimal("0.1")), "median_wait": med, "backlog": backlog,
                        "overloaded": over, "presence": presence(f_start, f_end)})
     return {"frames": frames, "standard": standard, "backlog_limit": backlog_limit}

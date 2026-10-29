@@ -8,6 +8,9 @@
 - Cờ ngày: đóng cửa, chưa chốt, hết hàng của chính nguyên liệu, bị chặn gián tiếp do món dùng nguyên liệu khác bị
   ngừng bán (món đó chiếm từ 20% tiêu hao của nguyên liệu này).
 - Đối soát: U b theo lượng chụp lúc bán cộng U h phải khớp tiêu hao pha chế trong sổ kho, lệch trên 1% thì báo.
+- Bán thành phẩm (định mức nhiều tầng): U b của nguyên liệu gốc gồm phần đi qua bán thành phẩm theo định mức mẻ; U b
+  của bán thành phẩm là lượng cần làm. Bán thành phẩm hủy, đổ bỏ (kể cả hết hạn cuối ngày) quy ra nguyên liệu gốc thành
+  tỷ lệ r btp. Đối soát vẫn so lượng trực tiếp với sổ kho, vì món bán ra chỉ trừ bán thành phẩm.
 """
 
 from collections import defaultdict
@@ -25,7 +28,7 @@ STOCK_LOSS = ("hu_hong", "het_han")
 
 def empty_row():
     return {"sales": 0.0, "sales_as_sold": 0.0, "voided": 0.0, "waste_operational": 0.0, "waste_one_off": 0.0,
-            "waste_stock": 0.0, "count_adjust": 0.0, "consumed_ledger": 0.0, "own_stockout": False,
+            "waste_stock": 0.0, "count_adjust": 0.0, "consumed_ledger": 0.0, "via_semi": 0.0, "own_stockout": False,
             "indirect_block": False}
 
 
@@ -43,6 +46,7 @@ class RecipeBook:
     def __init__(self):
         self._versions = {}
         self._lines = {}
+        self._semi = None
 
     def version(self, item_id, at):
         from apps.inventory.models import RecipeVersion
@@ -64,7 +68,8 @@ class RecipeBook:
             self._lines[version_id] = (by_size, by_option)
         return self._lines[version_id]
 
-    def usage(self, item_id, size_id, option_ids, at):
+    def usage(self, item_id, size_id, option_ids, at, explode=False):
+        """{nguyên liệu: lượng mỗi ly}. explode=True quy bán thành phẩm trong định mức ra nguyên liệu gốc."""
         version = self.version(item_id, at)
         if version is None:
             return {}
@@ -73,7 +78,36 @@ class RecipeBook:
         for opt in option_ids:
             for ing, q in by_option.get(opt, {}).items():
                 out[ing] = out.get(ing, 0.0) + q
-        return out
+        return self.explode(out) if explode else out
+
+    def semi(self):
+        """{bán thành phẩm: {thành phần: lượng cho một đơn vị}} theo định mức mẻ hiện hành."""
+        if self._semi is None:
+            from apps.inventory.models import SemiRecipe
+
+            self._semi = {r.product_id: r.per_unit() for r in SemiRecipe.objects.prefetch_related("lines")}
+        return self._semi
+
+    def explode(self, direct, depth=0):
+        """Định mức nhiều tầng: mỗi bán thành phẩm giữ lượng của chính nó (lượng cần làm) và cộng thêm thành phần của
+        nó theo định mức mẻ, xuống tới nguyên liệu mua vào. Nguyên liệu mua vào giữ nguyên."""
+        semi = self.semi()
+        if not semi:
+            return dict(direct)
+        out = defaultdict(float)
+        for ing, q in direct.items():
+            out[ing] += q
+            parts = semi.get(ing)
+            if parts and depth < 6:
+                for comp, q2 in self.explode({c: q * per for c, per in parts.items()}, depth + 1).items():
+                    out[comp] += q2
+        return dict(out)
+
+    def via_semi(self, direct):
+        """Phần nguyên liệu (và bán thành phẩm tầng dưới) đi qua bán thành phẩm: lượng quy đổi trừ lượng trực tiếp."""
+        if not self.semi():
+            return {}
+        return {k: v - direct.get(k, 0.0) for k, v in self.explode(direct).items() if v - direct.get(k, 0.0) > 1e-9}
 
     def items_using(self, at_items, ingredient_id, at):
         """Món có dòng định mức (kích cỡ hoặc tùy chọn) dùng nguyên liệu này."""
@@ -172,7 +206,7 @@ def build(today=None, days=365, include_simulated=None, now=None):
     size_item = dict(ItemSize.objects.values_list("pk", "item_id"))
     for d, by_key in configs.items():
         for (item_id, size_id, opts), cups in by_key.items():
-            for ing, q in book.usage(item_id, size_id, opts, at_now).items():
+            for ing, q in book.usage(item_id, size_id, opts, at_now, explode=True).items():
                 row(ing, d)["sales"] += q * cups
         for ing, q in as_sold[d].items():
             row(ing, d)["sales_as_sold"] += q
@@ -180,7 +214,7 @@ def build(today=None, days=365, include_simulated=None, now=None):
         item_id = size_item.get(size_id)
         if item_id is None:
             continue
-        per_cup = book.usage(item_id, size_id, (), at_now)
+        per_cup = book.usage(item_id, size_id, (), at_now, explode=True)
         for d, cups in series.items():
             if d in imported_days:
                 configs.setdefault(d, defaultdict(int))[(item_id, size_id, ())] += cups
@@ -189,19 +223,32 @@ def build(today=None, days=365, include_simulated=None, now=None):
     lo, hi = _aware(start), _aware(end + timedelta(days=1))
     for p in PostPrepCancellation.objects.filter(created_at__gte=lo, created_at__lt=hi):
         d = _local_day(p.created_at)
-        for ing, q in p.usage.items():
-            row(int(ing), d)["voided"] += float(q)
+        direct = {int(ing): float(q) for ing, q in p.usage.items()}
+        for ing, q in direct.items():
+            row(ing, d)["voided"] += q
+        for ing, q in book.via_semi(direct).items():
+            row(ing, d)["via_semi"] += q
     for w in Waste.objects.filter(created_at__gte=lo, created_at__lt=hi):
-        r = row(w.ingredient_id, _local_day(w.created_at))
+        d = _local_day(w.created_at)
+        r = row(w.ingredient_id, d)
         if w.reason in STOCK_LOSS:
             r["waste_stock"] += float(w.quantity)
         elif w.is_one_off:
             r["waste_one_off"] += float(w.quantity)
         else:
             r["waste_operational"] += float(w.quantity)
+        if not w.is_one_off:
+            # Bán thành phẩm đổ bỏ (pha hỏng, hết hạn cuối ngày) là nguyên liệu gốc đã dùng: tính vào nhu cầu gốc.
+            for ing, q in book.via_semi({w.ingredient_id: float(w.quantity)}).items():
+                row(ing, d)["via_semi"] += q
     open_h, close_h = params.get("open_hour"), params.get("close_hour")
+    # Bán thành phẩm về 0 trong giờ mở cửa thường chỉ là hết mẻ và làm mẻ mới sau vài phút, không phải khách bị từ
+    # chối: chỉ coi là hết hàng khi có trường hợp thiếu hoặc báo Đã hết. Nếu không, mỗi lần dùng hết mẻ sẽ chặn cả
+    # nguyên liệu gốc (chặn gián tiếp) và chuỗi của nguyên liệu gốc gần như không còn ngày học được.
+    semi_ids = set(Ingredient.objects.filter(kind="ban_thanh_pham").values_list("pk", flat=True))
     for m in StockMovement.objects.filter(created_at__gte=lo, created_at__lt=hi,
-                                          kind__in=["pha_che", "kiem_ke", "nhap_hang", "hao_hut"]).order_by("id"):
+                                          kind__in=["pha_che", "kiem_ke", "nhap_hang", "hao_hut", "lam_btp"]
+                                          ).order_by("id"):
         d = _local_day(m.created_at)
         r = row(m.ingredient_id, d)
         if m.kind == "pha_che":
@@ -209,7 +256,7 @@ def build(today=None, days=365, include_simulated=None, now=None):
         elif m.kind == "kiem_ke":
             r["count_adjust"] += float(m.quantity)
         hour = timezone.localtime(m.created_at).hour
-        if m.balance_after <= 0 and m.quantity < 0 and open_h <= hour < close_h:
+        if m.balance_after <= 0 and m.quantity < 0 and open_h <= hour < close_h and m.ingredient_id not in semi_ids:
             r["own_stockout"] = True  # tồn về 0 trong giờ mở cửa
     own = defaultdict(set)
     for c in ShortageCase.objects.filter(day__gte=start, day__lte=end):
@@ -247,7 +294,7 @@ def _indirect(rows, own, configs, book, at, today):
     for d in recent:
         for (item_id, size_id, opts), cups in configs[d].items():
             items.add(item_id)
-            for ing, q in book.usage(item_id, size_id, opts, at).items():
+            for ing, q in book.usage(item_id, size_id, opts, at, explode=True).items():
                 share[ing][item_id] += q * cups
     users = {j: book.items_using(items, j, at) for j in own}
     for ing, by_item in share.items():
@@ -292,11 +339,12 @@ def rates(data, ingredient_id):
         if d not in finalized:
             continue
         for k in ("sales", "sales_as_sold", "voided", "waste_operational", "waste_one_off", "waste_stock",
-                  "consumed_ledger"):
+                  "consumed_ledger", "via_semi"):
             sums[k] += r[k]
     ub = sums["sales"]
     r_h = sums["voided"] / ub if ub > 0 else 0.0
     r_vh = sums["waste_operational"] / ub if ub > 0 else 0.0
+    r_btp = sums["via_semi"] / ub if ub > 0 else 0.0
     r_k, run = 0.0, []
     for day, diff in data["stock_counts"].get(ingredient_id, []):
         run = run + [(day, diff)] if diff < 0 else []
@@ -310,8 +358,8 @@ def rates(data, ingredient_id):
     gap = abs(sold - ledger) / ledger if ledger > 0 else (0.0 if sold == 0 else 1.0)
     open_days = [d for d in finalized]
     blocked = sum(1 for d in open_days if d in rows and (rows[d]["own_stockout"] or rows[d]["indirect_block"]))
-    return {"r_h": round(r_h, 4), "r_vh": round(r_vh, 4), "r_k": round(r_k, 4),
-            "factor": round(1 + r_h + r_vh + r_k, 4), "ub_8w": round(ub, 2),
+    return {"r_h": round(r_h, 4), "r_vh": round(r_vh, 4), "r_k": round(r_k, 4), "r_btp": round(r_btp, 4),
+            "factor": round(1 + r_h + r_vh + r_k + r_btp, 4), "ub_8w": round(ub, 2),
             "waste_stock_8w": round(sums["waste_stock"], 2), "waste_one_off_8w": round(sums["waste_one_off"], 2),
             "recon": {"sold_plus_voided": round(sold, 2), "ledger": round(ledger, 2), "gap": round(gap, 4),
                       "flag": gap > params.get("plan_reconcile_gap_permille") / 1000 and (sold > 0 or ledger > 0)},
@@ -332,7 +380,7 @@ def recipe_ratio(data, ingredient_id, future_days, now):
         return {}
 
     def total(at):
-        return sum(book.usage(item, size, opts, at).get(ingredient_id, 0.0) * cups
+        return sum(book.usage(item, size, opts, at, explode=True).get(ingredient_id, 0.0) * cups
                    for (item, size, opts), cups in agg.items())
 
     base = total(now)
@@ -353,6 +401,8 @@ def save(data):
     """Lưu chuỗi tiêu hao vào bảng lưu sẵn để xem lại và đối soát (ghi đè theo nguyên liệu và ngày)."""
     from .models import IngredientDailyUsage
 
+    fields = ["source", "day_status", "sales", "sales_as_sold", "voided", "waste_operational", "waste_one_off",
+              "waste_stock", "count_adjust", "consumed_ledger", "own_stockout", "indirect_block", "eligible"]
     objs = []
     for ing, by_day in data["rows"].items():
         for d in data["dates"]:
@@ -365,9 +415,7 @@ def save(data):
                 ingredient_id=ing, date=d, day_status=st,
                 source="tep" if d in data["imported_days"] else "he_thong",
                 eligible=st == "du_dieu_kien" and not r["own_stockout"] and not r["indirect_block"],
-                **{k: v for k, v in r.items()}))
-    fields = ["source", "day_status", "sales", "sales_as_sold", "voided", "waste_operational", "waste_one_off",
-              "waste_stock", "count_adjust", "consumed_ledger", "own_stockout", "indirect_block", "eligible"]
+                **{k: v for k, v in r.items() if k in fields}))
     IngredientDailyUsage.objects.bulk_create(objs, batch_size=500, update_conflicts=True,
                                              unique_fields=["ingredient", "date"], update_fields=fields)
     return len(objs)

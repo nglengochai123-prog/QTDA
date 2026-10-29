@@ -116,6 +116,21 @@ class ScheduleTests(TestCase):
         self.client.login(username=self.b1.username, password=PASSWORD)
         self.assertContains(self.client.get(reverse("schedule:mine")), "Ca tối")
 
+    def test_republish_tells_people_who_lost_every_shift(self):
+        RoleNeed.objects.create(shift=self.evening, role=Role.PHA_CHE, needed=1)
+        sv.register(self.b1, {self.evening.pk: Role.PHA_CHE}, now=self.before_deadline)
+        sv.auto_assign(self.owner, self.week)
+        sv.publish(self.owner, self.week)
+        # Gợi ý chạy lại sau khi công bố: lượt gợi ý cũ của b1 bị bỏ, b2 được xếp tay vào ca khác.
+        Assignment.objects.filter(user=self.b1).update(removed_at=timezone.now())
+        sv.assign(self.owner, self.afternoon, self.b2, Role.PHA_CHE)
+        with mock.patch("apps.core.push.send_to_user", return_value=(1, "")) as send:
+            with self.captureOnCommitCallbacks(execute=True):
+                sv.publish(self.owner, self.week)
+        told = {c.args[0]: c.args[2] for c in send.call_args_list}
+        self.assertEqual(told[self.b1], "Bạn không còn ca nào trong tuần này.")
+        self.assertIn("Pha chế", told[self.b2])
+
     def test_need_suggestion_queue_model_and_cover(self):
         inputs = {"today": timezone.localdate(), "scv": 1.0,
                   "profile": ({True: {17: 0.2, 18: 0.3, 19: 0.1}, False: {}}, 1.0),

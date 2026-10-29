@@ -174,3 +174,49 @@ class OwnerOnlyAdminMixin:
 
 class OwnerOnlyInlineMixin(OwnerOnlyAdminMixin):
     """Bảng con trong trang quản trị: cùng quyền với trang cha, không dùng quyền model mặc định."""
+
+
+class AppManagedAdminMixin(OwnerOnlyAdminMixin):
+    """Dữ liệu sửa trong ứng dụng (mục Dữ liệu nền): trang quản trị chỉ xem.
+
+    Màn trong ứng dụng có kiểm tra và việc kèm theo khi lưu (gắn đơn vào ca vừa mở, khóa tài khoản người nghỉ việc,
+    báo ca chồng giờ, điều kiện mở bán món); sửa thẳng ở trang quản trị sẽ bỏ qua các bước đó.
+    """
+
+    app_resource = ""  # khóa trang Dữ liệu nền tương ứng, ví dụ "mon"
+
+    def has_add_permission(self, request, *args):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def _point_to_app(self, request):
+        from django.contrib import messages
+        from django.urls import reverse
+
+        if self.app_resource and request.method == "GET":
+            url = reverse("masterdata:list", args=[self.app_resource])
+            messages.info(request, f"Trang này chỉ để xem. Thêm, sửa ở mục Dữ liệu nền của ứng dụng: {url}")
+
+    def changelist_view(self, request, extra_context=None):
+        self._point_to_app(request)
+        return super().changelist_view(request, extra_context)
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        self._point_to_app(request)
+        return super().change_view(request, object_id, form_url, extra_context)
+
+
+class AppManagedInlineMixin(OwnerOnlyInlineMixin):
+    def has_add_permission(self, request, *args):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

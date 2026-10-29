@@ -67,7 +67,18 @@ class CapacityTests(SimpleTestCase):
         self.assertFalse(r["infeasible"])
         self.assertEqual(r["conflict"], "hạn dùng")
         self.assertEqual(len(r["options"]), 2)
-        self.assertGreater(r["expiry_excess"], 0)
+        # hạn 1 ngày chỉ dùng hết 60 trong khi gói 100: mua tối thiểu 1 gói, cảnh báo phần hết hạn
+        self.assertEqual((r["packs"], r["expiry_excess"]), (1, 40))
+
+    def test_safety_stock_is_capped_by_shelf_life(self):
+        inp = base(available=0.0, shelf_life=3, target_days=2, sigma=[80.0] * 10)
+        for j in range(0, 12):
+            inp.daily[THU + timedelta(days=j)] = 60.0
+        r = policy.compute(inp)
+        # hạn 3 ngày, chu kỳ mua 2 ngày: phần tồn an toàn chỉ còn 1 ngày để dùng, tối đa 60
+        self.assertEqual(r["ss_cap"], 60)
+        self.assertLessEqual(r["ss_S"], 60)
+        self.assertTrue(any("Tồn an toàn giới hạn" in n for n in r["notes"]))
 
 
 class ReviewScheduleTests(SimpleTestCase):
@@ -108,21 +119,21 @@ class OutOfSampleTests(SimpleTestCase):
         return out
 
     def test_first_origin_does_not_use_later_data(self):
-        """Điểm 4: đổi dữ liệu từ ngày thứ 40 không được làm đổi sai số tại gốc đầu tiên."""
+        """Điểm 4: đổi dữ liệu sau gốc đầu tiên không được làm đổi sai số tại gốc đầu tiên."""
         a = self.series(lambda d, x: x)
-        b = self.series(lambda d, x: x * (2.0 if d.weekday() == 2 else 0.5))
-        for method in ("M0", "M1", "M2"):
+        for method in ("M0", "LN", "WMA", "HW", "TSB"):
             ra = methods.rolling(a, method, estimate=(700, 760, 820), lookback=200)
+            first = ra["origins"][0][0]
+            b = [(d, x * (2.0 if d.weekday() == 2 else 0.5) if d > first else x, st) for d, x, st in a]
             rb = methods.rolling(b, method, estimate=(700, 760, 820), lookback=200)
-            first_a, first_b = ra["origins"][0], rb["origins"][0]
-            self.assertEqual(first_a[0], first_b[0])
-            self.assertAlmostEqual(first_a[1][1], first_b[1][1], places=6, msg=method)
+            self.assertEqual(rb["origins"][0][0], first)
+            self.assertAlmostEqual(ra["origins"][0][1][1][1], rb["origins"][0][1][1][1], places=6, msg=method)
 
-    def test_m2_without_prior_starts_after_initialisation(self):
+    def test_holt_winters_starts_after_eight_weeks(self):
         s = self.series(lambda d, x: x)
-        r = methods.rolling(s, "M2", lookback=200)
+        r = methods.rolling(s, "HW", lookback=200)
         ok_days = [d for d, _, st in s if st == "ok"]
-        self.assertGreaterEqual(r["origins"][0][0], ok_days[6])
+        self.assertGreaterEqual(r["origins"][0][0], ok_days[55])
 
     def test_estimate_after_origin_is_not_used(self):
         s = self.series(lambda d, x: x)
@@ -137,12 +148,12 @@ class LongWindowTests(SimpleTestCase):
         start = date(2026, 1, 5)
         s = [(start + timedelta(days=j), 100.0 + (j * 7919 % 13), "ok") for j in range(200)]
         today = s[-1][0] + timedelta(days=1)
-        fc = methods.forecast_ingredient(s, today=today, horizon=35, decision_h=15)
+        fc = methods.forecast_series(s, today=today, horizon=35, decision_h=15, candidates=("LN", "WMA"))
         self.assertGreaterEqual(len(fc["sigma"]), 31)
         self.assertTrue(fc["sigma_measured"][14])  # R 14 + ℓ 1
         self.assertTrue(fc["sigma_measured"][30])  # tháng
         short = s[-40:]
-        fc = methods.forecast_ingredient(short, today=today, horizon=35, decision_h=15)
+        fc = methods.forecast_series(short, today=today, horizon=35, decision_h=15, candidates=("LN", "WMA"))
         self.assertFalse(all(fc["sigma_measured"]))
 
 
@@ -184,20 +195,20 @@ class SeasonNotDoubleCountedTests(SimpleTestCase):
         self.assertAlmostEqual(f(20, 100, 110) * 110, 120)
 
 
-class M2SameInitTests(SimpleTestCase):
-    def test_published_m2_uses_same_initialisation_as_evaluated(self):
-        """Rà soát lần 2, điểm 2: ước tính có hiệu lực sau đầu chuỗi thì M2 phát hành cũng khởi tạo từ dữ liệu."""
+class FutureEstimateTests(SimpleTestCase):
+    def test_estimate_effective_later_is_not_blended_yet(self):
+        """Rà soát lần 2, điểm 2: ước tính có hiệu lực sau hôm nay chưa được trộn vào dự báo bước đầu."""
         start = date(2026, 3, 2)
-        s = [(start + timedelta(days=j), 100.0 + (j * 37 % 11), "ok") for j in range(90)]
-        day = [s[-1][0] + timedelta(days=1)]
-        late = s[30][0]
-        with_late = methods._predict(s, "M2", None, day, 0.95, 0.99, (700, 760, 820), late)
-        no_estimate = methods._predict(s, "M2", None, day, 0.95, 0.99)
-        self.assertEqual(with_late, no_estimate)
-        from_start = methods._predict(s, "M2", None, day, 0.95, 0.99, (700, 760, 820), start)
-        self.assertNotEqual(from_start, no_estimate)
-        fc = methods.forecast_ingredient(s, today=day[0], horizon=7, estimate=(700, 760, 820), estimate_since=late)
-        self.assertEqual(fc["m2_init"], "du_lieu")
+        s = [(start + timedelta(days=j), 100.0 + (j * 37 % 11), "ok") for j in range(30)]
+        today = s[-1][0] + timedelta(days=1)
+        later = methods.forecast_series(s, today=today, horizon=7, estimate=(700, 760, 820),
+                                        estimate_since=today + timedelta(days=3), candidates=("LN", "WMA"))
+        none = methods.forecast_series(s, today=today, horizon=7, candidates=("LN", "WMA"))
+        self.assertIsNone(later["prior_weight"])
+        self.assertEqual(later["daily"], none["daily"])
+        now = methods.forecast_series(s, today=today, horizon=7, estimate=(700, 760, 820), estimate_since=start,
+                                      candidates=("LN", "WMA"))
+        self.assertIsNotNone(now["prior_weight"])
 
 
 class SeasonInPlanTests(PlanBase):
