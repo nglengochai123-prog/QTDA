@@ -36,6 +36,20 @@ def filter_orders(params):
         qs = qs.filter(status=params["trang_thai"])
     if params.get("da_thu") == "1":  # cùng phạm vi với báo cáo doanh thu: đơn đã thu tiền (kể cả sau đó hủy hóa đơn)
         qs = qs.filter(payment__isnull=False)
+    if params.get("theo") == "thanh_toan":
+        from apps.reports import receipts
+
+        lo, hi = _bounds(_day(params.get("tu")), _day(params.get("den")))
+        lo = lo or timezone.make_aware(datetime(1970, 1, 1))
+        hi = hi or timezone.now() + timedelta(days=1)
+        selected = [e for e in receipts.entries(lo, hi) if receipts.matches(e, params)]
+        ids = {oid for entry in selected for oid in entry["order_ids"]}
+        qs = qs.filter(pk__in=ids)
+        if (params.get("ban") or "").isdigit():
+            qs = qs.filter(table_id=int(params["ban"]))
+        allowed = set(qs.values_list("pk", flat=True))
+        qs.receipt_entries = [e for e in selected if allowed.intersection(e["order_ids"])]
+        return qs
     basis = "payment__created_at" if params.get("theo") == "thanh_toan" else "created_at"
     lo, hi = _bounds(_day(params.get("tu")), _day(params.get("den")))
     if lo:
@@ -60,13 +74,23 @@ def filter_orders(params):
 @require_GET
 def order_lookup(request):
     qs = filter_orders(request.GET)
+    entries = getattr(qs, "receipt_entries", None)
+    receipt_total = sum(e["amount"] for e in entries) if entries is not None else None
     page, qs_params = paginate(request, qs)
+    page_ids = {o.pk for o in page.object_list}
+    receipt_rows = {}
+    for entry in entries or []:
+        if not page_ids.intersection(entry["order_ids"]):
+            continue
+        payment = entry["payment"]
+        row = receipt_rows.setdefault(payment.pk, {"payment": payment, "amount": 0, "legacy": entry["legacy"]})
+        row["amount"] += entry["amount"]
     advanced = sum(1 for key in ADVANCED_FILTERS if request.GET.get(key))
     total = Order.objects.filter(pk__in=qs.values("pk")).aggregate(s=Sum("total"))["s"] or 0
     return render(request, "orders/lookup.html", {
         "page": page, "qs": qs_params, "f": request.GET, "statuses": Order.Status.choices,
         "advanced": advanced, "filtered": advanced or any(request.GET.get(k) for k in ("q", "ca", "nhom", "gio", "da_thu")),
-        "count_total": total,
+        "count_total": total, "receipt_total": receipt_total, "receipt_rows": list(receipt_rows.values()),
         "methods": Payment.Method.choices, "tables": Table.objects.filter(is_active=True),
         "staff": User.objects.filter(is_active=True).order_by("first_name"),
         "sizes": ItemSize.objects.select_related("item").order_by("item__name", "price"),

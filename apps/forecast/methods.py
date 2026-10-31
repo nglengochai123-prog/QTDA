@@ -541,7 +541,7 @@ def stage_default(eligible, cfg=DEFAULT, has_ph=False):
     return "WMA" if eligible >= 28 else "LN"
 
 
-def forecast_series(series, *, today, horizon, cfg=DEFAULT, candidates=("WMA",), approved=None, estimate=None,
+def _forecast_series(series, *, today, horizon, cfg=DEFAULT, candidates=("WMA",), approved=None, estimate=None,
                     estimate_since=None, external=None, external_daily=None, default=None, decision_h=2,
                     target_h=None, csl=95, k=1.645, blocked_share=0.0, blocked_limit=0.2, hw_params=None):
     """Dự báo theo ngày từ hôm nay và sai số cửa sổ σ_h của một chuỗi, theo giai đoạn dữ liệu (mục 4.4).
@@ -726,3 +726,38 @@ def residual_season_factor(percent, baseline, current):
 
 def with_overrides(cfg, **kw):
     return replace(cfg, **kw)
+
+
+def forecast_series(series, *, today, horizon, cfg=DEFAULT, candidates=("WMA",), approved=None, estimate=None,
+                    estimate_since=None, external=None, external_daily=None, default=None, decision_h=2,
+                    target_h=None, csl=95, k=1.645, blocked_share=0.0, blocked_limit=0.2, hw_params=None):
+    out = _forecast_series(series, today=today, horizon=horizon, cfg=cfg, candidates=candidates,
+                           approved=approved, estimate=estimate, estimate_since=estimate_since,
+                           external=external, external_daily=external_daily, default=default,
+                           decision_h=decision_h, target_h=target_h, csl=csl, k=k,
+                           blocked_share=blocked_share, blocked_limit=blocked_limit, hw_params=hw_params)
+    if approved and out.get("method") != approved and not cfg.auto_switch:
+        candidate = out.get("method")
+        out["warnings"] = [w.replace("tạm chọn cách khác theo đánh giá", "đề xuất cách khác, chờ duyệt")
+                            .replace("tạm dùng", "ứng viên thay thế là") for w in out["warnings"]]
+        out["auto_pick"] = False
+        out["requires_approval"] = True
+        out["fallback_candidate"] = candidate
+        out["proposal"] = ({"method": candidate, "from": approved, "gain": 0, "h": decision_h,
+                            "weeks": 0, "mae_from": None, "mae_to": None, "urgent": True,
+                            "reason": "Cách đã duyệt không còn đủ điều kiện"} if candidate else None)
+        # Do not publish another method under the old approval. Keep the approved method only if calculable.
+        pred = predictor(series, approved, cfg, estimate=estimate, profile=weekday_profile(series, today),
+                         hw_params=hw_params, external_daily=external_daily)
+        out["method"] = approved if pred else None
+        out["daily"] = { (today + timedelta(days=j)).isoformat(): max(pred(today + timedelta(days=j)), 0.0)
+                         for j in range(horizon)} if pred else {}
+        out["provisional"] = True
+        out["sigma"] = []
+        out["sigma_measured"] = []
+        out["sigma_label"] = "Chờ duyệt phương án dự báo; không dùng sai số của cách thay thế"
+        out["warnings"].append("Cách đã duyệt không còn đủ điều kiện. Chưa áp dụng cách thay thế; "
+                               "Chủ quán cần xem xét đề xuất. Tạm dừng đề xuất mua tự động.")
+    else:
+        out["requires_approval"] = False
+    return out

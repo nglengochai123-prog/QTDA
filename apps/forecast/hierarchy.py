@@ -70,7 +70,7 @@ def build(total, items, *, today, horizon, cfg=methods.DEFAULT, approved=None, o
                                        approved=approved, decision_h=TOTAL_DECISION_H, hw_params=hw_params)
     out = {"total": total_fc, "origins": {}, "today": {}, "item_wape": None, "items": {}}
     method = total_fc.get("method")
-    if not method or not total:
+    if not method or not total or total_fc.get("requires_approval"):
         return out
     keep_days = horizon + 7
     res = methods.rolling(total, method, cfg, h_max=1, keep=True, keep_days=keep_days, hw_params=hw_params)

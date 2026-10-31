@@ -28,7 +28,7 @@ from .models import IngredientPlan, OrderSuggestion, PlanRun
 log = logging.getLogger(__name__)
 
 # Đổi khi cách tính thay đổi, để bản tính cũ không được trả lại cho cùng dữ liệu sau khi nâng cấp phần mềm.
-ENGINE_VERSION = "ke-hoach-mua-5"
+ENGINE_VERSION = "ke-hoach-mua-6"
 
 PARAM_KEYS = tuple(k for k in params.DEFAULTS if k.startswith(("plan_", "forecast_")))
 TOTAL_KEY = "tong"
@@ -136,6 +136,8 @@ def _remember(key, ingredient, fc, choices, now):
 def _hold_proposal(fc, choice, today, days):
     """Đề xuất đổi cách chỉ đưa ra khi cách đang dùng đã được chọn từ `days` ngày trước trở lên (lần tự chọn đầu,
     lần Chủ quán đổi hay giữ nguyên gần nhất): tránh đổi qua đổi lại, và không nhắc lại đề xuất vừa bị từ chối."""
+    if fc.get("requires_approval"):
+        return
     if fc.get("proposal") and (choice is None or (today - timezone.localdate(choice.created_at)).days < days):
         fc["proposal"] = None
 
@@ -149,6 +151,8 @@ def decide_switch(user, key, accept, note=""):
 
     from .models import ForecastChoice
 
+    if not user.is_owner:
+        raise ValidationError("Chỉ Chủ quán được duyệt phương pháp dự báo.")
     ingredient = None
     if key == TOTAL_KEY:
         run = PlanRun.objects.filter(kind__in=[PlanRun.Kind.FULL, PlanRun.Kind.MANUAL]).first()
@@ -587,7 +591,7 @@ def compute(ing, fc, now=None, run=None):
 def evaluate(ing, cfg, fc, today, f0, physical, reserved, c, semi=0.0):
     """Chạy bộ tính với dự báo đã có; không ghi gì. semi: lượng quy đổi đang nằm trong bán thành phẩm đã làm."""
     lots, excluded, _ = _lots(ing, today)
-    if not fc.get("method"):
+    if not fc.get("method") or fc.get("requires_approval"):
         return {"action": policy.NO_DATA, "reason": "; ".join(fc.get("warnings") or ["Chưa đủ dữ liệu."]),
                 "available": physical - reserved + semi, "physical": physical, "reserved": reserved, "lots": lots,
                 "excluded": excluded}
@@ -882,6 +886,8 @@ def accept(user, plan, quantity, note, expected_date, operation_key):
     chạy một lần (gửi lại trả về đơn đã tạo)."""
     from apps.inventory import operations as ops
 
+    if plan.forecast.get("requires_approval"):
+        raise ValidationError("Cần duyệt phương pháp dự báo trước khi chấp nhận kế hoạch mua.")
     ing = plan.ingredient
     quantity = Decimal(str(quantity))
     suggested = plan.suggested_quantity

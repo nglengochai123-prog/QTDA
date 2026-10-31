@@ -41,6 +41,6 @@ class DrillDownTests(Base):
         self.assertContains(r, reverse("control:exceptions") + "?muc=")
         today = timezone.localdate().isoformat()
         r = self.client.get(reverse("reports:materials"), {"tu": today, "den": today})
-        self.assertContains(r, reverse("inventory:ledger") + f"?nvl={self.d['milk'].pk}&amp;loai=pha_che")
+        self.assertContains(r, reverse("inventory:ledger") + f"?nvl={self.d['milk'].pk}&amp;loai=tieu_hao_va_lam")
         self.assertEqual(self.client.get(reverse("inventory:report"), {"thang": "2026-01"}).status_code, 200)
         self.assertEqual(self.client.get(reverse("reports:revenue_control")).status_code, 200)

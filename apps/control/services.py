@@ -100,6 +100,8 @@ def open_case(user, title, *, operation_key):
 
 @transaction.atomic
 def add_evidence(user, case, *, exception=None, discrepancy=None, amount=None, transaction_ref=""):
+    if case.verifications.exists():
+        raise ValidationError("Vụ việc đã xác minh; không thêm bằng chứng làm thay đổi kỳ đã ghi nhận.")
     if (exception is None) == (discrepancy is None):
         raise ValidationError("Chọn đúng một bằng chứng: ngoại lệ hoặc khoản chênh lệch.")
     if exception is not None:
@@ -130,11 +132,15 @@ def verify(user, case, amount, reason=""):
         return  # gửi lại cùng giá trị: không ghi thêm bản xác minh
     if previous is not None and not reason.strip():
         raise ValidationError("Thay đổi giá trị đã xác minh phải có lý do và bằng chứng (bản đính chính).")
-    LossVerification.objects.create(case=case, amount=int(amount), reason=reason, actor=user)
+    if int(amount) < 0:
+        raise ValidationError("Giá trị tổn thất không được âm.")
+    verification = LossVerification.objects.create(case=case, amount=int(amount), reason=reason, actor=user)
     case.status = LossCase.Status.CONCLUDED
     case.save(update_fields=["status", "updated_at"])
     record(Action.UPDATE, actor=user, obj=case, object_type="control.LossCase",
-           before={"da_xac_minh": previous}, after={"da_xac_minh": int(amount)}, reason=reason)
+           before={"da_xac_minh": previous}, after={"da_xac_minh": int(amount), "verification_id": verification.pk,
+                  "period_amounts": loss_periods(case, int(amount)),
+                  "period_basis": "Kỳ bằng chứng; phân bổ tỷ lệ khi vụ việc có nhiều kỳ"}, reason=reason)
 
 
 def recover(user, case, amount, note="", *, operation_key):
@@ -166,15 +172,79 @@ def recover(user, case, amount, note="", *, operation_key):
 BO01_MONTHLY_TARGET = 200000
 
 
+def _evidence_month(ev):
+    """Business date, independent of when the case was entered."""
+    if ev.discrepancy_id:
+        at = ev.discrepancy.shift.starts_at
+    elif ev.exception.shift_id:
+        at = ev.exception.shift.starts_at
+    elif ev.exception.order_id:
+        at = ev.exception.order.created_at
+    elif ev.exception.period:
+        try:
+            from datetime import date
+            return date.fromisoformat(ev.exception.period + "-01").strftime("%Y-%m")
+        except ValueError:
+            at = ev.exception.created_at
+    else:
+        at = ev.exception.created_at
+    return timezone.localtime(at).strftime("%Y-%m")
+
+
+def _split_amount(amount, weights):
+    """Deterministic proportional attribution; integer rounding preserves the exact case amount."""
+    total = sum(weights.values())
+    if total <= 0:
+        return {min(weights): amount} if weights else {}
+    parts = {key: amount * value // total for key, value in weights.items()}
+    remainder = amount - sum(parts.values())
+    for key in sorted(weights, key=lambda key: (-(amount * weights[key] % total), key))[:remainder]:
+        parts[key] += 1
+    return parts
+
+
+def loss_periods(case, amount):
+    groups = {}
+    for ev in case.evidence.select_related("discrepancy__shift", "exception__shift", "exception__order"):
+        key = ev.transaction_ref or f"evidence:{ev.pk}"
+        month = _evidence_month(ev)
+        old_month, old_amount = groups.get(key, (month, 0))
+        groups[key] = (min(month, old_month), max(old_amount, ev.amount, 0))
+    weights = {}
+    for month, value in groups.values():
+        weights[month] = weights.get(month, 0) + value
+    if not weights or not sum(weights.values()):
+        weights = {timezone.localtime(case.created_at).strftime("%Y-%m"): 1}
+    return _split_amount(amount, weights)
+
+
+def _verified_periods(case):
+    from apps.audit.models import AuditLog
+
+    latest = case.verifications.order_by("-created_at", "-id").first()
+    if latest is None:
+        return {}
+    log = AuditLog.objects.filter(object_type="control.LossCase", object_id=str(case.pk),
+                                  after__verification_id=latest.pk).order_by("-id").first()
+    saved = (log.after or {}).get("period_amounts") if log else None
+    return saved if saved is not None else loss_periods(case, latest.amount)
+
+
 def monthly_control(year, month):
     from apps.shifts.models import Discrepancy
 
-    cases = LossCase.objects.filter(created_at__year=year, created_at__month=month)
-    verified = sum(c.verified_amount() or 0 for c in cases)
-    recovered = sum(c.recovered_amount() for c in cases)
+    period = f"{year:04d}-{month:02d}"
+    verified = recovered = open_cases = 0
+    for case in LossCase.objects.prefetch_related("verifications", "recoveries"):
+        parts = _verified_periods(case)
+        verified += parts.get(period, 0)
+        if parts:
+            recovered += _split_amount(case.recovered_amount(), parts).get(period, 0)
+        if case.status == LossCase.Status.OPEN and period in loss_periods(case, 0):
+            open_cases += 1
     in_process = 0
     for d in Discrepancy.objects.current().filter(shift__starts_at__year=year, shift__starts_at__month=month,
-                                                  difference__lt=0):
+                                                difference__lt=0):
         if not d.is_unexplained_shortage:
             continue
         try:
@@ -182,9 +252,8 @@ def monthly_control(year, month):
         except LossEvidence.DoesNotExist:
             evidence = None
         if evidence is not None and evidence.case.verified_amount() is not None:
-            continue  # đã chuyển sang tổn thất đã xác minh, chỉ tính một lần
+            continue
         in_process += -d.difference
-    open_cases = cases.filter(status=LossCase.Status.OPEN).count()
     return {"verified": verified, "in_process": in_process, "recovered": recovered,
             "verified_remaining": verified - recovered, "control_value": verified + in_process,
             "target": BO01_MONTHLY_TARGET, "open_cases": open_cases, "updated_at": timezone.now()}

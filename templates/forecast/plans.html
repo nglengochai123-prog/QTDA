@@ -16,9 +16,9 @@
   <a class="stat" href="#du-hang"><p class="stat-label">Đủ hàng</p><p class="stat-value">{{ counts.enough }}</p><p class="stat-note">chưa cần làm gì</p></a>
 </div>
 
-{% if proposals %}<div class="notice notice-info" role="status"><div><strong>Có cách dự báo chính xác hơn cho {{ proposals|length }} mục</strong>
+{% if proposals %}<div class="notice notice-info" role="status"><div><strong>Có đề xuất phương pháp dự báo cần xem xét cho {{ proposals|length }} mục</strong>
   <p class="notice-extra">So trên các tuần gần nhất, cách dự báo khác cho sai số thấp hơn rõ rệt. Hệ thống chỉ đổi khi Chủ quán duyệt.</p>
-  <ul class="plain-list switch-list">{% for x in proposals %}<li><span><strong>{{ x.name }}</strong>: sai số thấp hơn {{ x.gain_pct }}% trong {{ x.weeks }} tuần gần nhất</span>
+  <ul class="plain-list switch-list">{% for x in proposals %}<li><span><strong>{{ x.name }}</strong>: {% if x.weeks %}sai số thấp hơn {{ x.gain_pct }}% trong {{ x.weeks }} tuần gần nhất{% else %}cách đã duyệt không còn đủ điều kiện; đề xuất thay thế đang chờ duyệt{% endif %}</span>
     {% if can_decide %}<form method="post" data-once class="switch-actions">{% csrf_token %}<input type="hidden" name="key" value="{{ x.key }}"><button class="btn btn-primary btn-xs" type="submit" name="action" value="doi_cach">Đổi cách dự báo</button><button class="btn btn-quiet btn-xs" type="submit" name="action" value="giu_cach">Giữ cách hiện tại</button></form>{% else %}<span class="muted">chờ Chủ quán duyệt</span>{% endif %}</li>{% endfor %}</ul>
 </div></div>{% endif %}
 

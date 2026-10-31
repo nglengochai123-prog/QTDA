@@ -359,7 +359,7 @@ class AdjustAfterPrepayTests(Base):
 
         today = timezone.localdate()
         report = revenue(today, today)
-        self.assertEqual((report["total"], report["refunds"], report["net"]), (25000, 0, 25000))
+        self.assertEqual((report["total"], report["refunds"], report["net"]), (50000, 25000, 25000))
         self.assertEqual(problems(), [])
 
     def test_increase_creates_charge_collected_into_shift(self):

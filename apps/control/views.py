@@ -57,7 +57,7 @@ def _next_open(exc):
 @capability_required(Cap.EXCEPTION_REVIEW)
 @require_GET
 def exception_list(request):
-    from django.db.models import Count, Sum
+    from django.db.models import Count, OuterRef, Subquery, Sum
 
     status = request.GET.get("trang-thai", "cho_xem_xet")
     items = ExceptionCase.objects.select_related("employee", "shift", "order", "ingredient", "loss_case")
@@ -69,7 +69,12 @@ def exception_list(request):
     by_kind = items.order_by().values("kind").annotate(n=Count("id"))
     if g.get("loai") in ExceptionCase.Kind.values:
         items = items.filter(kind=g["loai"])
-    filtered = False
+    result = g.get("ket_qua")
+    if result in ExceptionReview.Result.values or result == "chua_xem":
+        latest = ExceptionReview.objects.filter(exception_id=OuterRef("pk"), superseded_by__isnull=True).order_by("-created_at")
+        items = items.annotate(effective_result=Subquery(latest.values("result")[:1]))
+        items = items.filter(effective_result__isnull=True) if result == "chua_xem" else items.filter(effective_result=result)
+    filtered = bool(result)
     for key, field in (("nhan_vien", "employee_id"), ("ca", "shift_id")):
         if (g.get(key) or "").isdigit():
             items = items.filter(**{field: int(g[key])})
@@ -102,6 +107,7 @@ def exception_list(request):
         "pending": pending.count(), "overdue": len(due), "pending_sum": pending.aggregate(s=Sum("amount"))["s"] or 0,
         "first_open": pending.order_by("-created_at").values_list("pk", flat=True).first(),
         "reviewed": reviewed.count(), "violations": reviewed.filter(result=ExceptionReview.Result.VIOLATION).count(),
+        "review_results": [("chua_xem", "Chưa xem xét")] + list(ExceptionReview.Result.choices),
         "staff": User.objects.filter(is_active=True).order_by("first_name"),
         "shift": Shift.objects.filter(pk=g["ca"]).first() if (g.get("ca") or "").isdigit() else None})
 

@@ -119,6 +119,9 @@ def record_prepayment(user, operation_key, order, spec):
              "phuong_thuc": payment.get_method_display(), "loai": payment.get_kind_display(), "ca": str(shift)}
     if payment.cash_received is not None:
         after.update(khach_dua=payment.cash_received, tien_thua=payment.change_due)
+    from apps.reports.receipts import capture
+
+    capture(payment, [order], extra=False)
     record(Action.CREATE, actor=user, obj=payment, object_type="orders.Payment", after=after,
            reason="Thu tiền trước khi pha chế")
     return {"payment": payment.pk, "amount": payment.amount, "method": payment.get_method_display(),
@@ -197,6 +200,9 @@ def collect_charge(user, operation_key, charge_id, method, transfer_confirmed=Fa
         payment = Payment.objects.create(
             store=order.store, table=order.table, method=method, kind=Payment.Kind.EXTRA, amount=charge.amount,
             cashier=user, shift=shift, operation_key=f"{operation_key[:50]}-thu-them", cash_received=received)
+        from apps.reports.receipts import capture
+
+        capture(payment, [order], extra=True)
         charge.status, charge.payment = PrepaidCharge.Status.COLLECTED, payment
         charge.collected_by, charge.collected_at = user, timezone.now()
         charge.save(update_fields=["status", "payment", "collected_by", "collected_at", "updated_at"])

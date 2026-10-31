@@ -26,6 +26,7 @@
 
 <details class="filter-more"{% if filtered %} open{% endif %}><summary>Lọc theo nhân viên hoặc ngày</summary>
 <form method="get" class="filter-bar" aria-label="Bộ lọc ngoại lệ"><input type="hidden" name="trang-thai" value="{{ status }}">{% if f.loai %}<input type="hidden" name="loai" value="{{ f.loai }}">{% endif %}
+  <div class="field"><label for="f-result">Kết quả xem xét</label><select class="input" id="f-result" name="ket_qua"><option value="">Tất cả</option>{% for value, label in review_results %}<option value="{{ value }}"{% if f.ket_qua == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
   <div class="field"><label for="f-nv">Nhân viên</label><select class="input" id="f-nv" name="nhan_vien"><option value="">Tất cả</option>{% for u in staff %}<option value="{{ u.pk }}"{% if f.nhan_vien == u.pk|stringformat:"d" %} selected{% endif %}>{{ u }}</option>{% endfor %}</select></div>
   <div class="field"><label for="f-tu">Từ ngày</label><input class="input" id="f-tu" type="date" name="tu" value="{{ f.tu }}"></div>
   <div class="field"><label for="f-den">Đến ngày</label><input class="input" id="f-den" type="date" name="den" value="{{ f.den }}"></div>

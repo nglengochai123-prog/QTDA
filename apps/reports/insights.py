@@ -5,8 +5,7 @@ toán và ma trận thực đơn theo phương pháp Kasavana và Smith (1982): 
 mỗi ly. Giá vốn lấy từ lượng nguyên liệu thực trừ kho của từng dòng món (gồm cả tùy chọn như trân châu, kem muối) nhân
 giá nhập gần nhất tính tới ngày trừ kho.
 
-Doanh thu cùng định nghĩa với báo cáo doanh thu (services.revenue): giá trị món tính tiền của đơn đã thu tiền, theo
-thời điểm thanh toán. Hoàn tiền không trừ ở đây (báo cáo doanh thu có dòng doanh thu thuần).
+Doanh thu cùng định nghĩa với báo cáo doanh thu (services.revenue): từng khoản tiền thực thu, phân bổ món cố định tại lúc thu. Hoàn tiền không trừ ở đây (báo cáo doanh thu có dòng doanh thu thuần).
 """
 
 from collections import defaultdict
@@ -64,34 +63,41 @@ class _Period:
                     cost_of[sid] += -float(q) * float(prices.at(ing, timezone.localdate(at)))
         self.revenue = self.cups = 0
         self.cost = 0.0
+        self.cost_complete = True
         self.order_ids = set()
         self.days = defaultdict(lambda: {"revenue": 0, "orders": set(), "cups": 0, "cost": 0.0})
         self.items = defaultdict(lambda: {"revenue": 0, "cups": 0, "cost": 0.0, "group": ""})
         self.groups, self.methods = defaultdict(int), defaultdict(int)
         self.slots = defaultdict(set)
-        for line in lines:
-            value = line.unit_price * line.billable_quantity
-            cups = line.billable_quantity
-            cost = cost_of.get(str(line.pk), 0.0)
-            paid = timezone.localtime(line.order.payment.created_at)
-            created = timezone.localtime(line.order.created_at)
+        from .receipts import entries
+        from datetime import datetime
+
+        for entry in entries(start, end):
+            value, cups = entry["amount"], entry["cups"]
+            cost = cost_of.get(str(entry["line_id"]), 0.0) if cups else 0.0
+            payment = entry["payment"]
+            if entry["legacy"] or payment.kind in ("tra_truoc", "thu_them"):
+                self.cost_complete = False
+            paid = timezone.localtime(payment.created_at)
+            created = timezone.localtime(datetime.fromisoformat(entry["ordered_at"])) if entry["ordered_at"] else paid
             self.revenue += value
             self.cups += cups
             self.cost += cost
-            self.order_ids.add(line.order_id)
+            self.order_ids.update(entry["order_ids"])
             d = self.days[paid.date()]
             d["revenue"] += value
-            d["orders"].add(line.order_id)
+            d["orders"].update(entry["order_ids"])
             d["cups"] += cups
             d["cost"] += cost
-            it = self.items[line.item_name]
+            it = self.items[entry["item"]]
             it["revenue"] += value
             it["cups"] += cups
             it["cost"] += cost
-            it["group"] = line.item.group.name
-            self.groups[line.item.group.name] += value
-            self.methods[line.order.payment.get_method_display()] += value
-            self.slots[(created.weekday(), created.hour)].add(line.order_id)
+            it["group"] = entry["group"]
+            self.groups[entry["group"]] += value
+            self.methods[payment.get_method_display()] += value
+            if cups:
+                self.slots[(created.weekday(), created.hour)].update(entry["order_ids"])
 
     @property
     def orders(self):
@@ -132,7 +138,7 @@ def sales(start_day, end_day, prev=None, today=None, wide=False, lines=None):
         prev = (start_day - timedelta(days=length), start_day - timedelta(days=1))
     prices = Prices()
     cur, old = _Period(start_day, end_day, prices, lines), _Period(prev[0], prev[1], prices)
-    has_cost = cur.cost > 0
+    has_cost = cur.cost > 0 and cur.cost_complete
 
     aov = cur.revenue / cur.orders if cur.orders else 0
     old_aov = old.revenue / old.orders if old.orders else 0
@@ -143,7 +149,7 @@ def sales(start_day, end_day, prev=None, today=None, wide=False, lines=None):
          "spark": charts.sparkline(cur.series("orders")), "prev": old.orders},
         {"label": "Giá trị mỗi đơn", "value": round(aov), "unit": "đ", "delta": _pct(aov, old_aov),
          "spark": charts.sparkline(cur.series("aov")), "prev": round(old_aov)},
-        {"label": "Số ly", "value": cur.cups, "unit": "", "delta": _pct(cur.cups, old.cups),
+        {"label": "Ly tại lần thu đầu", "value": cur.cups, "unit": "", "delta": _pct(cur.cups, old.cups),
          "spark": charts.sparkline(cur.series("cups")), "prev": old.cups},
     ]
     if has_cost:
@@ -227,6 +233,10 @@ def sales(start_day, end_day, prev=None, today=None, wide=False, lines=None):
 
     # Nhận định tự động cho Chủ quán: chỉ nêu điều số liệu cho thấy rõ.
     notes = []
+    if not cur.cost_complete:
+        notes.append("Có khoản thu trước, thu thêm hoặc giao dịch thiếu phân bổ lịch sử. Tiền theo ngày thực thu; "
+                     "số ly và phân bổ món theo lần thu đầu, không phải sản lượng sau đổi/hủy. "
+                     "Chưa hiển thị lãi gộp và ma trận lợi nhuận cho kỳ này vì chưa ghép đủ giá vốn tương ứng.")
     d_rev, d_ord, d_aov = _pct(cur.revenue, old.revenue), _pct(cur.orders, old.orders), _pct(aov, old_aov)
     if d_rev is not None and d_ord is not None and d_aov is not None and cur.revenue:
         driver = "chủ yếu do số đơn" if abs(d_ord) >= abs(d_aov) else "chủ yếu do giá trị mỗi đơn"

@@ -5,8 +5,10 @@
 <header class="page-head"><div><h1>Báo cáo kiểm soát doanh thu</h1><p class="page-sub">{{ start|date:"d/m/Y" }} – {{ end|date:"d/m/Y" }}. Tiền thất thoát của tháng, chênh lệch tiền theo ca, yêu cầu điều chỉnh và ngoại lệ trong kỳ.</p></div></header>
 {% include "reports/_period.html" %}
 
-<section class="card" aria-labelledby="c-title">
-  <div class="card-head"><div><h2 id="c-title">Giá trị kiểm soát tạm tính tháng {{ start|date:"m/Y" }}</h2><p class="card-sub">Tổn thất đã xác minh cộng thiếu tiền đang xử lý; mỗi khoản chỉ tính một lần. Cập nhật {{ control.updated_at|date:"H:i d/m" }}{% if control.open_cases %}, còn {{ control.open_cases }} vụ việc chưa kết luận{% endif %}.</p></div>
+<p class="muted">Chỉ tiêu mục tiêu tính theo toàn bộ từng tháng dưới đây; danh sách giao dịch tính theo khoảng ngày đã chọn.</p>
+{% for m in months %}{% with control=m.control met=m.met %}
+<section class="card" aria-labelledby="c-title-{{ forloop.counter }}">
+  <div class="card-head"><div><h2 id="c-title-{{ forloop.counter }}">Giá trị kiểm soát tạm tính tháng {{ m.month|date:"m/Y" }}</h2><p class="card-sub">Tổn thất đã xác minh cộng thiếu tiền đang xử lý; mỗi khoản chỉ tính một lần. Cập nhật {{ control.updated_at|date:"H:i d/m" }}{% if control.open_cases %}, còn {{ control.open_cases }} vụ việc chưa kết luận{% endif %}.</p></div>
     <span class="pill pill-{% if met %}ok{% else %}warn{% endif %}">{% if met %}Đạt mục tiêu{% else %}Chưa đạt mục tiêu{% endif %}</span></div>
   <div class="mini-stats">
     <div class="mini-stat{% if not met %} is-warn{% endif %}"><span>Giá trị kiểm soát tạm tính</span><strong>{{ control.control_value|intcomma }} đ</strong><small>Mục tiêu dưới {{ target|intcomma }} đ</small></div>
@@ -15,14 +17,15 @@
     <div class="mini-stat"><span>Đã thu hồi</span><strong>{{ control.recovered|intcomma }} đ</strong><small>Đã xác minh còn lại {{ control.verified_remaining|intcomma }} đ</small></div>
   </div>
 </section>
+{% endwith %}{% endfor %}
 
 <section class="card" aria-labelledby="d-title">
   <div class="card-head"><h2 id="d-title">Chênh lệch tiền theo ca</h2></div>
   {% if discrepancies %}<div class="table-wrap"><table class="data-table table-stack"><thead><tr><th scope="col">Ca</th><th scope="col">Phương thức</th><th scope="col">Người phụ trách ca</th><th scope="col" class="num">Chênh lệch</th><th scope="col">Tình trạng</th></tr></thead>
   <tbody>{% for d in discrepancies %}<tr><th scope="row"><a href="{% url 'shifts:my_shift_detail' d.shift_id %}">{{ d.shift }}</a></th><td data-label="Phương thức">{{ d.get_method_display }}</td><td data-label="Người phụ trách ca">{{ d.manager }}</td><td class="num" data-label="Chênh lệch">{{ d.difference|intcomma }} đ</td><td data-label="Tình trạng">{% if d.decision %}{{ d.get_decision_display }}{% elif d.explanation %}Đã giải trình{% else %}<span class="pill pill-warn">Chưa giải thích</span>{% endif %}{% if d.over_threshold %} <span class="pill pill-danger">Vượt ngưỡng</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
   {% else %}<p class="empty-cell">Không có chênh lệch trong kỳ.</p>{% endif %}
-  {% if accumulated %}<div class="card-body rc-acc"><h3 class="card-h3">Thiếu chưa giải thích cộng dồn tháng {{ start|date:"m/Y" }}</h3>
-    <ul class="row-list">{% for r in accumulated %}<li><span class="row-main">{{ r.manager }}<small>{{ r.shift_type }}</small></span><span class="num-cell">{{ r.total|intcomma }} đ</span></li>{% endfor %}</ul></div>{% endif %}
+  {% for m in months %}{% if m.accumulated %}<div class="card-body rc-acc"><h3 class="card-h3">Thiếu chưa giải thích cộng dồn tháng {{ m.month|date:"m/Y" }}</h3>
+    <ul class="row-list">{% for r in m.accumulated %}<li><span class="row-main">{{ r.manager }}<small>{{ r.shift_type }}</small></span><span class="num-cell">{{ r.total|intcomma }} đ</span></li>{% endfor %}</ul></div>{% endif %}{% endfor %}
 </section>
 
 <section class="card" aria-labelledby="cases-title">
@@ -44,7 +47,7 @@
 </section>
 <section class="card" aria-labelledby="e-title">
   <div class="card-head"><h2 id="e-title">Ngoại lệ theo loại và kết quả</h2></div>
-  {% if exceptions %}<ul class="row-list exc-list no-day">{% for e in exceptions %}<li><a href="{% url 'control:exceptions' %}?trang-thai=tat-ca&amp;loai={{ e.value }}&amp;tu={{ start|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}">
+  {% if exceptions %}<ul class="row-list exc-list no-day">{% for e in exceptions %}<li><a href="{% url 'control:exceptions' %}?trang-thai=tat-ca&amp;loai={{ e.value }}&amp;ket_qua={{ e.result_value }}&amp;tu={{ start|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}">
     <span class="row-main">{{ e.kind }}</span>
     <span class="exc-meta"><span class="pill pill-{% if e.result == 'Vi phạm' %}danger{% elif e.result == 'Nhắc nhở' %}warn{% elif e.result == 'Hợp lệ' %}ok{% else %}neutral{% endif %}">{{ e.result }}</span><span class="num-cell rc-n">{{ e.n }}</span></span>
     <svg class="icon row-go" aria-hidden="true"><use href="#i-chevron"/></svg></a></li>{% endfor %}</ul>

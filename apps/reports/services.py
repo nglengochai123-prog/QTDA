@@ -1,13 +1,13 @@
 """Bảng điều khiển và báo cáo theo kỳ (FR-50, FR-52, FR-53, FR-54).
 
-Mọi số liệu tính lại từ giao dịch và đính chính đang có hiệu lực (GD-10), không chụp cứng.
+Tiền theo giao dịch thu/hoàn; phân bổ món giữ tại lúc thu trong nhật ký bất biến.
 """
 
 from collections import OrderedDict
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 
-from django.db.models import Count, F, Sum
+from django.db.models import Count, Sum
 from django.utils import timezone
 
 from apps.core import numbers
@@ -38,8 +38,7 @@ DIMENSIONS = OrderedDict([
 def _paid_lines(start, end):
     from apps.orders.models import OrderLine
 
-    # Doanh thu ghi theo số khách đã trả (BRU-10): gồm cả đơn sau đó bị hủy hóa đơn; khoản hoàn trừ một lần
-    # ở dòng doanh thu thuần, không loại đơn khỏi doanh thu để tránh trừ hai lần.
+    # Dòng món hiện tại dùng để ước tính giá vốn. Tiền thu đọc từ receipts, không từ các dòng này.
     return (OrderLine.objects.filter(order__payment__isnull=False, order__payment__created_at__gte=start,
                                      order__payment__created_at__lt=end)
             .select_related("order", "order__payment", "order__shift", "order__created_by", "item__group"))
@@ -51,45 +50,10 @@ def paid_lines(start_day, end_day):
 
 
 def _paid_total(start, end):
-    """Tổng giá trị món tính tiền của các đơn thu tiền trong [start, end), tính ngay trong cơ sở dữ liệu."""
-    billable = F("quantity") - F("cancelled_quantity") - F("voided_done_quantity")
-    return (_paid_lines(start, end).select_related(None)
-            .aggregate(s=Sum(F("unit_price") * billable))["s"] or 0)
+    """Tiền đã thu trong kỳ, gồm thu thêm; không loại khoản đã thu rồi hoàn."""
+    from apps.orders.models import Payment
 
-
-def _key(line, dim):
-    order = line.order
-    local = timezone.localtime(order.payment.created_at)
-    created = timezone.localtime(order.created_at)
-    return {
-        "ngay": f"{local:%d/%m/%Y}", "khung_gio": f"{created:%H}–{created.hour + 1:02d} giờ",
-        "ca": str(order.shift) if order.shift else "Không gắn ca", "nhom_mon": line.item.group.name,
-        "mon": f"{line.item_name} {line.size_name}", "nhan_vien": str(order.created_by),
-        "phuong_thuc": order.payment.get_method_display(),
-    }[dim]
-
-
-def _sort(line, dim, key):
-    order = line.order
-    if dim == "ngay":
-        return (timezone.localtime(order.payment.created_at).date(), key)
-    if dim == "khung_gio":
-        return (timezone.localtime(order.created_at).hour, key)
-    if dim == "ca":
-        return (order.shift.starts_at.timestamp() if order.shift else float("inf"), key)
-    return (0, key)
-
-
-def _filter(line, dim):
-    """Tham số lọc ở trang Tra cứu đơn tương ứng với một dòng báo cáo (truy vết tới đơn gốc, NFR-19)."""
-    order = line.order
-    return {
-        "ngay": ("ngay", f"{timezone.localtime(order.payment.created_at):%Y-%m-%d}"),
-        "khung_gio": ("gio", str(timezone.localtime(order.created_at).hour)),
-        "ca": ("ca", str(order.shift_id)) if order.shift_id else None, "nhom_mon": ("nhom", str(line.item.group_id)),
-        "mon": ("mon", str(line.size_id)), "nhan_vien": ("nhan_vien", str(order.created_by_id)),
-        "phuong_thuc": ("phuong_thuc", order.payment.method),
-    }[dim]
+    return Payment.objects.filter(created_at__gte=start, created_at__lt=end).aggregate(s=Sum("amount"))["s"] or 0
 
 
 def revenue_link(start_day, end_day, row_filter):
@@ -108,40 +72,56 @@ def revenue_link(start_day, end_day, row_filter):
 
 
 def revenue(start_day, end_day, dim="ngay", lines=None):
-    """Doanh thu theo chiều `dim` = giá trị món tính tiền của các đơn đã thu tiền trong kỳ (AC-105); hoàn tiền trừ ở doanh thu thuần."""
+    """Receipts by collection date/shift/method, with immutable item allocation and actual refunds."""
     from apps.shifts.models import Refund
+    from . import receipts
 
     start, end = period_bounds(start_day, end_day)
-    rows, total, orders = {}, 0, set()
-    for line in _paid_lines(start, end) if lines is None else lines:
-        value = line.unit_price * line.billable_quantity
-        key = _key(line, dim)
-        row = rows.setdefault(key, {"key": key, "revenue": 0, "cups": 0, "orders": set(), "filters": set(),
-                                    "sort": _sort(line, dim, key)})
-        row["filters"].add(_filter(line, dim))
-        row["revenue"] += value
-        row["cups"] += line.billable_quantity
-        row["orders"].add(line.order_id)
-        total += value
-        orders.add(line.order_id)
-    result = sorted(rows.values(), key=lambda r: r["sort"])  # ngày, ca theo thời gian; chuỗi "dd/mm" thì lệch tháng
-    for r in result:
-        r.pop("sort")
-        r["orders"] = len(r["orders"])
-        filters = r.pop("filters")
-        # Một dòng gộp từ nhiều giá trị lọc (ví dụ món đổi tên) thì không gắn liên kết để tránh lệch số đơn.
-        r["link"] = revenue_link(start_day, end_day, next(iter(filters))) if len(filters) == 1 else ""
-    # Khoản trả lại phần giảm của đơn thu trước không trừ ở đây: tổng tiền đơn (giá trị món) đã giảm theo.
-    refunds = (Refund.objects.filter(status=Refund.Status.PAID, paid_at__gte=start, paid_at__lt=end,
-                                     kind=Refund.Kind.CANCEL_PAID)
-               .aggregate(s=Sum("amount"))["s"] or 0)
+    rows, total, orders, legacy = {}, 0, set(), 0
+    for entry in receipts.entries(start, end):
+        payment = entry["payment"]
+        key = receipts.key(entry, dim)
+        at = timezone.localtime(payment.created_at)
+        sort = (at.date().toordinal() if dim == "ngay" else at.hour if dim == "khung_gio" else
+                payment.shift.starts_at.timestamp() if dim == "ca" and payment.shift else 0)
+        row = rows.setdefault(key, {"key": key, "revenue": 0, "cups": 0, "orders": set(),
+                                    "filters": set(), "sort": (sort, key), "refunds": 0})
+        row["filters"].add(receipts.row_filter(entry, dim))
+        row["revenue"] += entry["amount"]
+        row["cups"] += entry["cups"]
+        row["orders"].update(entry["order_ids"])
+        total += entry["amount"]
+        orders.update(entry["order_ids"])
+        if entry["legacy"]:
+            legacy += entry["amount"]
+    refund_rows = list(Refund.objects.filter(status=Refund.Status.PAID, paid_at__gte=start, paid_at__lt=end)
+                       .select_related("shift"))
+    refunds = sum(r.amount for r in refund_rows)
+    money_dimension = dim in ("ngay", "khung_gio", "ca", "phuong_thuc")
+    if money_dimension:
+        for refund in refund_rows:
+            at = timezone.localtime(refund.paid_at)
+            key = {"ngay": at.strftime("%d/%m/%Y"), "khung_gio": f"{at:%H}–{at.hour + 1:02d} giờ",
+                   "ca": str(refund.shift) if refund.shift else "Không gắn ca",
+                   "phuong_thuc": refund.get_method_display()}[dim]
+            sort = (at.date().toordinal() if dim == "ngay" else at.hour if dim == "khung_gio" else
+                    refund.shift.starts_at.timestamp() if dim == "ca" and refund.shift else 0)
+            row = rows.setdefault(key, {"key": key, "revenue": 0, "cups": 0, "orders": set(),
+                                        "filters": set(), "sort": (sort, key), "refunds": 0})
+            row["refunds"] += refund.amount
+    result = sorted(rows.values(), key=lambda r: r["sort"])
+    for row in result:
+        row.pop("sort")
+        row["orders"] = len(row["orders"])
+        filters = row.pop("filters")
+        row["link"] = revenue_link(start_day, end_day, next(iter(filters))) if len(filters) == 1 else ""
+        row["net"] = row["revenue"] - row["refunds"]
     length = (end_day - start_day).days + 1
-    prev_start, prev_end = start_day - timedelta(days=length), start_day - timedelta(days=1)
-    p_start, p_end = period_bounds(prev_start, prev_end)
-    previous = _paid_total(p_start, p_end)
+    previous_period = (start_day - timedelta(days=length), start_day - timedelta(days=1))
     return {"rows": result, "total": total, "orders": len(orders), "refunds": refunds, "net": total - refunds,
-            "cups": sum(r["cups"] for r in result),
-            "previous": previous, "previous_period": (prev_start, prev_end), "dim": dim, "dim_label": DIMENSIONS[dim]}
+            "cups": sum(r["cups"] for r in result), "previous": _paid_total(*period_bounds(*previous_period)),
+            "previous_period": previous_period, "dim": dim, "dim_label": DIMENSIONS[dim],
+            "money_dimension": money_dimension, "legacy_amount": legacy}
 
 
 def revenue_xlsx(start_day, end_day):
@@ -150,10 +130,11 @@ def revenue_xlsx(start_day, end_day):
     sheets, lines = [], paid_lines(start_day, end_day)
     for dim, label in DIMENSIONS.items():
         data = revenue(start_day, end_day, dim, lines)
-        rows = [[label, "Số đơn", "Số ly", "Doanh thu (đồng)"]]
-        rows += [[r["key"], r["orders"], r["cups"], r["revenue"]] for r in data["rows"]]
+        rows = [[label, "Số đơn có khoản thu", "Số ly ghi lúc thu đầu", "Tiền đã thu (đồng)", "Tiền đã hoàn", "Thu trừ hoàn"]]
+        rows += [[r["key"], r["orders"], r["cups"], r["revenue"], r["refunds"] if data["money_dimension"] else "Không phân bổ", r["net"] if data["money_dimension"] else "Không phân bổ"] for r in data["rows"]]
         rows += [["Tổng", data["orders"], data["cups"], data["total"]], ["Hoàn tiền đã trả trong kỳ", "", "", data["refunds"]],
                  ["Doanh thu thuần", "", "", data["net"]]]
+        rows.append(["Phân bổ theo món tại lúc thu; thu thêm không đếm thêm ly. Dữ liệu cũ chưa có phân bổ: " + str(data["legacy_amount"]) + " đồng."])
         sheets.append((label, rows))
     return xlsx.build(sheets)
 
@@ -177,18 +158,25 @@ def revenue_control(start_day, end_day):
     exc_rows = {}
     for exc in exceptions:
         review = exc.effective_review()
-        key = (exc.get_kind_display(), review.get_result_display() if review else "Chưa xem xét", exc.kind)
+        key = (exc.get_kind_display(), review.get_result_display() if review else "Chưa xem xét", exc.kind, review.result if review else "chua_xem")
         exc_rows[key] = exc_rows.get(key, 0) + 1
     discrepancies = (Discrepancy.objects.current().filter(shift__starts_at__gte=start, shift__starts_at__lt=end)
                      .select_related("shift", "manager").order_by("shift__starts_at"))
-    control = monthly_control(start_day.year, start_day.month)
+    months = []
+    month = start_day.replace(day=1)
+    while month <= end_day:
+        control = monthly_control(month.year, month.month)
+        months.append({"month": month, "control": control, "met": control["control_value"] < BO01_MONTHLY_TARGET,
+                       "accumulated": accumulated_report(month.year, month.month)})
+        month = (month + timedelta(days=32)).replace(day=1)
+    control = months[0]["control"]
     return {
         "requests_total": requests.count(), "by_reason": by_reason,
-        "exceptions": [{"kind": k[0], "result": k[1], "value": k[2], "n": n} for k, n in sorted(exc_rows.items())],
+        "exceptions": [{"kind": k[0], "result": k[1], "value": k[2], "result_value": k[3], "n": n} for k, n in sorted(exc_rows.items())],
         "discrepancies": discrepancies, "accumulated": accumulated_report(start_day.year, start_day.month),
         "cases": LossCase.objects.filter(created_at__gte=start, created_at__lt=end)
         .prefetch_related("verifications", "recoveries"),
-        "control": control, "target": BO01_MONTHLY_TARGET, "met": control["control_value"] < BO01_MONTHLY_TARGET,
+        "months": months, "control": control, "target": BO01_MONTHLY_TARGET, "met": control["control_value"] < BO01_MONTHLY_TARGET,
     }
 
 
@@ -227,24 +215,11 @@ def materials(start_day, end_day):
             "closing": closing, "shortages": shortages.get(ing.pk, 0),
         })
     total_shortages = sum(shortages.values())
-    # Nhu cầu ước tính 7 ngày tới theo lần phát hành dự báo gần nhất (kỳ dự báo, lượng dự kiến và căn cứ)
-    from apps.forecast.models import IngredientForecast
-    from apps.forecast.services import latest_release
+    from .material_forecasts import attach
 
-    rel = latest_release()
-    estimates = {}
-    if rel:
-        for fc in IngredientForecast.objects.filter(release=rel):
-            days = fc.daily[:7]
-            totals = sorted(p[min(6, len(p) - 1)] for p in fc.paths_sample) if fc.paths_sample else []
-            from apps.forecast import dglm
+    attach(rows, start_day, end_day)
+    return {"rows": rows, "shortages": total_shortages, "bo02_target": BO02_MONTHLY_TARGET}
 
-            estimates[fc.ingredient_id] = {
-                "mean": round(sum(d["mean"] for d in days), 1), "q10": dglm.quantile(totals, 0.1),
-                "q90": dglm.quantile(totals, 0.9), "from": days[0]["date"] if days else "", "to": days[-1]["date"] if days else ""}
-    for row in rows:
-        row["estimate"] = estimates.get(row["ingredient"].pk)
-    return {"rows": rows, "shortages": total_shortages, "bo02_target": BO02_MONTHLY_TARGET, "forecast_release": rel}
 
 
 # ---------------- FR-50: bảng điều khiển ----------------
@@ -312,7 +287,7 @@ def _sales_block(first, end, today):
     """
     from django.core.cache import cache
 
-    key = f"bang-dieu-khien:{first}:{end}:{today}:{_payments_stamp()}"
+    key = f"bang-dieu-khien-thu-thuc-v2:{first}:{end}:{today}:{_payments_stamp()}"
     cached = cache.get(key)
     if cached is not None:
         return cached

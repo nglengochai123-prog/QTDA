@@ -124,7 +124,7 @@ class ForecastChoiceTests(PlanBase):
         IngredientPlan.objects.filter(pk=plan.pk).update(forecast={**plan.forecast, "proposal": proposal})
         self.client.login(username=self.owner.username, password=PASSWORD)
         page = self.client.get(reverse("forecast:plans"))
-        self.assertContains(page, "Có cách dự báo chính xác hơn")
+        self.assertContains(page, "Có đề xuất phương pháp dự báo cần xem xét")
         self.assertContains(page, "sai số thấp hơn 12%")
         self.assertNotContains(page, other)  # không hiện tên cách tính
         self.client.post(reverse("forecast:plans"), {"action": "giu_cach", "key": key})

@@ -189,6 +189,9 @@ def _pay(order, user, method, shift, operation_key):
                                      cashier=user, shift=shift, operation_key=f"{operation_key[:52]}-pdp-tt")
     order.payment, order.status, order.shift = payment, Order.Status.PAID, order.shift or shift
     order.save(update_fields=["payment", "status", "shift", "updated_at"])
+    from apps.reports.receipts import capture
+
+    capture(payment, [order], extra=False)
     record(Action.CREATE, actor=user, obj=payment, object_type="orders.Payment",
            after={"ban": order.table.code, "so_tien": payment.amount, "phuong_thuc": payment.get_method_display(),
                   "don": [order.code], "nguon": "nhập bù phiếu dự phòng"})

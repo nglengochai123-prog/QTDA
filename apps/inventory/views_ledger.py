@@ -2,7 +2,7 @@
 
 from datetime import datetime, time, timedelta
 
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.shortcuts import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET
@@ -18,7 +18,11 @@ def filter_movements(params):
     qs = StockMovement.objects.select_related("ingredient", "actor")
     if (params.get("nvl") or "").isdigit():
         qs = qs.filter(ingredient_id=int(params["nvl"]))
-    if params.get("loai") in StockMovement.Kind.values:
+    if params.get("loai") == "nhap_va_lam":
+        qs = qs.filter(Q(kind=StockMovement.Kind.RECEIPT) | Q(kind=StockMovement.Kind.PRODUCE, quantity__gt=0))
+    elif params.get("loai") == "tieu_hao_va_lam":
+        qs = qs.filter(Q(kind=StockMovement.Kind.CONSUME) | Q(kind=StockMovement.Kind.PRODUCE, quantity__lt=0))
+    elif params.get("loai") in StockMovement.Kind.values:
         qs = qs.filter(kind=params["loai"])
     tz = timezone.get_current_timezone()
     start, end = _day(params.get("tu")), _day(params.get("den"))
@@ -45,7 +49,7 @@ def ledger(request):
     for m in rows:
         m.order_id = orders.get(int(m.source_id)) if m.source_type == "dong_mon" and m.source_id.isdigit() else None
     return render(request, "inventory/ledger.html", {
-        "page": page, "rows": rows, "qs": qs, "f": request.GET, "kinds": StockMovement.Kind.choices,
+        "page": page, "rows": rows, "qs": qs, "f": request.GET, "kinds": list(StockMovement.Kind.choices) + [("nhap_va_lam", "Nhập và làm ra"), ("tieu_hao_va_lam", "Tiêu hao món và làm mẻ")],
         "ingredients": Ingredient.objects.order_by("name"), "total": total,
         "unit": rows[0].ingredient.get_unit_display() if rows else "",
     })

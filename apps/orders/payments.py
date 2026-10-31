@@ -94,6 +94,9 @@ def _record_payment(user, operation_key, table, method, kind):
         # Đơn gửi lúc chưa có ca nào mở thì thuộc ca thu tiền của nó, để báo cáo theo ca khớp với quỹ ca.
         order.shift = order.shift or shift
         order.save(update_fields=["payment", "status", "shift", "updated_at"])
+    from apps.reports.receipts import capture
+
+    capture(payment, orders, extra=False)
     record(Action.CREATE, actor=user, obj=payment, object_type="orders.Payment",
            after={"ban": table.code, "so_tien": payment.amount, "phuong_thuc": payment.get_method_display(),
                   "loai": payment.get_kind_display(), "don": [o.code for o in orders]})

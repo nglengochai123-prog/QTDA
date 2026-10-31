@@ -8,7 +8,7 @@
 </header>
 {% include "reports/_period.html" %}
 
-{% if rows %}
+{% if rows or refunds %}
 {% include "reports/parts/kpis.html" with kpis=sales.kpis %}
 <div class="stats stats-compact">
   <div class="stat"><p class="stat-label">Hoàn tiền đã trả trong kỳ</p><p class="stat-value">{{ refunds|intcomma }} <small>đ</small></p></div>
@@ -19,7 +19,7 @@
 
 <section class="card">
   <div class="card-head">
-    <div><h2>Doanh thu theo {{ dim_label|lower }}</h2><p class="card-sub">Chọn chiều xem để đổi biểu đồ và bảng bên dưới.</p></div>
+    <div><h2>Doanh thu theo {{ dim_label|lower }}</h2><p class="card-sub">Ngày, giờ, ca và phương thức theo từng lần thu/hoàn. Món, nhóm món và nhân viên theo phân bổ được lưu tại lúc thu; không phân bổ hoàn tiền vào món.</p></div>
     <nav class="seg" aria-label="Chiều xem">{% for v, l in dims %}<a href="?tu={{ start|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}&amp;theo={{ v }}"{% if v == dim %} aria-current="true"{% endif %}>{{ l }}</a>{% endfor %}</nav>
   </div>
   <div class="card-body">
@@ -29,9 +29,9 @@
     {% elif dim_kind == "hbars" %}{% include "reports/charts/hbars.html" with c=dim_chart label="Doanh thu theo "|add:dim_label %}{% endif %}
   </div>
   <div class="table-wrap"><table class="data-table">
-    <thead><tr><th scope="col">{{ dim_label }}</th><th scope="col" class="num">Số đơn</th><th scope="col" class="num">Số ly</th><th scope="col" class="num">Doanh thu</th></tr></thead>
-    <tbody>{% for r in rows %}<tr><th scope="row">{{ r.key }}</th><td class="num">{% if r.link %}<a href="{% url 'orders:lookup' %}?{{ r.link }}" title="Xem các đơn của dòng này">{{ r.orders|intcomma }}</a>{% else %}{{ r.orders|intcomma }}{% endif %}</td><td class="num">{{ r.cups|intcomma }}</td><td class="num">{{ r.revenue|intcomma }} đ</td></tr>{% endfor %}</tbody>
-    <tfoot><tr><th scope="row">Tổng</th><td class="num">{{ orders|intcomma }}</td><td class="num">{{ cups|intcomma }}</td><td class="num">{{ total|intcomma }} đ</td></tr></tfoot>
+    <thead><tr><th scope="col">{{ dim_label }}</th><th scope="col" class="num">Số đơn</th><th scope="col" class="num">Số ly</th><th scope="col" class="num">Tiền đã thu</th>{% if money_dimension %}<th scope="col" class="num">Đã hoàn</th><th scope="col" class="num">Thu trừ hoàn</th>{% endif %}</tr></thead>
+    <tbody>{% for r in rows %}<tr><th scope="row">{{ r.key }}</th><td class="num">{% if r.link %}<a href="{% url 'orders:lookup' %}?{{ r.link }}" title="Xem các đơn của dòng này">{{ r.orders|intcomma }}</a>{% else %}{{ r.orders|intcomma }}{% endif %}</td><td class="num">{{ r.cups|intcomma }}</td><td class="num">{{ r.revenue|intcomma }} đ</td>{% if money_dimension %}<td class="num">{{ r.refunds|intcomma }} đ</td><td class="num">{{ r.net|intcomma }} đ</td>{% endif %}</tr>{% endfor %}</tbody>
+    <tfoot><tr><th scope="row">Tổng</th><td class="num">{{ orders|intcomma }}</td><td class="num">{{ cups|intcomma }}</td><td class="num">{{ total|intcomma }} đ</td>{% if money_dimension %}<td class="num">{{ refunds|intcomma }} đ</td><td class="num">{{ net|intcomma }} đ</td>{% endif %}</tr></tfoot>
   </table></div>
 </section>
 
@@ -46,5 +46,6 @@
   </section>
 </div>
 {% else %}<div class="empty"><p><strong>Chưa có đơn đã thanh toán trong kỳ.</strong></p></div>{% endif %}
-<details class="help-tip"><summary>Giải thích</summary><p>Bấm số đơn để xem danh sách đơn gốc của dòng đó. Doanh thu là số khách đã trả trong kỳ (giá trị món tính tiền, theo thời điểm thanh toán), kể cả đơn sau đó bị hủy hóa đơn. Hoàn tiền tính theo thời điểm thực hoàn và chỉ trừ một lần ở doanh thu thuần. Lãi gộp ước tính chưa trừ lương, mặt bằng, điện nước.</p></details>
+{% if legacy_amount %}<p class="muted">Có {{ legacy_amount|intcomma }} đ từ giao dịch cũ chưa lưu phân bổ món/nhân viên. Các khoản này vẫn được tính đủ theo ngày, giờ, ca và phương thức thu.</p>{% endif %}
+<details class="help-tip"><summary>Giải thích</summary><p>Doanh thu là tiền đã thu trong kỳ, gồm thu trước và thu thêm; khoản chờ thu chưa được tính. Hoàn tiền gồm cả hủy hóa đơn và giảm đơn, ghi vào ngày, ca và phương thức thực hoàn. Số ly ghi tại lần thu đầu, thu thêm không đếm lại ly. Phân bổ tiền theo món được giữ tại lúc thu, không phải sản lượng món cuối cùng sau đổi/hủy. Lãi gộp là ước tính trước hoàn tiền, chưa trừ lương, mặt bằng, điện nước.</p></details>
 {% endblock %}
