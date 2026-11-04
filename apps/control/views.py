@@ -239,15 +239,19 @@ def parameters(request):
             messages.error(request, exc.messages[0] if hasattr(exc, "messages") else "Thời điểm hiệu lực không hợp lệ.")
         return redirect("control:parameters")
     now = timezone.now()
-    rows = []
-    for k in params.business_keys():
-        d = params.DEFAULTS[k]
-        log = list(params.history(k)[:6])
-        rows.append({"key": k, "value": params.get(k), "default": d[0], "unit": d[1], "label": d[2], "source": d[3],
-                     "basis": params.BASIS[k][0], "basis_note": params.BASIS[k][1],
-                     "assumption": params.BASIS[k][0] == params.ASSUMPTION,
-                     "upcoming": [x for x in log if x.effective_from > now], "log": [x for x in log if x.effective_from <= now]})
-    return render(request, "control/parameters.html", {"rows": rows})
+    groups = []
+    for title, keys in params.GROUPS:
+        rows = []
+        for k in keys:
+            d = params.DEFAULTS[k]
+            log = list(params.history(k)[:6])
+            rows.append({"key": k, "value": params.get(k), "default": d[0], "unit": "đ" if d[1] == "đồng" else d[1],
+                         "label": d[2], "help": params.HELP[k],
+                         "assumption": params.BASIS[k][0] == params.ASSUMPTION,
+                         "upcoming": [x for x in log if x.effective_from > now],
+                         "log": [x for x in log if x.effective_from <= now]})
+        groups.append({"title": title, "rows": rows})
+    return render(request, "control/parameters.html", {"groups": groups})
 
 
 @capability_required(Cap.HANDLE_ALERTS)

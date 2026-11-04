@@ -2,7 +2,9 @@
 
 import io
 import zipfile
+from decimal import Decimal
 
+from django.test import SimpleTestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -108,15 +110,32 @@ class ReportTests(Base):
         self.d["milk"].save()
         self.client.login(username=self.d["owner"].username, password=PASSWORD)
         page = self.client.get(reverse("reports:dashboard"))
-        self.assertContains(page, "Ca đang mở")
+        self.assertContains(page, "Hôm nay")
+        self.assertContains(page, "Tiền mặt dự kiến trong két")
         self.assertContains(page, "Sữa đặc")
-        self.assertContains(page, "Giá trị kiểm soát tạm tính")
+        self.assertContains(page, "Mục tiêu tháng")
+        self.assertContains(page, "Thất thoát tạm tính")
         for name in ("reports:revenue", "reports:materials", "reports:revenue_control"):
             self.assertEqual(self.client.get(reverse(name)).status_code, 200)
         self.client.login(username=self.cashier.username, password=PASSWORD)
         for name in ("reports:dashboard", "reports:revenue", "reports:revenue_control"):
             self.assertEqual(self.client.get(reverse(name)).status_code, 403)
         _ = (stock, StockMovement)
+
+
+class GoalTests(SimpleTestCase):
+    def test_each_goal_is_judged_against_its_target(self):
+        control = {"control_value": Decimal(250000), "verified": Decimal(200000), "in_process": Decimal(50000)}
+        service = {"percent": 92, "ok": 46, "frames": 50, "worst": [(timezone.localdate(), 2)], "target": 90}
+        g = {x["key"]: x for x in services.goals(control, 2, service, [])}
+        self.assertEqual((g["bo01"]["met"], g["bo01"]["fill"]), (False, 100))  # 250.000 đ, mục tiêu dưới 200.000 đ
+        self.assertFalse(g["bo02"]["met"])  # 2 lần thiếu, mục tiêu không quá 1
+        self.assertTrue(g["bo03"]["met"])  # 92% khung giờ đạt chuẩn, mục tiêu từ 90%
+        self.assertIn("46/50", g["bo03"]["note"])
+        empty = {x["key"]: x for x in services.goals(control, 0, {**service, "percent": None, "frames": 0}, [])}
+        self.assertTrue(empty["bo02"]["met"])
+        self.assertFalse(empty["bo03"]["met"])
+        self.assertEqual(empty["bo03"]["value"], "–")
 
 
 class DashboardChartTests(Base):
@@ -130,7 +149,8 @@ class DashboardChartTests(Base):
         page = self.client.get(reverse("reports:dashboard"))
         data = page.context
         report = services.revenue(data["first"], data["end"])
-        self.assertEqual(sum(d["revenue"] for d in data["days"]), report["total"])
+        self.assertEqual(sum(d["revenue"] for d in data["days"]), report["net"])  # doanh thu thuần: thu trừ hoàn
+        self.assertEqual(sum(d["receipts"] for d in data["days"]), report["total"])
         self.assertEqual(sum(d["orders"] for d in data["days"]), report["orders"])
         self.assertContains(page, 'class="chart-svg"')
         self.assertContains(page, "data-tip=")

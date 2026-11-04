@@ -153,9 +153,14 @@ def settle_adjustment(order, req, actor):
     """Sau khi duyệt điều chỉnh một đơn thu trước còn mở: ghi phần chênh giữa tổng mới và tiền đã thu.
 
     Không đụng thanh toán gốc. Tăng → khoản chờ thu thêm; giảm → khoản hoàn chờ trả khách (shifts.Refund)."""
+    from apps.reports import receipts
+
     due = order.total - paid_net(order)
+    # Phân bổ theo dòng món: phần đổi qua lại giữa các dòng ghi ngay; phần chênh tiền gắn với khoản thu thêm/hoàn.
+    money_lines = receipts.plan_adjustment(order, actor, due)
     if due > 0:
         charge = PrepaidCharge.objects.create(store=order.store, order=order, request=req, amount=due)
+        receipts.save_charge_plan(charge, actor, money_lines)
         record(Action.CREATE, actor=actor, obj=charge, object_type="orders.PrepaidCharge",
                after={"don": order.code, "so_tien": due, "trang_thai": charge.get_status_display()},
                reason=f"Điều chỉnh đơn thu trước: {req.summary()}")
@@ -165,6 +170,7 @@ def settle_adjustment(order, req, actor):
         refund = Refund.objects.create(store=order.store, payment=payment, order_code=order.code, method=method,
                                        amount=-due, approved_by=actor, request_id_ref=req.pk,
                                        kind=Refund.Kind.PREPAID_DECREASE)
+        receipts.save_refund_plan(refund, actor, money_lines)
         record(Action.CREATE, actor=actor, obj=refund, object_type="shifts.Refund",
                after={"don": order.code, "so_tien": refund.amount, "phuong_thuc": refund.get_method_display(),
                       "loai": refund.get_kind_display(), "thanh_toan_goc": payment.pk,
@@ -202,7 +208,7 @@ def collect_charge(user, operation_key, charge_id, method, transfer_confirmed=Fa
             cashier=user, shift=shift, operation_key=f"{operation_key[:50]}-thu-them", cash_received=received)
         from apps.reports.receipts import capture
 
-        capture(payment, [order], extra=True)
+        capture(payment, [order], extra=True, charge=charge)
         charge.status, charge.payment = PrepaidCharge.Status.COLLECTED, payment
         charge.collected_by, charge.collected_at = user, timezone.now()
         charge.save(update_fields=["status", "payment", "collected_by", "collected_at", "updated_at"])

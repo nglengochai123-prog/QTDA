@@ -259,7 +259,7 @@
       var size = item.sizes.find(function (s) { return s.id === pick.size; });
       var optionNames = [];
       item.optionGroups.forEach(function (g) {
-        g.options.forEach(function (o) { if (pick.options.indexOf(o.id) >= 0) optionNames.push(o.name); });
+        g.options.forEach(function (o) { if (pick.options.indexOf(o.id) >= 0) optionNames.push(o.ticket || o.name); });
       });
       state.lines.push({ item: item.id, size: size.id, options: pick.options.slice().sort(),
                          quantity: pick.quantity, note: pick.note.trim(), name: item.name, sizeName: size.name,

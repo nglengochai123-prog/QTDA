@@ -13,6 +13,7 @@ from django.utils import timezone
 from apps.core import numbers
 
 BO02_MONTHLY_TARGET = 1  # BO-01, BO-02: chỉ tiêu dự án, không phải tham số cảnh báo
+BO03_TARGET_PERCENT = 90  # BO-03: 90% đến 95% khung giờ đáp ứng (PRODUCT.md)
 
 
 def period_bounds(start_day, end_day):
@@ -56,6 +57,15 @@ def _paid_total(start, end):
     return Payment.objects.filter(created_at__gte=start, created_at__lt=end).aggregate(s=Sum("amount"))["s"] or 0
 
 
+def _net_total(start, end):
+    """Doanh thu thuần trong kỳ: tiền đã thu trừ hoàn tiền đã trả, cùng cách tính với `revenue()["net"]`."""
+    from apps.shifts.models import Refund
+
+    paid_back = Refund.objects.filter(status=Refund.Status.PAID, paid_at__gte=start, paid_at__lt=end).aggregate(
+        s=Sum("amount"))["s"] or 0
+    return _paid_total(start, end) - paid_back
+
+
 def revenue_link(start_day, end_day, row_filter):
     """Chuỗi tham số cho Tra cứu đơn cùng phạm vi báo cáo: đơn đã thu tiền, theo ngày thanh toán."""
     from urllib.parse import urlencode
@@ -72,56 +82,32 @@ def revenue_link(start_day, end_day, row_filter):
 
 
 def revenue(start_day, end_day, dim="ngay", lines=None):
-    """Receipts by collection date/shift/method, with immutable item allocation and actual refunds."""
-    from apps.shifts.models import Refund
+    """Doanh thu theo chiều `dim`: tiền thu và tiền hoàn thực tế trong kỳ, phân bổ món theo sổ phân bổ (receipts).
+
+    Mọi chiều xem cộng lại đều ra đúng tiền thu trừ hoàn: hoàn tiền trừ vào đúng món, nhóm, nhân viên đã nhận tiền."""
     from . import receipts
 
     start, end = period_bounds(start_day, end_day)
-    rows, total, orders, legacy = {}, 0, set(), 0
-    for entry in receipts.entries(start, end):
-        payment = entry["payment"]
-        key = receipts.key(entry, dim)
-        at = timezone.localtime(payment.created_at)
-        sort = (at.date().toordinal() if dim == "ngay" else at.hour if dim == "khung_gio" else
-                payment.shift.starts_at.timestamp() if dim == "ca" and payment.shift else 0)
-        row = rows.setdefault(key, {"key": key, "revenue": 0, "cups": 0, "orders": set(),
-                                    "filters": set(), "sort": (sort, key), "refunds": 0})
-        row["filters"].add(receipts.row_filter(entry, dim))
-        row["revenue"] += entry["amount"]
-        row["cups"] += entry["cups"]
-        row["orders"].update(entry["order_ids"])
-        total += entry["amount"]
-        orders.update(entry["order_ids"])
-        if entry["legacy"]:
-            legacy += entry["amount"]
-    refund_rows = list(Refund.objects.filter(status=Refund.Status.PAID, paid_at__gte=start, paid_at__lt=end)
-                       .select_related("shift"))
-    refunds = sum(r.amount for r in refund_rows)
-    money_dimension = dim in ("ngay", "khung_gio", "ca", "phuong_thuc")
-    if money_dimension:
-        for refund in refund_rows:
-            at = timezone.localtime(refund.paid_at)
-            key = {"ngay": at.strftime("%d/%m/%Y"), "khung_gio": f"{at:%H}–{at.hour + 1:02d} giờ",
-                   "ca": str(refund.shift) if refund.shift else "Không gắn ca",
-                   "phuong_thuc": refund.get_method_display()}[dim]
-            sort = (at.date().toordinal() if dim == "ngay" else at.hour if dim == "khung_gio" else
-                    refund.shift.starts_at.timestamp() if dim == "ca" and refund.shift else 0)
-            row = rows.setdefault(key, {"key": key, "revenue": 0, "cups": 0, "orders": set(),
-                                        "filters": set(), "sort": (sort, key), "refunds": 0})
-            row["refunds"] += refund.amount
-    result = sorted(rows.values(), key=lambda r: r["sort"])
+    items = receipts.entries(start, end)
+    rows = receipts.grouped(items, dim)
+    total = sum(e["amount"] for e in items if e["kind"] != receipts.HOAN)
+    refunds = -sum(e["amount"] for e in items if e["kind"] == receipts.HOAN)
+    orders = {oid for e in items if receipts.counts_order(e) for oid in e["order_ids"]}
+    legacy = sum(abs(e["amount"]) for e in items if e["legacy"])
+    result = sorted(rows, key=lambda r: r["sort"])
     for row in result:
         row.pop("sort")
         row["orders"] = len(row["orders"])
         filters = row.pop("filters")
+        # Một dòng gộp từ nhiều giá trị lọc (ví dụ món đổi tên) thì không gắn liên kết để tránh lệch số đơn.
         row["link"] = revenue_link(start_day, end_day, next(iter(filters))) if len(filters) == 1 else ""
         row["net"] = row["revenue"] - row["refunds"]
     length = (end_day - start_day).days + 1
     previous_period = (start_day - timedelta(days=length), start_day - timedelta(days=1))
     return {"rows": result, "total": total, "orders": len(orders), "refunds": refunds, "net": total - refunds,
-            "cups": sum(r["cups"] for r in result), "previous": _paid_total(*period_bounds(*previous_period)),
+            "cups": sum(r["cups"] for r in result), "previous": _net_total(*period_bounds(*previous_period)),
             "previous_period": previous_period, "dim": dim, "dim_label": DIMENSIONS[dim],
-            "money_dimension": money_dimension, "legacy_amount": legacy}
+            "money_dimension": True, "legacy_amount": legacy}
 
 
 def revenue_xlsx(start_day, end_day):
@@ -131,10 +117,11 @@ def revenue_xlsx(start_day, end_day):
     for dim, label in DIMENSIONS.items():
         data = revenue(start_day, end_day, dim, lines)
         rows = [[label, "Số đơn có khoản thu", "Số ly ghi lúc thu đầu", "Tiền đã thu (đồng)", "Tiền đã hoàn", "Thu trừ hoàn"]]
-        rows += [[r["key"], r["orders"], r["cups"], r["revenue"], r["refunds"] if data["money_dimension"] else "Không phân bổ", r["net"] if data["money_dimension"] else "Không phân bổ"] for r in data["rows"]]
+        rows += [[r["key"], r["orders"], r["cups"], r["revenue"], r["refunds"], r["net"]] for r in data["rows"]]
         rows += [["Tổng", data["orders"], data["cups"], data["total"]], ["Hoàn tiền đã trả trong kỳ", "", "", data["refunds"]],
                  ["Doanh thu thuần", "", "", data["net"]]]
-        rows.append(["Phân bổ theo món tại lúc thu; thu thêm không đếm thêm ly. Dữ liệu cũ chưa có phân bổ: " + str(data["legacy_amount"]) + " đồng."])
+        rows.append(["Hoàn tiền trừ vào đúng món đã nhận tiền; đổi món chuyển tiền sang món mới tại lúc duyệt. "
+                     "Dữ liệu cũ chưa có phân bổ: " + str(data["legacy_amount"]) + " đồng."])
         sheets.append((label, rows))
     return xlsx.build(sheets)
 
@@ -240,14 +227,125 @@ def shift_panel(user):
     present = {Role(r).label: 0 for r in WORK_ROLES}
     for att in Attendance.objects.filter(clock_out__isnull=True):
         present[att.get_role_display()] = present.get(att.get_role_display(), 0) + 1
+    fig = figures(shift) if shift else None
     return {
-        "shift": shift, "figures": figures(shift) if shift else None,
+        "staffing": staffing_now(present), "today": today_vs_last_week(),
+        "shift": shift, "figures": fig,
+        "cash_out": fig["refunds_cash"] + fig["expenses"] + fig["handovers"] if fig else 0,
         "open_orders": Order.objects.exclude(status__in=["da_thanh_toan", "da_huy"]).count(),
         "approvals": len(pending_for(user)),
         "my_alerts": visible_to(user).filter(status__in=["moi", "dang_xu_ly"]).count(),
         "quick_reports": QuickReport.objects.filter(acknowledged_at__isnull=True).count(),
-        "present": present,
+        "present": present, "today_date": timezone.localdate(),
     }
+
+
+def today_vs_last_week(now=None):
+    """Doanh thu thuần hôm nay tới giờ, so với cùng thứ tuần trước tính tới cùng giờ."""
+    from . import receipts
+
+    now = timezone.localtime(now or timezone.now())
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    def net(lo, hi):
+        return sum(e["amount"] for e in receipts.entries(lo, hi))
+
+    cur, old = net(start, now), net(start - timedelta(days=7), now - timedelta(days=7))
+    weekday = ["thứ Hai", "thứ Ba", "thứ Tư", "thứ Năm", "thứ Sáu", "thứ Bảy", "Chủ nhật"][now.weekday()]
+    return {"net": cur, "last_week": old, "weekday": weekday,
+            "delta": round((cur - old) / old * 100) if old else None}
+
+
+def staffing_now(present, now=None):
+    """Người có mặt so với số người cần của các ca trong lịch đang diễn ra (cộng các ca chồng giờ)."""
+    from apps.accounts.models import Role
+    from apps.schedule.models import RoleNeed
+    from apps.schedule.services import ROLES
+
+    now = timezone.localtime(now or timezone.now())
+    needs = {r: 0 for r in ROLES}
+    found = False
+    for need in RoleNeed.objects.filter(shift__date=now.date()).select_related("shift"):
+        a, b = need.shift._minutes()
+        if a <= now.hour * 60 + now.minute < b:
+            needs[need.role] = needs.get(need.role, 0) + need.needed
+            found = True
+    if not found:
+        return []
+    rows = []
+    for r in ROLES:
+        label = Role(r).label
+        have = present.get(label, 0)
+        rows.append({"label": label, "present": have, "needed": needs[r], "short": have < needs[r],
+                     "gap": max(needs[r] - have, 0)})
+    return rows
+
+
+def service_level(first, end, today=None):
+    """BO-03: tỷ lệ khung giờ mở cửa đạt chuẩn phục vụ (không quá tải: chờ món trung vị trong chuẩn, quầy không dồn
+    quá giới hạn) từ ngày `first` tới `end`. Ngày đã qua giữ trong bộ nhớ đệm 6 giờ; hôm nay 2 phút."""
+    from django.core.cache import cache
+
+    from apps.orders.workload import day_frames
+
+    today = today or timezone.localdate()
+    total = ok = 0
+    worst = []
+    d = first
+    while d <= min(end, today):
+        key = f"bo03:{d}:{_payments_stamp() if d == today else ''}"
+        day = cache.get(key)
+        if day is None:
+            frames = day_frames(d)["frames"]
+            day = [(f["label"], f["overloaded"]) for f in frames if f["cups"] or f["backlog"]]
+            try:
+                cache.set(key, day, 120 if d == today else 6 * 3600)
+            except Exception:  # noqa: BLE001
+                pass
+        total += len(day)
+        ok += sum(1 for _label, over in day if not over)
+        bad = sum(1 for _label, over in day if over)
+        if bad:
+            worst.append((d, bad))
+        d += timedelta(days=1)
+    worst.sort(key=lambda x: (-x[1], x[0]))
+    return {"frames": total, "ok": ok, "percent": round(100 * ok / total) if total else None,
+            "worst": worst[:3], "target": BO03_TARGET_PERCENT}
+
+
+def goals(control, shortages, service, open_reports):
+    """Ba mục tiêu của dự án (PRODUCT.md): thất thoát, thiếu nguyên liệu, khung giờ đạt chuẩn phục vụ."""
+    from apps.control.services import BO01_MONTHLY_TARGET
+
+    loss = control["control_value"]
+    pct = service["percent"]
+    loss_note = f"Đã xác minh {numbers.fmt(control['verified'], 0)} đ · đang xử lý {numbers.fmt(control['in_process'], 0)} đ"
+    if control.get("open_cases"):
+        loss_note += f" · {control['open_cases']} vụ chưa kết luận"
+    if open_reports:
+        names = ", ".join(f"{r.ingredient.name} ({r.get_level_display().lower()})" for r in open_reports[:3])
+        stock_note = f"Đang báo: {names}" + ("…" if len(open_reports) > 3 else "")
+    else:
+        stock_note = "Không có nguyên liệu đang báo thiếu"
+    if service["frames"]:
+        service_note = f"{service['ok']}/{service['frames']} khung giờ đạt chuẩn"
+        if service["worst"]:
+            service_note += " · quá tải nhiều nhất " + ", ".join(f"{d:%d/%m} ({n} khung)" for d, n in service["worst"])
+    else:
+        service_note = "Chưa có khung giờ nào có khách"
+    return [
+        {"key": "bo01", "label": "Thất thoát doanh thu", "value": f"{numbers.fmt(loss, 0)} đ",
+         "target": f"dưới {numbers.fmt(BO01_MONTHLY_TARGET, 0)} đ", "met": loss < BO01_MONTHLY_TARGET,
+         "fill": min(100, round(100 * loss / BO01_MONTHLY_TARGET)) if BO01_MONTHLY_TARGET else 0, "tick": None,
+         "note": loss_note, "url": "reports:revenue_control"},
+        {"key": "bo02", "label": "Thiếu nguyên liệu", "value": f"{shortages} lần",
+         "target": f"không quá {BO02_MONTHLY_TARGET} lần", "met": shortages <= BO02_MONTHLY_TARGET,
+         "fill": min(100, round(100 * shortages / max(BO02_MONTHLY_TARGET, 1))), "tick": None,
+         "note": stock_note, "url": "inventory:report"},
+        {"key": "bo03", "label": "Khung giờ đạt chuẩn phục vụ", "value": f"{pct}%" if pct is not None else "–",
+         "target": f"từ {service['target']}%", "met": pct is not None and pct >= service["target"],
+         "fill": pct or 0, "tick": service["target"], "note": service_note, "url": "staff:workload"},
+    ]
 
 
 def _stock_summary(today):
@@ -287,7 +385,9 @@ def _sales_block(first, end, today):
     """
     from django.core.cache import cache
 
-    key = f"bang-dieu-khien-thu-thuc-v2:{first}:{end}:{today}:{_payments_stamp()}"
+    # Kỳ đang diễn ra so với cùng giờ kỳ trước: khóa đổi theo từng 10 phút để phần so sánh không đứng yên cả buổi.
+    slot = timezone.localtime().strftime("%H%M")[:3] if end == today else ""
+    key = f"bang-dieu-khien-v3:{first}:{end}:{today}:{slot}:{_payments_stamp()}"
     cached = cache.get(key)
     if cached is not None:
         return cached
@@ -297,15 +397,16 @@ def _sales_block(first, end, today):
     days = []
     d = first
     while d <= end:
-        r = found.get(f"{d:%d/%m/%Y}", {"revenue": 0, "orders": 0, "cups": 0})
-        days.append({"day": d, "revenue": r["revenue"], "orders": r["orders"]})
+        r = found.get(f"{d:%d/%m/%Y}", {"revenue": 0, "refunds": 0, "net": 0, "orders": 0, "cups": 0})
+        days.append({"day": d, "receipts": r["revenue"], "refunds": r["refunds"], "revenue": r["net"],
+                     "orders": r["orders"]})
         d += timedelta(days=1)
     from . import insights
 
     # So với cùng các ngày của tháng trước (1–26/10 so với 1–26/09), không phải kỳ liền trước cùng độ dài.
     prev_first = (first - timedelta(days=1)).replace(day=1)
     prev_end = min(prev_first + (end - first), first - timedelta(days=1))
-    sales = insights.sales(first, end, prev=(prev_first, prev_end), today=today, lines=lines)
+    sales = insights.sales(first, end, prev=(prev_first, prev_end), today=today, lines=lines, rolling_heat=True)
     result = (by_day, days, sales)
     try:
         cache.set(key, result, 600)
@@ -314,12 +415,54 @@ def _sales_block(first, end, today):
     return result
 
 
+COVER_CAP_DAYS = 30  # thanh dài nhất của biểu đồ số ngày còn dùng; số trên nhãn vẫn là số thật
+
+
+def _critical_stock(today):
+    """Nguyên liệu trọng yếu quy ra số ngày còn dùng được theo tốc độ dùng 4 tuần gần nhất.
+
+    Mỗi nguyên liệu một đơn vị (gram, ml, cái) nên không đặt chung một trục số lượng: 162 gram matcha nằm sát 0 cạnh
+    11.070 gram cà phê dù matcha mới là thứ sắp hết. Quy ra ngày thì mọi dòng cùng thang và trả lời đúng câu Chủ quán
+    cần: còn đủ dùng mấy ngày, đã chạm mức tồn an toàn chưa."""
+    from apps.inventory.lots import daily_usage
+    from apps.inventory.models import Ingredient
+
+    from . import charts
+
+    ingredients = list(Ingredient.objects.filter(is_critical=True, is_active=True).select_related("stock"))
+    usage = daily_usage([i.pk for i in ingredients], today)
+    critical, rows = [], []
+    for ing in ingredients:
+        stock = getattr(ing, "stock", None)
+        available = stock.available if stock else Decimal(0)
+        per_day = usage.get(ing.pk) or 0
+        days = float(available) / per_day if per_day > 0 else None
+        unit = ing.get_unit_display()
+        c = {"ingredient": ing, "physical": stock.physical if stock else Decimal(0), "available": available,
+             # cùng điều kiện với ô Dưới tồn an toàn và trang Tồn kho
+             "below": ing.safety_stock > 0 and available <= ing.safety_stock, "per_day": per_day, "days": days,
+             "unit": unit}
+        critical.append(c)
+        if days is None:
+            continue
+        safety_days = float(ing.safety_stock) / per_day
+        rows.append({"label": ing.name, "value": min(max(days, 0), COVER_CAP_DAYS),
+                     "marker": min(safety_days, COVER_CAP_DAYS) or None, "below": c["below"],
+                     "status": "warn" if c["below"] else None,
+                     "text": f"{numbers.fmt(max(days, 0), 1)} ngày",
+                     "tip": f"{ing.name}: có thể dùng {numbers.fmt(available, 0)} {unit}, dùng bình quân "
+                            f"{numbers.fmt(per_day, 0)} {unit}/ngày, đủ khoảng {numbers.fmt(max(days, 0), 1)} ngày; tồn an "
+                            f"toàn {numbers.fmt(ing.safety_stock, 0)} {unit} (khoảng {numbers.fmt(safety_days, 1)} ngày)"})
+    rows.sort(key=lambda r: r["value"])
+    return critical, charts.hbars(rows, "marker", label_w=130, width=charts.HALF)
+
+
 def dashboard(today=None, month=None):
     """Bảng điều khiển theo tháng (bộ lọc `month` = ngày bất kỳ trong tháng cần xem)."""
     from apps.control.models import Alert, ExceptionCase
     from apps.control.services import BO01_MONTHLY_TARGET, monthly_control
     from apps.core import params
-    from apps.inventory.models import Ingredient, ShortageCase
+    from apps.inventory.models import ShortageCase
     from apps.shifts.services import accumulated_report
 
     from . import charts
@@ -332,18 +475,7 @@ def dashboard(today=None, month=None):
     shortages = ShortageCase.objects.filter(day__gte=first, day__lte=last).count()
     by_day, days, sales = _sales_block(first, end, today)
     revenue_chart = sales["trend_chart"]
-    critical = []
-    for ing in Ingredient.objects.filter(is_critical=True, is_active=True).select_related("stock"):
-        stock = getattr(ing, "stock", None)
-        available = stock.available if stock else Decimal(0)
-        critical.append({"ingredient": ing, "physical": stock.physical if stock else Decimal(0), "available": available,
-                         "below": available < ing.safety_stock})
-    stock_chart = charts.hbars([{"label": c["ingredient"].name, "value": float(c["available"]),
-                                 "marker": float(c["ingredient"].safety_stock), "below": c["below"],
-                                 "text": f"{numbers.fmt(c['available'], 0)} {c['ingredient'].get_unit_display()}",
-                                 "tip": f"{c['ingredient'].name}: có thể dùng {numbers.fmt(c['available'], 0)}, tồn an toàn "
-                                        f"{numbers.fmt(c['ingredient'].safety_stock, 0)} {c['ingredient'].get_unit_display()}"}
-                                for c in critical], "marker", label_w=130, width=charts.HALF)
+    critical, stock_chart = _critical_stock(today)
     acc_rows = accumulated_report(month.year, month.month)
     limit = params.get("accumulated_manager_threshold")
     by_manager = {}
@@ -356,12 +488,14 @@ def dashboard(today=None, month=None):
     bo01_chart = charts.stacked([("Tổn thất đã xác minh", control["verified"], 1),
                                  ("Thiếu tiền đang xử lý", control["in_process"], 2)], BO01_MONTHLY_TARGET)
     open_alerts = Alert.objects.filter(status__in=Alert.OPEN)
-    from apps.inventory.models import QuickReport
     # Bảng 5.4: báo Sắp hết là thông tin, không chuyển cấp, hiển thị trên bảng điều khiển đến khi được xử lý.
-    running_low = (QuickReport.objects.filter(level=QuickReport.Level.LOW, acknowledged_at__isnull=True)
-                   .select_related("ingredient", "reporter").order_by("-created_at"))
+    from apps.inventory.operations import open_reports_board
+
+    open_reports = open_reports_board()
+    service = service_level(first, end, today) if first <= today else {"frames": 0, "ok": 0, "percent": None,
+                                                                        "worst": [], "target": BO03_TARGET_PERCENT}
     return {
-        "running_low": running_low,
+        "running_low": open_reports, "goals": goals(control, shortages, service, open_reports),
         "today": today, "month": first, "first": first, "end": end, "control": control,
         "bo01_target": BO01_MONTHLY_TARGET, "bo01_met": control["control_value"] < BO01_MONTHLY_TARGET,
         "bo01_chart": bo01_chart,

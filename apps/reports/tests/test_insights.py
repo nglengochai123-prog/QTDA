@@ -8,6 +8,7 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.core import numbers
 from apps.inventory import lots
 from apps.inventory import operations as ops
 from apps.inventory.models import Supplier
@@ -45,11 +46,11 @@ class InsightTests(Base):
         self.assertEqual(s["revenue"], 50000)
         self.assertEqual(round(s["cost"]), 15600)
         kpi = {k["label"]: k for k in s["kpis"]}
-        self.assertEqual(kpi["Doanh thu"]["value"], 50000)
+        self.assertEqual(kpi["Doanh thu thuần"]["value"], 50000)
         self.assertEqual(kpi["Số đơn"]["value"], 1)
         self.assertEqual(kpi["Giá trị mỗi đơn"]["value"], 50000)
         self.assertEqual(kpi["Lãi gộp ước tính"]["value"], 34400)
-        self.assertIsNone(kpi["Doanh thu"]["delta"])  # kỳ trước chưa bán
+        self.assertIsNone(kpi["Doanh thu thuần"]["delta"])  # kỳ trước chưa bán
         self.assertTrue(any("Giá vốn nguyên liệu bằng 31% doanh thu" in n for n in s["notes"]))
         self.assertIsNotNone(s["heat_chart"])
         self.assertIsNone(s["matrix_chart"])  # cần ít nhất hai món để chia ô
@@ -58,6 +59,30 @@ class InsightTests(Base):
         self.paid(2)
         rate = lots.daily_usage([self.d["coffee"].pk])[self.d["coffee"].pk]
         self.assertAlmostEqual(rate, 40)  # sổ kho mới có từ hôm nay: chia 1 ngày, không chia 28
+
+    def test_dashboard_critical_stock_is_days_of_cover(self):
+        """Nguyên liệu trọng yếu khác đơn vị nên quy ra số ngày còn dùng, không đặt gram cạnh ml trên một trục."""
+        self.prices()
+        self.paid(2)  # dùng 40 g cà phê, 60 ml sữa đặc hôm nay
+        for ing, safety in ((self.d["coffee"], 200), (self.d["milk"], 100000)):  # sữa đặc dưới tồn an toàn
+            ing.is_critical, ing.safety_stock = True, safety
+            ing.save()
+        critical, chart = services._critical_stock(timezone.localdate())
+        rows = {r["label"]: r for r in chart["rows"]}
+        coffee, milk = rows[self.d["coffee"].name], rows[self.d["milk"].name]
+        available = {c["ingredient"].pk: float(c["available"]) for c in critical}
+        days = available[self.d["coffee"].pk] / 40
+        self.assertEqual(coffee["text"], f"{numbers.fmt(days, 1)} ngày")  # nhãn ghi số ngày thật
+        self.assertAlmostEqual(coffee["value"], min(days, services.COVER_CAP_DAYS))  # thanh dài nhất 30 ngày
+        self.assertAlmostEqual(coffee["marker"], 5)  # tồn an toàn 200 g ≈ 5 ngày dùng
+        self.assertFalse(coffee["below"])
+        self.assertAlmostEqual(milk["value"], available[self.d["milk"].pk] / 60)
+        self.assertTrue(milk["below"])
+        self.assertEqual(milk["status"], "warn")
+        self.assertEqual([r["label"] for r in chart["rows"]][0], self.d["milk"].name)  # sắp hết trước lên đầu
+        self.client.login(username=self.d["owner"].username, password=PASSWORD)
+        page = self.client.get(reverse("reports:dashboard"))
+        self.assertContains(page, "Nguyên liệu trọng yếu còn đủ dùng")
 
     def test_dimension_charts_pick_a_form_per_dimension(self):
         self.paid(2)

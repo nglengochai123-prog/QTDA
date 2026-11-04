@@ -69,26 +69,35 @@ def register_page(user, week, now=None):
     }
 
 
+def _by_role(people):
+    """Gộp người cùng ca theo vị trí cho dòng ngắn: [{role: "Pha chế", names: "Huy, Lan"}]."""
+    groups = {}
+    for p in people:
+        groups.setdefault(p["role"], []).append(p["short"])
+    return [{"role": role, "names": ", ".join(names)} for role, names in groups.items()]
+
+
 def my_page(user, now=None):
     now = now or timezone.now()
     today = timezone.localdate(now)
     this_week = sv.week_start(today)
     published = set(WeekPublish.objects.values_list("week_start", flat=True))
-    rows = (Assignment.objects.filter(user=user, removed_at__isnull=True, shift__date__gte=this_week)
-            .select_related("shift").order_by("shift__date", "shift__start"))
+    rows = [a for a in (Assignment.objects.filter(user=user, removed_at__isnull=True, shift__date__gte=this_week)
+                        .select_related("shift").order_by("shift__date", "shift__start"))
+            if sv.week_start(a.shift.date) in published]
+    # Người cùng ca chỉ lấy cho các ca đã công bố mà chính người này được xếp.
+    teams = sv.coworkers([a.shift_id for a in rows], user)
     weeks, upcoming = {}, None
     for a in rows:
         s = a.shift
         w = sv.week_start(s.date)
-        if w not in published:
-            continue
         tz = timezone.get_current_timezone()
         start = timezone.make_aware(datetime.combine(s.date, s.start), tz)
         end = timezone.make_aware(s.end_datetime, tz)
         state = "done" if end <= now else "now" if start <= now else "next"
         item = {"a": a, "shift": s, "role": sv.ROLE_LABEL.get(a.role, a.role), "day": DAY_NAMES[s.date.weekday()],
                 "short": DAY_SHORT[s.date.weekday()], "today": s.date == today, "state": state, "hours": s.hours,
-                "start": start, "end": end}
+                "start": start, "end": end, "team": teams.get(s.pk, []), "team_by_role": _by_role(teams.get(s.pk, []))}
         if state != "done" and upcoming is None:
             upcoming = item
             item["until"] = _left(start - now) if state == "next" else _left(end - now)

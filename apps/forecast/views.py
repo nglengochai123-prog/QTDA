@@ -276,7 +276,8 @@ def evaluation(request):
     current = {}
     for r in result["rows"]:
         current[r["size"].pk] = services.method_for(r["size"].pk, has_prior=r["has_prior"])
-        r["current_label"] = MethodDecision.Method(current[r["size"].pk]).label
+        r["current_label"] = ("Tự học từ số bán" if current[r["size"].pk] == MethodDecision.Method.MODEL
+                              else MethodDecision.Method(current[r["size"].pk]).label)
     return render(request, "forecast/evaluation.html", {"result": result, "weekly": weekly, "current": current,
                                                         "accuracy": services.release_accuracy(),
                                                         "simulated": simulated,
@@ -302,7 +303,7 @@ def choose_method(request, size_id):
                         "split": str(r["split"]), "dispersion": r["dispersion"], "sensitivity": r["sensitivity"],
                         "horizons": {str(h): v for h, v in r["horizons"].items()}}
     if method == MethodDecision.Method.MODEL and evidence.get("verdict") != "mo_hinh_tot_hon" and not request.POST.get("note"):
-        messages.error(request, "Đánh giá chưa cho thấy mô hình tốt hơn; ghi lý do nếu vẫn muốn dùng mô hình.")
+        messages.error(request, "Cách tính tự học chưa sát hơn ước tính ban đầu; ghi lý do nếu vẫn muốn dùng.")
         return redirect("forecast:evaluation")
     d = MethodDecision.objects.create(store=size.item.store, size=size, method=method, evidence=evidence,
                                       note=request.POST.get("note", "")[:255], decided_by=request.user)
@@ -313,8 +314,8 @@ def choose_method(request, size_id):
             "approved_by": request.user, "approved_at": timezone.now()})
     record(Action.UPDATE, request=request, obj=d, object_type="forecast.MethodDecision",
            after={"mon": str(size), "cach_tinh": d.get_method_display()}, reason=d.note)
-    messages.success(request, f"{size.item.name} {size.name}: dùng {d.get_method_display().lower()} cho đặt hàng từ lần "
-                              f"phát hành tới.")
+    label = "cách tính tự học" if d.method == MethodDecision.Method.MODEL else d.get_method_display().lower()
+    messages.success(request, f"{size.item.name} {size.name}: dùng {label} cho đặt hàng từ lần phát hành tới.")
     return redirect("forecast:evaluation")
 
 

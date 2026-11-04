@@ -3,23 +3,28 @@
 {% block title %}Báo cáo doanh thu · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <header class="page-head">
-  <div><h1>Báo cáo doanh thu</h1><p class="page-sub">{{ start|date:"d/m/Y" }} – {{ end|date:"d/m/Y" }}. Mũi tên so với kỳ liền trước cùng độ dài ({{ previous_period.0|date:"d/m" }}–{{ previous_period.1|date:"d/m" }}).</p></div>
-  <div class="page-tools"><a class="btn btn-quiet" href="?tu={{ start|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}&amp;xuat=excel">Xuất file Excel</a></div>
+  <div><h1>Báo cáo doanh thu</h1><p class="page-sub">{{ start|date:"d/m/Y" }} – {{ end|date:"d/m/Y" }} · so với {{ previous_period.0|date:"d/m" }}–{{ previous_period.1|date:"d/m" }}</p></div>
+  <div class="page-tools"><a class="btn btn-quiet" href="?tu={{ start|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}&amp;xuat=excel">Xuất Excel</a></div>
 </header>
 {% include "reports/_period.html" %}
 
 {% if rows or refunds %}
 {% include "reports/parts/kpis.html" with kpis=sales.kpis %}
-<div class="stats stats-compact">
-  <div class="stat"><p class="stat-label">Hoàn tiền đã trả trong kỳ</p><p class="stat-value">{{ refunds|intcomma }} <small>đ</small></p></div>
-  <div class="stat"><p class="stat-label">Doanh thu thuần</p><p class="stat-value">{{ net|intcomma }} <small>đ</small></p><p class="stat-note">Doanh thu trừ hoàn tiền</p></div>
-  <div class="stat"><p class="stat-label">Kỳ trước ({{ previous_period.0|date:"d/m" }}–{{ previous_period.1|date:"d/m" }})</p><p class="stat-value">{{ previous|intcomma }} <small>đ</small></p></div>
-</div>
+<section class="card recon" aria-label="Đối chiếu tiền trong kỳ">
+  <dl class="recon-row">
+    <div><dt>Tiền đã thu</dt><dd>{{ total|intcomma }} <small>đ</small></dd></div>
+    <div class="recon-op" aria-hidden="true">−</div>
+    <div><dt>Hoàn tiền đã trả</dt><dd>{{ refunds|intcomma }} <small>đ</small></dd></div>
+    <div class="recon-op" aria-hidden="true">=</div>
+    <div class="recon-total"><dt>Doanh thu thuần</dt><dd>{{ net|intcomma }} <small>đ</small></dd></div>
+    <div class="recon-prev"><dt>Kỳ trước ({{ previous_period.0|date:"d/m" }}–{{ previous_period.1|date:"d/m" }})</dt><dd>{{ previous|intcomma }} <small>đ</small></dd></div>
+  </dl>
+</section>
 {% include "reports/parts/notes.html" with notes=sales.notes id="dt" %}
 
 <section class="card">
   <div class="card-head">
-    <div><h2>Doanh thu theo {{ dim_label|lower }}</h2><p class="card-sub">Ngày, giờ, ca và phương thức theo từng lần thu/hoàn. Món, nhóm món và nhân viên theo phân bổ được lưu tại lúc thu; không phân bổ hoàn tiền vào món.</p></div>
+    <div><h2>Doanh thu theo {{ dim_label|lower }}</h2><p class="card-sub">Tính theo lúc thu và lúc hoàn tiền. Hoàn tiền và đổi món được trừ vào đúng món.</p></div>
     <nav class="seg" aria-label="Chiều xem">{% for v, l in dims %}<a href="?tu={{ start|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}&amp;theo={{ v }}"{% if v == dim %} aria-current="true"{% endif %}>{{ l }}</a>{% endfor %}</nav>
   </div>
   <div class="card-body">
@@ -29,7 +34,7 @@
     {% elif dim_kind == "hbars" %}{% include "reports/charts/hbars.html" with c=dim_chart label="Doanh thu theo "|add:dim_label %}{% endif %}
   </div>
   <div class="table-wrap"><table class="data-table">
-    <thead><tr><th scope="col">{{ dim_label }}</th><th scope="col" class="num">Số đơn</th><th scope="col" class="num">Số ly</th><th scope="col" class="num">Tiền đã thu</th>{% if money_dimension %}<th scope="col" class="num">Đã hoàn</th><th scope="col" class="num">Thu trừ hoàn</th>{% endif %}</tr></thead>
+    <thead><tr><th scope="col">{{ dim_label }}</th><th scope="col" class="num">Số đơn</th><th scope="col" class="num">Số ly</th><th scope="col" class="num">Đã thu</th>{% if money_dimension %}<th scope="col" class="num">Đã hoàn</th><th scope="col" class="num">Doanh thu thuần</th>{% endif %}</tr></thead>
     <tbody>{% for r in rows %}<tr><th scope="row">{{ r.key }}</th><td class="num">{% if r.link %}<a href="{% url 'orders:lookup' %}?{{ r.link }}" title="Xem các đơn của dòng này">{{ r.orders|intcomma }}</a>{% else %}{{ r.orders|intcomma }}{% endif %}</td><td class="num">{{ r.cups|intcomma }}</td><td class="num">{{ r.revenue|intcomma }} đ</td>{% if money_dimension %}<td class="num">{{ r.refunds|intcomma }} đ</td><td class="num">{{ r.net|intcomma }} đ</td>{% endif %}</tr>{% endfor %}</tbody>
     <tfoot><tr><th scope="row">Tổng</th><td class="num">{{ orders|intcomma }}</td><td class="num">{{ cups|intcomma }}</td><td class="num">{{ total|intcomma }} đ</td>{% if money_dimension %}<td class="num">{{ refunds|intcomma }} đ</td><td class="num">{{ net|intcomma }} đ</td>{% endif %}</tr></tfoot>
   </table></div>
@@ -37,15 +42,21 @@
 
 <div class="grid-2">
   <section class="card">
-    <div class="card-head"><div><h2>Giờ đông khách</h2><p class="card-sub">Số đơn trung bình mỗi ngày theo thứ và giờ khách gọi.</p></div></div>
+    <div class="card-head"><div><h2>Giờ đông khách</h2><p class="card-sub">Số đơn trung bình theo thứ và giờ trong kỳ.</p></div></div>
     <div class="card-body">{% if sales.heat_chart %}{% include "reports/charts/heatmap.html" with c=sales.heat_chart label="Số đơn trung bình theo thứ và giờ" %}{% endif %}</div>
   </section>
   <section class="card">
-    <div class="card-head"><div><h2>Ma trận thực đơn</h2><p class="card-sub">Ngang: số ly bán; dọc: lãi gộp mỗi ly. Món ở góc trên phải là món chủ lực.</p></div></div>
+    <div class="card-head"><div><h2>Ma trận thực đơn</h2><p class="card-sub">Số ly bán (ngang) và lãi gộp mỗi ly (dọc). Góc trên phải là món chủ lực.</p></div></div>
     <div class="card-body">{% include "reports/parts/matrix.html" with s=sales %}</div>
   </section>
 </div>
 {% else %}<div class="empty"><p><strong>Chưa có đơn đã thanh toán trong kỳ.</strong></p></div>{% endif %}
-{% if legacy_amount %}<p class="muted">Có {{ legacy_amount|intcomma }} đ từ giao dịch cũ chưa lưu phân bổ món/nhân viên. Các khoản này vẫn được tính đủ theo ngày, giờ, ca và phương thức thu.</p>{% endif %}
-<details class="help-tip"><summary>Giải thích</summary><p>Doanh thu là tiền đã thu trong kỳ, gồm thu trước và thu thêm; khoản chờ thu chưa được tính. Hoàn tiền gồm cả hủy hóa đơn và giảm đơn, ghi vào ngày, ca và phương thức thực hoàn. Số ly ghi tại lần thu đầu, thu thêm không đếm lại ly. Phân bổ tiền theo món được giữ tại lúc thu, không phải sản lượng món cuối cùng sau đổi/hủy. Lãi gộp là ước tính trước hoàn tiền, chưa trừ lương, mặt bằng, điện nước.</p></details>
+{% if legacy_amount %}<p class="note">{{ legacy_amount|intcomma }} đ thuộc giao dịch cũ chưa ghi theo món, nên nằm ở dòng "Chưa có phân bổ lịch sử" khi xem theo món, nhóm món hay nhân viên. Tổng tiền không đổi.</p>{% endif %}
+<details class="help-tip"><summary>Cách đọc báo cáo</summary><ul>
+  <li><strong>Đã thu</strong>: tiền thực nhận trong kỳ, gồm thu trước và thu thêm. Khoản đang chờ thu chưa tính.</li>
+  <li><strong>Đã hoàn</strong>: hủy hóa đơn đã thu và trả lại phần giảm, ghi vào ngày, ca, phương thức thực hoàn.</li>
+  <li><strong>Đổi món</strong> ở đơn đã thu: tiền và số ly chuyển sang món mới lúc duyệt; khoản thu cũ giữ nguyên ngày, ca, phương thức.</li>
+  <li>Cộng các dòng ở bất kỳ cách xem nào đều ra đúng doanh thu thuần.</li>
+  <li><strong>Lãi gộp ước tính</strong> chỉ trừ giá vốn nguyên liệu, chưa trừ lương, mặt bằng, điện nước.</li>
+</ul></details>
 {% endblock %}

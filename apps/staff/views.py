@@ -18,6 +18,18 @@ from apps.core.idempotency import OperationKeyError
 from . import timekeeping
 
 
+def _clock_out_text(result):
+    """Câu báo sau khi ra ca: giờ ra và thời gian của lượt vừa xong, để nhân viên thấy ngay có đúng không."""
+    from .models import Attendance
+
+    att = Attendance.objects.filter(pk=(result or {}).get("attendance")).first()
+    if att is None or att.clock_out is None:
+        return "Đã ra ca."
+    minutes = max(0, int((att.clock_out - att.clock_in).total_seconds() // 60))
+    spent = f"{minutes // 60} giờ {minutes % 60:02d} phút" if minutes >= 60 else f"{minutes} phút"
+    return f"Đã ra ca lúc {timezone.localtime(att.clock_out):%H:%M}, lượt này {spent}."
+
+
 @login_required
 @require_http_methods(["GET", "POST"])
 def attendance(request):
@@ -33,8 +45,8 @@ def attendance(request):
                 timekeeping.clock_in(request.user, p.get("operation_key", ""), p.get("role", ""))
                 messages.success(request, "Đã vào ca.")
             elif p.get("action") == "out":
-                timekeeping.clock_out(request.user, p.get("operation_key", ""))
-                messages.success(request, "Đã ra ca.")
+                result, _ = timekeeping.clock_out(request.user, p.get("operation_key", ""))
+                messages.success(request, _clock_out_text(result))
             elif p.get("action") == "supplement":
                 when = timezone.make_aware(datetime.fromisoformat(p.get("clock_out", "")))
                 timekeeping.supplement_clock_out(request.user, p.get("attendance"), when, p.get("reason", ""))
@@ -69,8 +81,20 @@ def workload(request):
         frame["presence_list"] = [frame["presence"].get(r, 0) for r in timekeeping.WORK_ROLES]
     frames = data["frames"]
     roles = [Role(r).label for r in timekeeping.WORK_ROLES]
+    planned = _planned_by_hour(day)
+    short_hours, short_roles = [], []
     for frame in frames:
-        frame["presence_cells"] = [{"label": label, "n": n} for label, n in zip(roles, frame["presence_list"])]
+        hour = timezone.localtime(frame["start"]).hour
+        frame["presence_cells"] = []
+        for r, label, n in zip(timekeeping.WORK_ROLES, roles, frame["presence_list"]):
+            need = planned.get(hour, {}).get(r)
+            short = need is not None and n < need
+            frame["presence_cells"].append({"label": label, "n": n, "need": need, "short": short,
+                                            "gap": (need - n) if short else 0})
+            if short and label not in short_roles:
+                short_roles.append(label)
+        if any(c["short"] for c in frame["presence_cells"]):
+            short_hours.append(hour)
     labels = [f"{f['start']:%H}h" for f in frames]
     hours = [f["label"] for f in frames]  # khung cuối ghi 23–24 giờ, không phải 23–00
     cups_chart = charts.stacked_columns(labels, [
@@ -92,4 +116,34 @@ def workload(request):
     return render(request, "staff/workload.html", {
         "day": day, "role_headers": roles, "prev_day": day - timedelta(days=1), "next_day": day + timedelta(days=1),
         "cups_chart": cups_chart, "wait_chart": wait_chart, "staff_chart": staff_chart,
-        "overloaded": [h for h, f in zip(hours, frames) if f["overloaded"]], **data})
+        "overloaded": [h for h, f in zip(hours, frames) if f["overloaded"]], "has_plan": bool(planned),
+        "short_frames": _hour_ranges(short_hours), "short_count": len(short_hours), "short_roles": short_roles, **data})
+
+
+def _hour_ranges(hours):
+    """[6, 7, 8, 13] → ["06–09 giờ", "13–14 giờ"]: gộp các khung liền nhau cho thông báo ngắn gọn."""
+    out, run = [], []
+    for h in sorted(hours):
+        if run and h != run[-1] + 1:
+            out.append(f"{run[0]:02d}–{run[-1] + 1:02d} giờ")
+            run = []
+        run.append(h)
+    if run:
+        out.append(f"{run[0]:02d}–{run[-1] + 1:02d} giờ")
+    return out
+
+
+def _planned_by_hour(day):
+    """{giờ: {vị trí: số người cần theo lịch}}: cộng số người cần của các ca trong lịch có mặt ở giờ đó."""
+    from apps.schedule import staffing
+    from apps.schedule.models import RoleNeed
+    from apps.schedule.services import _span
+
+    out = {}
+    for need in RoleNeed.objects.filter(shift__date=day).select_related("shift"):
+        span = _span(need.shift)
+        for hour in range(24):
+            if staffing.covers(span, hour):
+                cell = out.setdefault(hour, {})
+                cell[need.role] = cell.get(need.role, 0) + need.needed
+    return out

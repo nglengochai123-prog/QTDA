@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load humanize %}
+{% load humanize loi_thuong %}
 {% block title %}Ca của tôi · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 {% if to_confirm %}
@@ -23,7 +23,10 @@
 
 {% if not shift %}
 <h1>Ca của tôi</h1>
-<div class="empty"><p><strong>Hiện không có ca nào đang mở.</strong></p>{% if request.user.is_owner %}<p>Tên ca, giờ và người được ủy quyền thanh toán điền sẵn theo ca gần nhất (nếu đã có ca); xem lại rồi lưu.</p><p><a class="btn btn-primary" href="{% url 'masterdata:create' 'ca' %}">Mở ca mới</a></p>{% else %}<p>Báo Chủ quán mở ca để bắt đầu bán hàng và ghi quỹ.</p>{% endif %}</div>
+<div class="empty"><p><strong>Hiện không có ca nào đang mở.</strong></p>{% if upcoming %}<p>Ca tiếp theo: <strong>{{ upcoming.name }} {{ upcoming.starts_at|date:"H:i" }}–{{ upcoming.ends_at|date:"H:i d/m" }}</strong>. Đến giờ bắt đầu ca thì bán hàng và ghi quỹ được.</p>{% elif request.user.is_owner %}<p>Tên ca, giờ và người được ủy quyền thanh toán điền sẵn theo ca gần nhất (nếu đã có ca); xem lại rồi lưu.</p><p><a class="btn btn-primary" href="{% url 'masterdata:create' 'ca' %}">Mở ca mới</a></p>{% else %}<p>Báo Chủ quán mở ca để bắt đầu bán hàng và ghi quỹ.</p>{% endif %}</div>
+{% if recent %}<section class="panel" aria-labelledby="recent-title"><h2 id="recent-title">Ca vừa kết</h2>
+  <ul class="ruled-list compact">{% for r in recent %}<li class="row-between"><a href="{% url 'shifts:my_shift_detail' r.shift.pk %}">{{ r.shift.name }} {{ r.shift.starts_at|date:"H:i" }}–{{ r.shift.ends_at|date:"H:i d/m" }}</a>
+    {% if r.to_explain %}<span class="flag-pending">Cần giải trình {{ r.to_explain }} chênh lệch</span>{% else %}<span class="muted">Xem số liệu</span>{% endif %}</li>{% endfor %}</ul></section>{% endif %}
 {% else %}
 <header class="page-head">
   <h1>{{ shift.name }} <span class="muted">{{ shift.starts_at|date:"H:i" }}–{{ shift.ends_at|date:"H:i d/m" }}</span></h1>
@@ -91,7 +94,7 @@
 {% endif %}
 
 <section class="panel" aria-labelledby="entries-title">
-  <h2 id="entries-title">Bút toán của ca</h2>
+  <h2 id="entries-title">Sổ quỹ tiền mặt của ca</h2>
   {% if entries %}
   <ul class="ruled-list compact">
     {% for e in entries %}
@@ -116,7 +119,7 @@
       {% endif %}{% endif %}</li>
     {% endfor %}
   </ul>
-  {% else %}<p class="muted">Chưa có bút toán nào.</p>{% endif %}
+  {% else %}<p class="muted">Chưa ghi khoản nào.</p>{% endif %}
 </section>
 
 {% if shift.status == "dang_mo" %}
@@ -136,7 +139,8 @@
   <p class="muted">Xử lý hết các mục trên rồi mới kết ca được.{% if open_orders %} Thu tiền các bàn ở <a href="{% url 'orders:cashier' %}">Thu ngân</a>{% if next_shifts %}, hoặc chuyển đơn khách chưa trả sang ca sau{% else %}; khách chưa trả mà hết ca thì Chủ quán tạo ca sau ở Quản trị, mục Ca làm việc, rồi chuyển đơn sang ca đó{% endif %}.{% endif %}</p>
   <button class="btn btn-primary" type="button" disabled>Kết ca và chốt doanh thu</button>
   {% else %}
-  <form method="post" action="{% url 'shifts:close' shift.pk %}" data-once>{% csrf_token %}
+  <p class="muted">Kết ca sẽ khóa ca này: không ghi thêm đơn, khoản chi hay khoản nộp. Sau đó đếm tiền trong két và gửi báo cáo cuối ca để đối soát.</p>
+  <form method="post" action="{% url 'shifts:close' shift.pk %}" data-once data-confirm="Kết ca {{ shift }}? Sau khi kết ca không ghi thêm đơn hay khoản tiền vào ca này.">{% csrf_token %}
     <button class="btn btn-primary" type="submit">Kết ca và chốt doanh thu</button></form>
   {% endif %}
 </section>
@@ -161,7 +165,7 @@
     {% for d in discrepancies %}
     <li class="discrepancy">
       <div class="row-between"><span>{{ d.get_method_display }}: phải có {{ d.expected|intcomma }} đ, thực tế {{ d.actual|intcomma }} đ</span>
-        <strong class="{% if d.difference < 0 %}text-warn{% endif %}">{{ d.difference|intcomma }} đ{% if d.over_threshold %} · vượt ngưỡng{% endif %}</strong></div>
+        <strong class="{% if d.difference < 0 %}text-warn{% endif %}">{{ d.difference|chenh_tien }}{% if d.over_threshold %} · vượt ngưỡng{% endif %}</strong></div>
       {% if not d.over_threshold and not d.explanation %}<p class="muted">Trong mức cho phép nên không phải giải trình{% if d.difference < 0 %}; vẫn được cộng vào thiếu tiền tích lũy của tháng{% endif %}.</p>{% endif %}
       {% if d.explanation %}<p class="muted">Giải trình: {{ d.explanation }}{% if d.decision %} · {{ d.get_decision_display }}{% endif %}</p>
       {% elif d.over_threshold %}
@@ -175,7 +179,7 @@
   </ul>
   {% else %}<p>Không có chênh lệch. Ca đã đối soát khớp.</p>{% endif %}
   {% if history %}<details><summary class="muted">Chênh lệch đã hết hiệu lực sau đính chính ({{ history|length }})</summary>
-    <ul class="plain-list">{% for d in history %}<li class="muted">{{ d.get_method_display }} {{ d.difference|intcomma }} đ · hết hiệu lực {{ d.superseded_at|date:"H:i d/m" }}</li>{% endfor %}</ul></details>{% endif %}
+    <ul class="plain-list">{% for d in history %}<li class="muted">{{ d.get_method_display }}: {{ d.difference|chenh_tien|lower }} · hết hiệu lực {{ d.superseded_at|date:"H:i d/m" }}</li>{% endfor %}</ul></details>{% endif %}
 </section>
 
 <section class="panel" aria-labelledby="corr-title">

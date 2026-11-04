@@ -57,9 +57,10 @@ def _menu_data():
                 "optionGroups": [{
                     "id": g.pk, "name": g.name, "multiple": g.selection == g.Selection.MULTIPLE,
                     "required": g.is_required,
-                    "options": [{"id": o.pk, "name": o.name, "extra": o.extra_price,
+                    "options": [{"id": o.pk, "name": o.name, "ticket": o.ticket_name, "extra": o.extra_price,
                                  "usage": _usage_map(version, option=o)}
-                                for o in g.options.all() if o.is_active],
+                                # Cùng thứ tự thì theo thứ tự khai báo (Bình thường, Ít, Không) thay vì theo chữ cái.
+                                for o in sorted(g.options.all(), key=lambda o: (o.sort_order, o.pk)) if o.is_active],
                 } for g in sorted(item.option_groups.all(), key=lambda g: (g.selection == g.Selection.MULTIPLE, g.name))],
             })
         if items:
@@ -133,7 +134,11 @@ def _bar_context():
         ticket["is_new"] = age.total_seconds() < 60
         ticket["cups"] = sum(l.pending_quantity for l in ticket["lines"])
         result.append(ticket)
-    return {"tickets": result, "cups_waiting": sum(t["cups"] for t in result), "now": now}
+    from apps.inventory.operations import open_reports_board
+
+    # Báo thiếu nguyên liệu còn mở đi cùng hàng chờ: báo mới của người khác, hay báo đã đóng khi nhập hàng, hiện ngay.
+    return {"tickets": result, "cups_waiting": sum(t["cups"] for t in result), "now": now,
+            "open_reports": open_reports_board()}
 
 
 @capability_required(Cap.BAR_PREPARE)

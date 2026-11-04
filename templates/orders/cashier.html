@@ -31,7 +31,7 @@
       </header>
       <dl class="prepaid-facts">
         <div><dt>Tiền</dt><dd><span class="pill pill-ok">{{ o.payment_label }}</span> {{ o.payment.amount|intcomma }} đ · {{ o.payment.get_method_display|lower }} · {{ o.payment.created_at|date:"H:i" }} · {{ o.payment.cashier }}{% if o.payment.cash_received is not None %} · khách đưa {{ o.payment.cash_received|intcomma }} đ, thừa {{ o.payment.change_due|intcomma }} đ{% endif %}</dd></div>
-        <div><dt>Tiến độ</dt><dd><span class="pill pill-neutral">{{ o.progress_label }}</span> {% if c.progress.waiting %}còn {{ c.progress.waiting }} ly chờ pha · {% endif %}còn giao {{ c.progress.to_deliver }} ly</dd></div>
+        <div><dt>Tiến độ</dt><dd><span class="pill pill-neutral">{{ o.progress_label }}</span> {% if c.progress.waiting %}còn {{ c.progress.waiting }} ly chờ pha{% if c.progress.to_deliver %} · {% endif %}{% endif %}{% if c.progress.to_deliver %}còn {{ c.progress.to_deliver }} ly chưa giao{% endif %}</dd></div>
       </dl>
       <ul class="bill-orders prepaid-lines">
         {% for l in c.lines %}

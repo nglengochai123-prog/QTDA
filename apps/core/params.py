@@ -26,8 +26,7 @@ DEFAULTS = {
     "cash_threshold": (50000, "đồng", "Ngưỡng cảnh báo chênh lệch tiền mặt mỗi ca", "BRU-10"),
     "transfer_threshold": (50000, "đồng", "Ngưỡng cảnh báo chênh lệch chuyển khoản mỗi ca", "BRU-10"),
     "accumulated_manager_threshold": (100000, "đồng", "Ngưỡng tích lũy thiếu tiền trong tháng của một người phụ trách ca", "BRU-11"),
-    "accumulated_store_threshold": (300000, "đồng", "Ngưỡng cảnh báo thiếu tiền tích lũy trong tháng của toàn quán "
-                                                    "(khác mục tiêu BO-01 dưới 200.000 đ)", "BRU-11"),
+    "accumulated_store_threshold": (300000, "đồng", "Ngưỡng cảnh báo thiếu tiền tích lũy trong tháng của toàn quán", "BRU-11"),
     "adjust_count_limit": (3, "yêu cầu", "Số yêu cầu điều chỉnh sau pha chế cho phép của một nhân viên trong ca", "BRU-12"),
     "post_prep_value_limit": (100000, "đồng", "Tổng giá trị món hủy sau pha chế cho phép trong ca", "BRU-12"),
     "backup_entry_hours": (1, "giờ", "Thời hạn nhập bù phiếu dự phòng sau khi có kết nối lại", "BRU-03"),
@@ -98,12 +97,20 @@ DEFAULTS = {
     "schedule_deadline_hour": (12, "giờ", "Hạn đăng ký ca tuần sau: giờ trong ngày", "BRU-29"),
     "late_minutes": (5, "phút", "Vào ca sau giờ bắt đầu ca trong lịch quá số phút này thì Chấm công ghi là đi trễ", "FR-35"),
     "schedule_min_per_role": (1, "người", "Số người tối thiểu mỗi vị trí trong mỗi giờ quán mở", "BRU-28"),
+    "schedule_demand_percent": (75, "%", "Gợi ý số người: lo đủ người cho ngày bán đông hơn dự báo, ở mức phân vị này của "
+                                         "dự báo số ly (50: đúng bằng dự báo)", "BRU-28"),
     "schedule_productivity_pha_che": (0, "tải/người/giờ", "Sức làm của một pha chế khi bận liên tục (0: tự đo từ giờ gửi và "
                                                           "giờ pha xong)", "BRU-28"),
-    "schedule_productivity_phuc_vu": (0, "tải/người/giờ", "Sức làm của một phục vụ khi bận liên tục (0: ước lượng thận trọng từ "
+    "schedule_productivity_phuc_vu": (0, "lượt/người/giờ", "Sức làm của một phục vụ khi bận liên tục, tính bằng lượt nhận đơn "
+                                                           "tại bàn và lượt mang món (0: ước lượng thận trọng từ "
                                                           "các giờ không quá tải)", "BRU-28"),
-    "schedule_productivity_thu_ngan": (0, "tải/người/giờ", "Sức làm của một thu ngân khi bận liên tục (0: ước lượng thận trọng "
+    "schedule_productivity_thu_ngan": (0, "giao dịch/người/giờ", "Sức làm của một thu ngân khi bận liên tục, tính bằng khoản thu, "
+                                                                 "khoản hoàn và đơn nhận tại quầy (0: ước lượng thận trọng "
                                                            "từ các giờ không quá tải)", "BRU-28"),
+    "schedule_task_minutes_phuc_vu": (3, "phút", "Thời gian chuẩn một lượt phục vụ (nhận đơn tại bàn hoặc mang món ra), dùng khi "
+                                                  "chưa đo được sức làm thật", "BRU-28"),
+    "schedule_task_minutes_thu_ngan": (1.5, "phút", "Thời gian chuẩn một giao dịch thu ngân (thu tiền, hoàn tiền, nhận đơn tại "
+                                                    "quầy), dùng khi chưa đo được sức làm thật", "BRU-28"),
     "schedule_wait_target_minutes": (4, "phút", "Gợi ý số người: việc phải chờ trong hàng không quá số phút này trước khi có "
                                                 "người làm", "BRU-27, BRU-28"),
     "schedule_service_percent": (70, "%", "Gợi ý số người: tỷ lệ việc mỗi giờ được bắt đầu trong số phút trên", "BRU-27, BRU-28"),
@@ -116,7 +123,8 @@ DEFAULTS = {
 # Tham số của mô hình: chỉ sửa trong file này (người dùng chỉ thấy kết quả, không thấy cách tính).
 MODEL_KEYS = frozenset(k for k in DEFAULTS if k.startswith(("forecast_", "plan_"))) | {
     "schedule_productivity_pha_che", "schedule_productivity_phuc_vu", "schedule_productivity_thu_ngan",
-    "schedule_wait_target_minutes", "schedule_service_percent"}
+    "schedule_wait_target_minutes", "schedule_service_percent", "schedule_demand_percent",
+    "schedule_task_minutes_phuc_vu", "schedule_task_minutes_thu_ngan"}
 
 
 # Khoảng hợp lệ của tham số nghiệp vụ: chặn gõ nhầm (giờ 25, thứ 9, 500%) làm hỏng các phép tính theo giờ, theo thứ.
@@ -131,7 +139,7 @@ BOUNDS = {
     "consumption_check_hours": (1, 720), "purchase_late_days": (1, 60), "count_confirm_days": (1, 60),
     "count_threshold_percent": (0, 100), "open_hour": (0, 23), "close_hour": (1, 24),
     "schedule_deadline_weekday": (2, 8), "schedule_deadline_hour": (0, 23), "late_minutes": (0, 240),
-    "schedule_min_per_role": (0, 20), "lot_near_expiry_days": (0, 60), "lot_near_expiry_percent": (0, 100),
+    "schedule_min_per_role": (0, 20), "schedule_demand_percent": (50, 99), "lot_near_expiry_days": (0, 60), "lot_near_expiry_percent": (0, 100),
 }
 
 
@@ -221,7 +229,13 @@ BASIS = {
                                            "chế đều bận, không lấy trung vị cả giờ rảnh (xem docs/KET_QUA_MO_PHONG.md)"),
     "schedule_productivity_phuc_vu": (BRD, "BRU-28: năng suất do Chủ quán đặt; để 0 thì lấy giờ đông nhất đã làm kịp (phân vị 98 tải "
                                            "mỗi người ở giờ không quá tải), thường thấp hơn sức làm thật nên gợi ý dư người"),
-    "schedule_productivity_thu_ngan": (BRD, "BRU-28: như phục vụ"),
+    "schedule_productivity_thu_ngan": (BRD, "BRU-28: như phục vụ, đơn vị là giao dịch thu ngân"),
+    "schedule_task_minutes_phuc_vu": (ASSUMPTION, "Nhận một đơn tại bàn hoặc mang một khay món ra khoảng 2 đến 4 phút; lấy 3 "
+                                                  "phút. Chỉ là mức sàn khi số đo thấp hơn"),
+    "schedule_task_minutes_thu_ngan": (ASSUMPTION, "Thu một bàn hay một đơn tại quầy (đếm tiền hoặc quét mã) khoảng 1 đến 2 "
+                                                   "phút; lấy 1,5 phút. Chỉ là mức sàn khi số đo thấp hơn"),
+    "schedule_demand_percent": (ASSUMPTION, "Lịch tuần lập trước vài ngày nên cần dự phòng: phân vị 75 của dự báo số ly, tức "
+                                            "khoảng 3 ngày trên 4 không thiếu người vì bán đông hơn dự báo"),
     "schedule_wait_target_minutes": (ASSUMPTION, "Chọn qua mô phỏng hàng đợi: chờ trong hàng 4 phút cộng thời gian pha và mang ra "
                                                  "vẫn dưới chuẩn 10 phút của AC-79"),
     "schedule_service_percent": (ASSUMPTION, "Chọn qua mô phỏng: 70% cho khoảng 96% số giờ đạt chuẩn chờ (BO-03 đòi 90%), giờ "
@@ -231,6 +245,56 @@ BASIS = {
     "lot_near_expiry_percent": (ASSUMPTION, "Hàng hạn dài (siro 1 năm) cần báo sớm hơn 2 ngày: 20% hạn dùng là khoảng 2 tháng, "
                                             "đủ một vòng mua hàng nhóm B để giảm đặt thêm"),
 }
+
+
+# Lời giải thích hiện trên màn Tham số: nói tham số làm gì với quán, không nhắc mã yêu cầu hay tài liệu thiết kế.
+HELP = {
+    "approval_level_minutes": "Yêu cầu hủy món, đổi món, chuyển bàn chưa được duyệt sau số phút này thì bị đánh dấu quá hạn; "
+                              "thu ngân thu theo món khách thực nhận.",
+    "adjust_count_limit": "Một nhân viên gửi quá số yêu cầu hủy hoặc đổi món đã pha trong một ca thì hệ thống mở ngoại lệ.",
+    "post_prep_value_limit": "Tổng tiền món bị hủy sau khi đã pha trong một ca vượt mức này thì hệ thống mở ngoại lệ.",
+    "backup_entry_hours": "Bán bằng phiếu giấy lúc mất mạng thì phải nhập bù trong số giờ này kể từ khi có mạng lại.",
+    "shift_report_hours": "Người phụ trách ca gửi báo cáo cuối ca trong số giờ này sau giờ kết thúc ca.",
+    "cash_threshold": "Tiền mặt đếm được lệch so với số phải có quá mức này thì người phụ trách ca phải giải trình.",
+    "transfer_threshold": "Tiền chuyển khoản nhận được lệch quá mức này thì người phụ trách ca phải giải trình.",
+    "accumulated_manager_threshold": "Các khoản thiếu nhỏ của một người phụ trách ca cộng dồn trong tháng vượt mức này thì "
+                                     "hệ thống mở ngoại lệ.",
+    "accumulated_store_threshold": "Tiền thiếu của cả quán cộng dồn trong tháng vượt mức này thì báo Chủ quán. Khác với "
+                                   "mục tiêu thất thoát dưới 200.000 đ.",
+    "receipt_photo_threshold": "Khoản chi tiền mặt từ mức này phải chụp ảnh chứng từ. Phiếu nhập hàng luôn cần ảnh hóa đơn.",
+    "discrepancy_explain_hours": "Thời hạn người phụ trách ca giải trình khoản chênh lệch tiền vượt ngưỡng.",
+    "discrepancy_decide_days": "Thời hạn Chủ quán chấp nhận hoặc không chấp nhận khoản chênh lệch đã giải trình.",
+    "review_reminder_days": "Ngoại lệ chưa được xem xét sẽ được nhắc lại sau số ngày này.",
+    "consumption_tolerance_percent": "Nguyên liệu trọng yếu dùng thực tế nhiều hơn lượng theo đơn quá mức này giữa hai lần "
+                                     "kiểm kê thì hệ thống mở ngoại lệ.",
+    "consumption_check_hours": "Thời hạn Chủ quán xem xét khi tiêu hao vượt mức cho phép.",
+    "count_threshold_percent": "Số đếm lệch số trên sổ quá mức này thì phải ghi lý do và chờ Chủ quán xác nhận mới điều "
+                               "chỉnh tồn.",
+    "count_confirm_days": "Thời hạn Chủ quán xác nhận kết quả kiểm kê lệch nhiều.",
+    "alert_out_of_stock_minutes": "Nhân viên báo Đã hết thì Chủ quán cần xử lý trong số phút này.",
+    "purchase_late_days": "Hàng đặt đã quá ngày giao dự kiến thì cảnh báo cần xử lý trong số ngày này.",
+    "lot_near_expiry_days": "Lô còn từ số ngày này trở xuống thì hiện là Sắp hết hạn.",
+    "lot_near_expiry_percent": "Hoặc khi thời gian còn lại dưới phần này của hạn dùng; lấy mức báo sớm hơn.",
+    "open_hour": "Báo Đã hết trong giờ mở cửa mới tính là một lần thiếu nguyên liệu.",
+    "close_hour": "Quán đóng cửa lúc nửa đêm thì ghi 24.",
+    "wait_standard_minutes": "Khung giờ có thời gian chờ món thường gặp vượt mức này thì không đạt chuẩn phục vụ.",
+    "bar_backlog_limit": "Cuối khung giờ còn quá số ly này chưa pha thì khung đó bị tính là quá tải.",
+    "schedule_deadline_weekday": "Nhân viên đăng ký ca tuần sau trước thứ này (2 là thứ Hai, 8 là Chủ nhật).",
+    "schedule_deadline_hour": "Giờ chốt đăng ký trong ngày hạn; sau đó Chủ quán xếp lịch.",
+    "late_minutes": "Vào ca trễ hơn giờ bắt đầu quá số phút này thì Chấm công ghi là đi trễ.",
+    "schedule_min_per_role": "Mỗi vị trí luôn có ít nhất số người này trong giờ mở cửa, kể cả giờ vắng khách.",
+}
+GROUPS = [
+    ("Đơn và duyệt", ["approval_level_minutes", "adjust_count_limit", "post_prep_value_limit", "backup_entry_hours"]),
+    ("Tiền và ca", ["shift_report_hours", "cash_threshold", "transfer_threshold", "accumulated_manager_threshold",
+                    "accumulated_store_threshold", "receipt_photo_threshold", "discrepancy_explain_hours",
+                    "discrepancy_decide_days", "review_reminder_days"]),
+    ("Kho", ["consumption_tolerance_percent", "consumption_check_hours", "count_threshold_percent", "count_confirm_days",
+             "alert_out_of_stock_minutes", "purchase_late_days", "lot_near_expiry_days", "lot_near_expiry_percent",
+             "open_hour", "close_hour"]),
+    ("Phục vụ và lịch làm", ["wait_standard_minutes", "bar_backlog_limit", "schedule_deadline_weekday",
+                             "schedule_deadline_hour", "late_minutes", "schedule_min_per_role"]),
+]
 
 
 def _rows(key):

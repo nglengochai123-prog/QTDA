@@ -305,6 +305,28 @@
     }, true);
   });
 
+  // --- Thu chuyển khoản: nhắc ngay tại chỗ nếu chưa đánh dấu đã thấy tiền về, giữ nguyên lựa chọn của thu ngân ---
+  document.querySelectorAll("form").forEach(function (form) {
+    var box = form.querySelector('input[name="transfer_confirmed"]');
+    if (!box || !form.querySelector('input[name="method"][value="chuyen_khoan"]')) return;
+    var hint = document.createElement("p");
+    hint.className = "transfer-hint";
+    hint.hidden = true;
+    hint.textContent = "Đánh dấu ô này khi đã thấy tiền về tài khoản quán.";
+    box.closest("label").insertAdjacentElement("afterend", hint);
+    box.addEventListener("change", function () { hint.hidden = true; });
+    form.addEventListener("change", function (event) { if (event.target.name === "method") hint.hidden = true; });
+    form.addEventListener("submit", function (event) {
+      var transfer = form.querySelector('input[name="method"][value="chuyen_khoan"]');
+      if (transfer && transfer.checked && !box.checked) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        hint.hidden = false;
+        box.focus();
+      }
+    }, true);
+  });
+
   // --- Ô chọn lô chỉ hiện lô của nguyên liệu đang chọn (ghi hao hụt) ---
   document.querySelectorAll("select[data-lots-for]").forEach(function (lotSelect) {
     var ingredient = document.getElementById(lotSelect.dataset.lotsFor);
@@ -331,4 +353,43 @@
       }
     });
   });
+  // --- Ô chọn tệp: nút và tên tệp bằng tiếng Việt thay cho "Choose File / No file chosen" của trình duyệt ---
+  function enhanceFile(input) {
+    if (input.getAttribute("data-pick")) return;
+    input.setAttribute("data-pick", "1");
+    var isImage = /image/.test(input.getAttribute("accept") || "");
+    var empty = isImage ? "Chưa chọn ảnh" : "Chưa chọn tệp";
+    var box = document.createElement("span");
+    box.className = "file-pick";
+    var btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-quiet btn-sm";
+    btn.textContent = isImage ? "Chọn ảnh" : "Chọn tệp";
+    var name = document.createElement("span");
+    name.className = "file-pick-name";
+    name.textContent = empty;
+    input.parentNode.insertBefore(box, input);
+    box.appendChild(input);
+    box.appendChild(btn);
+    box.appendChild(name);
+    input.classList.add("file-pick-input");
+    input.tabIndex = -1;
+    btn.addEventListener("click", function (e) { e.preventDefault(); input.click(); });
+    function show() {
+      var n = input.files ? input.files.length : 0;
+      name.textContent = n > 1 ? n + " tệp" : n === 1 ? input.files[0].name : empty;
+      box.classList.toggle("has-file", n > 0);
+      box.classList.remove("is-invalid");
+      // Câu nhắc bằng tiếng Việt thay cho câu mặc định của trình duyệt khi ô bắt buộc còn trống.
+      if (input.required) input.setCustomValidity(n ? "" : (isImage ? "Chọn ảnh trước khi lưu." : "Chọn tệp trước khi lưu."));
+    }
+    input.addEventListener("invalid", function () {
+      box.classList.add("is-invalid");
+      name.textContent = isImage ? "Cần chọn ảnh trước khi lưu" : "Cần chọn tệp trước khi lưu";
+    });
+    show();
+    input.addEventListener("change", show);
+    if (input.form) input.form.addEventListener("reset", function () { setTimeout(show, 0); });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('input[type="file"]'), enhanceFile);
 })();

@@ -117,7 +117,8 @@ def decide(request, request_id):
         for message in _errors(error):
             messages.error(request, message)
     else:
-        messages.success(request, result["message"] or f"Đã ghi: {result['status']}.")
+        verb = "Đã duyệt" if approve else "Đã từ chối"
+        messages.success(request, result["message"] or f"{verb} yêu cầu {req.summary()} của đơn {req.order.code}.")
     return redirect("orders:approvals")
 
 

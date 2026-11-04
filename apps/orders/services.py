@@ -170,7 +170,7 @@ def submit_order(user, operation_key, payload):
                 quantity=line["quantity"], note=line["note"], recipe_version=line["version"],
                 usage_per_unit=line["usage"])
             OrderLineOption.objects.bulk_create([
-                OrderLineOption(line=order_line, option=o, name=o.name, extra_price=o.extra_price)
+                OrderLineOption(line=order_line, option=o, name=o.ticket_name, extra_price=o.extra_price)
                 for o in line["options"]])
         record(Action.CREATE, actor=user, obj=order, object_type="orders.Order",
                after={"code": order.code, "table": table.code, "total": order.total,

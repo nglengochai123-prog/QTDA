@@ -46,8 +46,8 @@ class MoneyRegressionTests(Base):
         self.assertEqual({r['key']:r['revenue'] for r in rows},{'Tiền mặt':25000,'Chuyển khoản':8000})
         analysis=insights.sales(today,today)
         self.assertEqual(analysis['revenue'],33000)
-        self.assertFalse(analysis['has_cost'])
-        self.assertTrue(any('khoản thu trước' in n for n in analysis['notes']))
+        # Thu trước, thu thêm có phân bổ đầy đủ: không còn ẩn lãi gộp cả kỳ, không có cảnh báo dữ liệu cũ.
+        self.assertFalse(any('chưa lưu phân bổ' in n for n in analysis['notes']))
         self.assertEqual(sum(r['cups'] for r in rows),1)
         self.client.force_login(self.owner)
         transfer = next(r for r in rows if r['key']=='Chuyển khoản')
@@ -96,7 +96,7 @@ class MoneyRegressionTests(Base):
         self.client.force_login(self.owner)
         page=self.client.get(reverse('reports:revenue'),{'tu':str(today),'den':str(today)})
         self.assertEqual(page.status_code,200)
-        self.assertContains(page,'Hoàn tiền đã trả trong kỳ')
+        self.assertContains(page,'Hoàn tiền đã trả')
 
     def test_legacy_receipt_preserves_money_without_inventing_item_history(self):
         Payment.objects.create(store=self.d['store'],table=self.d['table'],cashier=self.owner,shift=self.shift,

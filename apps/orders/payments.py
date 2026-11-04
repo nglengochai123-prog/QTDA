@@ -32,17 +32,16 @@ def bill(table):
             if req.current_level == AdjustmentRequest.Level.EXHAUSTED:
                 exhausted.append(req)
             else:
-                blockers.append(f"Đơn {order.code} có yêu cầu \"{req.summary()}\" đang chờ duyệt ở cấp "
-                                f"{req.get_current_level_display()}.")  # AC-09
+                blockers.append(f"Đơn {order.code} có yêu cầu \"{req.summary()}\" đang {req.waiting_text()}.")  # AC-09
         elif order.status != Order.Status.SERVED:
             blockers.append(f"Đơn {order.code} đang ở trạng thái {order.get_status_display()}, chưa phục vụ xong.")
     if exhausted:
         shift = exhausted[0].order.shift or Shift.objects.operating()
-        who = (f"Người được ủy quyền thu tiền của ca ({shift.authorizer})"
+        who = (f"{shift.authorizer} (được ủy quyền thu tiền ca này)"
                if shift is not None and shift.authorizer is not None else "Chủ quán")
         summary = "; ".join(f"đơn {r.order.code}: {r.summary()}" for r in exhausted)
-        blockers.append(f"Có yêu cầu điều chỉnh đã quá hạn duyệt ({summary}). {who} thu tiền theo món khách "
-                        "thực nhận, hoặc Chủ quán duyệt yêu cầu trước ở mục Duyệt.")
+        blockers.append(f"Yêu cầu điều chỉnh đã quá hạn duyệt ({summary}). {who} thu tiền theo món khách "
+                        "thực nhận, hoặc Chủ quán duyệt yêu cầu ở mục Duyệt.")
     return {"table": table, "orders": orders, "amount": sum(o.total for o in orders),
             "blockers": blockers, "exhausted": exhausted, "requests": requests}
 

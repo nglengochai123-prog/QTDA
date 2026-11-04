@@ -335,6 +335,11 @@ class AdjustmentRequest(StoreScopedModel):
     def get_current_level_display(self):
         return self.Level(self.current_level).label
 
+    def waiting_text(self):
+        """Câu ngắn cho giao diện: đang chờ ai duyệt, hoặc đã quá hạn ở mọi cấp."""
+        return {self.Level.SHIFT: "chờ người duyệt trong ca", self.Level.BACKUP: "chờ người duyệt dự phòng",
+                self.Level.OWNER: "chờ Chủ quán"}.get(self.current_level, "đã quá hạn duyệt")
+
     def summary(self):
         if self.kind == self.Kind.CANCEL_ITEMS:
             return f"Hủy {self.cups} × {self.line.item_name} {self.line.size_name}"

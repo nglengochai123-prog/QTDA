@@ -55,7 +55,7 @@ def stock_list(request):
 
     items = list(_ingredients())
     view = lots.overview(items)
-    rows, totals = [], {"value": 0, "expired": 0, "expired_value": 0, "near": 0, "low": 0, "at_risk_value": 0}
+    rows, totals = [], {"value": 0, "expired": 0, "expired_value": 0, "near": 0, "low": 0, "at_risk_value": 0, "risk": 0}
     empty = [i.pk for i in items if i.stock.available <= 0]
     moved = set(StockMovement.objects.filter(ingredient_id__in=empty).values_list("ingredient_id", flat=True)
                 .distinct()) if empty else set()
@@ -73,6 +73,7 @@ def stock_list(request):
         totals["near"] += len(d["near"])
         totals["low"] += int(low)
         totals["at_risk_value"] += d["at_risk_value"]
+        totals["risk"] += int(d["at_risk"] > 0)
     q = request.GET.get("loc", "")
     # Lọc theo từng điều kiện (một nguyên liệu vừa có lô quá hạn vừa dưới tồn an toàn hiện ở cả hai bộ lọc).
     tests = {"expired": lambda r: r["d"]["expired"], "low": lambda r: r["low"], "near": lambda r: r["d"]["near"],
@@ -97,14 +98,27 @@ def quick_report(request):
                                                         p.get("level"), p.get("left") or None), "")
         if result:
             data, _ = result
-            messages.success(request, "Đã báo. Chủ quán nhận được ngay." +
-                             (" Đã ghi một trường hợp thiếu nguyên liệu hôm nay." if data["shortage_recorded"] else ""))
+            if data.get("duplicate"):
+                messages.success(request, f"Đã ghi xác nhận. Báo {data['level'].lower()} của {data['first']} vẫn mở, "
+                                          "không tạo báo mới.")
+            else:
+                messages.success(request, "Đã báo, Chủ quán nhận được ngay." +
+                                 (" Hôm nay được tính một lần thiếu nguyên liệu." if data["shortage_recorded"] else ""))
         return redirect("inventory:quick_report")
+    from apps.shifts.models import Shift
+
+    shift = Shift.objects.operating()
+    open_by = {r.ingredient_id: r for r in ops.open_quick_reports()}
     items = list(_ingredients())
     for i in items:
         i.op_low, i.op_out = uuid.uuid4().hex, uuid.uuid4().hex
-    return render(request, "inventory/quick_report.html", {"ingredients": items,
-                                                           "can_setup": user_can(request.user, Cap.MASTER_INVENTORY)})
+        i.open_report = r = open_by.get(i.pk)
+        if r is not None:
+            r.earlier_shift = shift is None or r.shift_id != shift.pk
+    items.sort(key=lambda i: (i.open_report is None, i.name))  # nguyên liệu đang bị báo thiếu lên đầu
+    return render(request, "inventory/quick_report.html", {
+        "ingredients": items, "open_reports": [i.open_report for i in items if i.open_report], "shift": shift,
+        "can_setup": user_can(request.user, Cap.MASTER_INVENTORY)})
 
 
 @capability_required(Cap.VIEW_WORKLOAD)

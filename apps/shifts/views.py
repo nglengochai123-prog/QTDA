@@ -41,6 +41,14 @@ def my_shift(request, shift_id=None):
     if shift is None:
         shift = Shift.objects.filter(status=Shift.Status.CLOSED, report__isnull=True).first()
     context = {"shift": shift, "categories": [c for c in ExpenseCategory.choices if c[0] != ExpenseCategory.MATERIALS]}
+    if shift is None:
+        # Không có ca đang mở: vẫn chỉ đường về các ca vừa kết, nhất là ca còn chênh lệch phải giải trình.
+        recent = Shift.objects.filter(status=Shift.Status.CLOSED).order_by("-starts_at")[:3]
+        context["upcoming"] = (Shift.objects.filter(status=Shift.Status.OPEN, starts_at__gt=timezone.now())
+                               .order_by("starts_at").first())
+        context["recent"] = [{"shift": s, "to_explain": sum(1 for d in s.discrepancies.current()
+                                                             if d.over_threshold and not d.explanation)}
+                             for s in recent]
     if shift is not None:
         from apps.orders.models import Order
 

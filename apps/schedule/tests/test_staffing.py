@@ -104,7 +104,7 @@ class RateTests(TestCase):
         default = params.DEFAULTS["schedule_productivity_phuc_vu"]
         with mock.patch.dict(params.DEFAULTS, {"schedule_productivity_phuc_vu": (33,) + default[1:]}):
             rates = sv.rates(timezone.localdate())
-        self.assertEqual(rates[Role.PHUC_VU], {"value": 33.0, "source": "Đặt trong file tham số", "kind": "owner"})
+        self.assertEqual(rates[Role.PHUC_VU], {"value": 33.0, "source": "Theo số Chủ quán đặt", "kind": "owner"})
         self.assertIsNone(rates[Role.THU_NGAN])  # chưa ai chấm công thu ngân: Chủ quán nhập tay
 
 

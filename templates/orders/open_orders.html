@@ -16,8 +16,8 @@
       {% for line in order.lines.all %}
       <li class="{% if line.status == 'da_huy' %}is-void{% endif %}">
         <span class="correction">{% if line.cancelled_quantity or line.voided_done_quantity %}<del>{{ line.quantity }}</del><ins>{{ line.billable_quantity }}</ins>{% else %}{{ line.quantity }}{% endif %}</span>
-        × {{ line.item_name }} {{ line.size_name }}
-        <span class="muted">· {{ line.get_status_display }}{% if line.options.all %} · {% for o in line.options.all %}{{ o.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</span>
+        × {{ line.item_name }} {{ line.size_name }}{% if line.options.all %} <span class="muted">({% for o in line.options.all %}{{ o.name }}{% if not forloop.last %}, {% endif %}{% endfor %})</span>{% endif %}
+        <span class="muted">· {{ line.get_status_display }}</span>
       </li>
       {% endfor %}
     </ul>
@@ -25,7 +25,7 @@
       <strong>{{ order.total|intcomma }} đ</strong>
       {% with req=order.pending_request %}
       {% if req %}
-      <span class="flag-pending">Đang chờ duyệt: {{ req.summary }} ({{ req.get_current_level_display }})</span>
+      <span class="flag-pending">Đang chờ duyệt: {{ req.summary }} · {{ req.waiting_text }}</span>
       {% else %}
       <a class="btn btn-quiet" href="{% url 'orders:request_adjustment' order.pk %}">Yêu cầu điều chỉnh</a>
       {% endif %}

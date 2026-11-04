@@ -90,6 +90,15 @@ class Option(TimeStampedModel):
     def __str__(self):
         return f"{self.group.name}: {self.name}"
 
+    @property
+    def ticket_name(self):
+        """Tên ghi trên phiếu và đơn. Nhóm chọn một mà tên tùy chọn chưa nói rõ nhóm (như "Bình thường") thì ghép
+        tên nhóm vào trước, để phiếu không hiện "Bình thường, Bình thường" cho cả Đá lẫn Đường."""
+        group = self.group
+        if group.selection == group.Selection.MULTIPLE or group.name.lower() in self.name.lower():
+            return self.name
+        return f"{group.name} {self.name[:1].lower()}{self.name[1:]}"[:80]
+
     def save(self, *args, **kwargs):
         changed = self.pk is None or Option.objects.filter(pk=self.pk).exclude(extra_price=self.extra_price).exists()
         super().save(*args, **kwargs)

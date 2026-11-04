@@ -1,4 +1,5 @@
 {% load loi_thuong %}
+{% include "inventory/parts/open_reports.html" %}
 <p class="bar-summary"><strong>{{ cups_waiting }}</strong> ly chờ pha · {{ tickets|length }} đơn</p>
 {% if tickets %}
 <div class="bar-grid">

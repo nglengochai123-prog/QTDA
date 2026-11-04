@@ -169,6 +169,9 @@ def approve_refund(order, approver, request_id):
     method = Refund.Method.CASH if payment.method == "tien_mat" else Refund.Method.TRANSFER
     refund = Refund.objects.create(store=order.store, payment=payment, order_code=order.code, method=method,
                                    amount=order.total, approved_by=approver, request_id_ref=request_id)
+    from apps.reports.receipts import plan_cancel_refund
+
+    plan_cancel_refund(refund, order, approver)
     record(Action.CREATE, actor=approver, obj=refund, object_type="shifts.Refund",
            after={"don": order.code, "phuong_thuc": refund.get_method_display(), "so_tien": refund.amount,
                   "thanh_toan_goc": payment.pk, "trang_thai": refund.get_status_display()})

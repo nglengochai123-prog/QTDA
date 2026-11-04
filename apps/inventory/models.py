@@ -528,6 +528,15 @@ class QuickReport(StoreScopedModel):
                                         on_delete=models.PROTECT, null=True, blank=True, related_name="+")
     acknowledged_at = models.DateTimeField("Xử lý lúc", null=True, blank=True)
     note = models.CharField("Ghi chú xử lý", max_length=255, blank=True)
+    # Ca lúc báo: ca sau thấy báo của ca trước còn mở, xác nhận lại thay vì báo lặp.
+    shift = models.ForeignKey("shifts.Shift", verbose_name="Ca báo", on_delete=models.PROTECT, null=True, blank=True,
+                              related_name="+")
+    confirm_count = models.PositiveIntegerField("Số lần xác nhận lại", default=0)
+    last_confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người xác nhận lại gần nhất",
+                                          on_delete=models.PROTECT, null=True, blank=True, related_name="+")
+    last_confirmed_at = models.DateTimeField("Xác nhận lại lúc", null=True, blank=True)
+    last_estimated_left = models.DecimalField("Lượng còn lại ước tính gần nhất", max_digits=12, decimal_places=2,
+                                              null=True, blank=True)
 
     class Meta:
         verbose_name = "Báo nhanh nguyên liệu"

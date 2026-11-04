@@ -35,7 +35,7 @@ class DrillDownTests(Base):
     def test_dashboard_and_reports_link_to_details(self):
         QuickReport.objects.create(store=self.d["store"], ingredient=self.d["milk"], level="sap_het", reporter=self.d["barista"])
         r = self.client.get(reverse("reports:dashboard"))
-        self.assertContains(r, "Nguyên liệu báo Sắp hết")
+        self.assertContains(r, "Nguyên liệu đang báo thiếu")
         self.assertContains(r, self.d["milk"].name)
         self.assertContains(r, reverse("orders:lookup") + "?da_thu=1&amp;theo=thanh_toan")
         self.assertContains(r, reverse("control:exceptions") + "?muc=")

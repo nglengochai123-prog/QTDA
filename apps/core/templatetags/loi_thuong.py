@@ -69,3 +69,15 @@ def phut(minutes):
 def nhan(field, label):
     """Ô nhập kèm aria-label, cho bảng nhập nhiều dòng nơi tiêu đề cột thay cho nhãn."""
     return field.as_widget(attrs={"aria-label": label})
+
+@register.filter
+def chenh_tien(value):
+    """Số chênh lệch tiền để người đọc: -70000 -> "Thiếu 70.000 đ", 20000 -> "Dư 20.000 đ", 0 -> "Khớp"."""
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return value
+    if not value:
+        return "Khớp"
+    amount = f"{abs(value):,}".replace(",", ".")
+    return f"Thiếu {amount} đ" if value < 0 else f"Dư {amount} đ"

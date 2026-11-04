@@ -169,7 +169,7 @@ def create_request(user, operation_key, payload):
             fields["new_line"] = {"item": new["item"].pk, "size": new["size"].pk,
                                   "options": [o.pk for o in new["options"]], "quantity": new["quantity"],
                                   "note": new["note"]}
-            option_text = ", ".join(o.name for o in new["options"])
+            option_text = ", ".join(o.ticket_name for o in new["options"])
             fields["new_line_text"] = (f"{new['quantity']} × {new['item'].name} {new['size'].name}"
                                        + (f" ({option_text})" if option_text else ""))[:200]
         if kind == Kind.MOVE_TABLE:
@@ -269,7 +269,7 @@ def _add_line(order, spec, actor, delivered=False):
         order=order, position=position, item=new["item"], size=new["size"], item_name=new["item"].name,
         size_name=new["size"].name, unit_price=new["unit_price"], quantity=new["quantity"], note=new["note"],
         recipe_version=new["version"], usage_per_unit=new["usage"])
-    OrderLineOption.objects.bulk_create([OrderLineOption(line=line, option=o, name=o.name, extra_price=o.extra_price)
+    OrderLineOption.objects.bulk_create([OrderLineOption(line=line, option=o, name=o.ticket_name, extra_price=o.extra_price)
                                          for o in new["options"]])
     if delivered:
         # Món khách đã thực nhận (AC-10): đã pha nên trừ tồn vật lý ngay, không qua giữ chỗ. Không chặn khi
@@ -353,7 +353,7 @@ def decide(user, operation_key, request_id, approve, note=""):
                 _exception(ExceptionCase.Kind.REJECTED_ADJUSTMENT, req,
                            rule="Yêu cầu điều chỉnh sau pha chế bị từ chối",
                            amount=_request_value(req),
-                           detail=f"{req.summary()} · bị từ chối bởi {user} · {payload['note']}")
+                           detail=f"{req.summary()} · bị từ chối bởi {user}" + (f" · {payload['note']}" if payload["note"] else ""))
         req.decided_by, req.decided_at, req.decision_note = user, timezone.now(), payload["note"]
         req.save(update_fields=["status", "decided_by", "decided_at", "decision_note", "updated_at"])
         record(Action.STATUS_CHANGE, actor=user, obj=req, object_type="orders.AdjustmentRequest",

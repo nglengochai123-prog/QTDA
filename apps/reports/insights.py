@@ -5,7 +5,8 @@ toán và ma trận thực đơn theo phương pháp Kasavana và Smith (1982): 
 mỗi ly. Giá vốn lấy từ lượng nguyên liệu thực trừ kho của từng dòng món (gồm cả tùy chọn như trân châu, kem muối) nhân
 giá nhập gần nhất tính tới ngày trừ kho.
 
-Doanh thu cùng định nghĩa với báo cáo doanh thu (services.revenue): từng khoản tiền thực thu, phân bổ món cố định tại lúc thu. Hoàn tiền không trừ ở đây (báo cáo doanh thu có dòng doanh thu thuần).
+Doanh thu ở đây là doanh thu thuần, cùng nguồn với báo cáo doanh thu (receipts): tiền thực thu trừ tiền thực hoàn, theo
+ngày phát sinh; phân bổ món theo sổ phân bổ (đổi món chuyển sang món mới, hoàn tiền trừ đúng món).
 """
 
 from collections import defaultdict
@@ -44,49 +45,64 @@ def _pct(cur, prev):
 class _Period:
     """Gom dòng món đã thu tiền của một kỳ theo ngày, món, nhóm, phương thức và thứ × giờ."""
 
-    def __init__(self, start_day, end_day, prices, lines=None):
+    def __init__(self, start_day, end_day, prices, lines=None, until=None):
+        """until: cắt kỳ tại thời điểm này (kỳ so sánh tính tới cùng giờ với hôm nay)."""
         from apps.inventory.models import StockMovement
 
         self.start_day, self.end_day = start_day, end_day
         start, end = period_bounds(start_day, end_day)
-        lines = list(_paid_lines(start, end)) if lines is None else lines
-        # Giá vốn: lượng nguyên liệu thực trừ kho của từng dòng món (nguồn "dong_mon"); món pha trước lúc thu tiền
-        # nên lấy rộng thêm hai ngày về trước.
-        cost_of = defaultdict(float)
-        if lines:
-            ids = {str(l.pk) for l in lines}
-            for sid, ing, at, q in (StockMovement.objects
-                                    .filter(source_type="dong_mon", created_at__gte=start - timedelta(days=2),
-                                            created_at__lt=end)
+        if until is not None:
+            end = min(end, until)
+        from datetime import datetime
+
+        from apps.orders.models import OrderLine
+
+        from .receipts import counts_order, entries
+
+        found = entries(start, end)
+        # Giá vốn mỗi ly của từng dòng món: nguyên liệu thực trừ kho của dòng (nguồn "dong_mon", không giới hạn thời
+        # gian vì món thu trước có thể pha ở ngày khác) chia số ly đã làm hoặc sẽ làm. Ly hủy sau pha chế là hao hụt,
+        # không tính vào giá vốn của ly bán.
+        ids = {e["line_id"] for e in found if e["line_id"] and e["cups"]}
+        per_cup = {}
+        if ids:
+            made = {l.pk: l.quantity - l.cancelled_quantity for l in OrderLine.objects.filter(pk__in=ids)}
+            cost_of = defaultdict(float)
+            for sid, ing, at, q in (StockMovement.objects.filter(source_type="dong_mon",
+                                                                 source_id__in=[str(i) for i in ids])
                                     .values_list("source_id", "ingredient_id", "created_at", "quantity")):
-                if sid in ids:
-                    cost_of[sid] += -float(q) * float(prices.at(ing, timezone.localdate(at)))
+                cost_of[int(sid)] += -float(q) * float(prices.at(ing, timezone.localdate(at)))
+            per_cup = {pk: cost_of[pk] / made[pk] for pk in cost_of if made.get(pk)}
         self.revenue = self.cups = 0
+        self.receipts = self.refunds = 0
         self.cost = 0.0
-        self.cost_complete = True
+        self.legacy = 0
         self.order_ids = set()
         self.days = defaultdict(lambda: {"revenue": 0, "orders": set(), "cups": 0, "cost": 0.0})
         self.items = defaultdict(lambda: {"revenue": 0, "cups": 0, "cost": 0.0, "group": ""})
         self.groups, self.methods = defaultdict(int), defaultdict(int)
         self.slots = defaultdict(set)
-        from .receipts import entries
-        from datetime import datetime
-
-        for entry in entries(start, end):
+        for entry in found:
             value, cups = entry["amount"], entry["cups"]
-            cost = cost_of.get(str(entry["line_id"]), 0.0) if cups else 0.0
-            payment = entry["payment"]
-            if entry["legacy"] or payment.kind in ("tra_truoc", "thu_them"):
-                self.cost_complete = False
-            paid = timezone.localtime(payment.created_at)
-            created = timezone.localtime(datetime.fromisoformat(entry["ordered_at"])) if entry["ordered_at"] else paid
+            cost = per_cup.get(entry["line_id"], 0.0) * cups
+            if entry["legacy"]:
+                self.legacy += abs(value)
+            if entry["kind"] == "hoan":
+                self.refunds -= value
+            else:
+                self.receipts += value
+            at = timezone.localtime(entry["at"])
+            created = timezone.localtime(datetime.fromisoformat(entry["ordered_at"])) if entry["ordered_at"] else at
             self.revenue += value
             self.cups += cups
             self.cost += cost
-            self.order_ids.update(entry["order_ids"])
-            d = self.days[paid.date()]
+            counted = counts_order(entry)
+            if counted:
+                self.order_ids.update(entry["order_ids"])
+            d = self.days[at.date()]
             d["revenue"] += value
-            d["orders"].update(entry["order_ids"])
+            if counted:
+                d["orders"].update(entry["order_ids"])
             d["cups"] += cups
             d["cost"] += cost
             it = self.items[entry["item"]]
@@ -95,9 +111,14 @@ class _Period:
             it["cost"] += cost
             it["group"] = entry["group"]
             self.groups[entry["group"]] += value
-            self.methods[payment.get_method_display()] += value
-            if cups:
+            self.methods[entry["method_label"]] += value
+            if entry["kind"] == "thu" and cups > 0:
                 self.slots[(created.weekday(), created.hour)].update(entry["order_ids"])
+
+    @property
+    def cost_complete(self):
+        """Lãi gộp chỉ hiện khi phần tiền chưa phân bổ món (dữ liệu cũ) không quá 5% doanh thu."""
+        return self.legacy <= 0.05 * abs(self.receipts) if self.receipts else not self.legacy
 
     @property
     def orders(self):
@@ -126,9 +147,35 @@ class _Period:
         return out
 
 
-def sales(start_day, end_day, prev=None, today=None, wide=False, lines=None):
+def _heat(period, days):
+    """Thứ × giờ: số đơn trung bình mỗi ngày cùng thứ (đếm số ngày từng thứ trong kỳ). Trả (biểu đồ, giờ cao điểm)."""
+    weekday_count = [0] * 7
+    for d in days:
+        weekday_count[d.weekday()] += 1
+    hours = sorted({h for _, h in period.slots}) or list(range(7, 22))
+    hours = list(range(min(hours), max(hours) + 1))
+    values = [[len(period.slots.get((w, h), ())) / weekday_count[w] if weekday_count[w] else 0 for h in hours]
+              for w in range(7)]
+    chart = charts.heatmap(
+        WEEKDAYS, [f"{h}h" for h in hours], values, width=charts.HALF,
+        tip=lambda r, c, v: f"{WEEKDAY_NAMES[r]}, {hours[c]}–{hours[c] + 1} giờ: trung bình {_num(v, 1)} đơn mỗi ngày",
+        value_fmt=lambda v: _num(v, 1)) if period.slots else None
+    peak = max(((w, h, values[w][i]) for w in range(7) for i, h in enumerate(hours)), key=lambda x: x[2],
+               default=None)
+    return chart, peak
+
+
+HEAT_DAYS = 28  # giờ đông khách: 4 tuần gần nhất, mỗi thứ có 4 ngày, không phụ thuộc đang ở đầu hay cuối tháng
+
+
+def sales(start_day, end_day, prev=None, today=None, wide=False, lines=None, rolling_heat=False):
     """Phân tích bán hàng kỳ [start_day, end_day]; prev = (từ, đến) của kỳ so sánh, mặc định là kỳ liền trước cùng độ
-    dài. wide: biểu đồ xu hướng chiếm cả hàng. lines: dòng món đã nạp sẵn của đúng kỳ này (services.paid_lines)."""
+    dài. wide: biểu đồ xu hướng chiếm cả hàng. lines: dòng món đã nạp sẵn của đúng kỳ này (services.paid_lines).
+
+    Kỳ đang diễn ra (tới hôm nay): kỳ so sánh tính tới cùng giờ của ngày tương ứng, để hôm nay chưa hết ngày không bị so
+    với cả một ngày đã bán xong. rolling_heat: giờ đông khách lấy 4 tuần gần nhất thay vì riêng kỳ đang xem."""
+    from datetime import datetime
+
     from .inventory import Prices
 
     today = today or timezone.localdate()
@@ -137,19 +184,22 @@ def sales(start_day, end_day, prev=None, today=None, wide=False, lines=None):
     if prev is None:
         prev = (start_day - timedelta(days=length), start_day - timedelta(days=1))
     prices = Prices()
-    cur, old = _Period(start_day, end_day, prices, lines), _Period(prev[0], prev[1], prices)
+    now = timezone.localtime()
+    same_time = end_day == today == now.date()
+    until = timezone.make_aware(datetime.combine(prev[1], now.time().replace(microsecond=0))) if same_time else None
+    cur, old = _Period(start_day, end_day, prices, lines), _Period(prev[0], prev[1], prices, until=until)
     has_cost = cur.cost > 0 and cur.cost_complete
 
     aov = cur.revenue / cur.orders if cur.orders else 0
     old_aov = old.revenue / old.orders if old.orders else 0
     kpis = [
-        {"label": "Doanh thu", "value": cur.revenue, "unit": "đ", "delta": _pct(cur.revenue, old.revenue),
+        {"label": "Doanh thu thuần", "value": cur.revenue, "unit": "đ", "delta": _pct(cur.revenue, old.revenue),
          "spark": charts.sparkline(cur.series("revenue")), "prev": old.revenue},
         {"label": "Số đơn", "value": cur.orders, "unit": "", "delta": _pct(cur.orders, old.orders),
          "spark": charts.sparkline(cur.series("orders")), "prev": old.orders},
         {"label": "Giá trị mỗi đơn", "value": round(aov), "unit": "đ", "delta": _pct(aov, old_aov),
          "spark": charts.sparkline(cur.series("aov")), "prev": round(old_aov)},
-        {"label": "Ly tại lần thu đầu", "value": cur.cups, "unit": "", "delta": _pct(cur.cups, old.cups),
+        {"label": "Số ly bán", "value": cur.cups, "unit": "", "delta": _pct(cur.cups, old.cups),
          "spark": charts.sparkline(cur.series("cups")), "prev": old.cups},
     ]
     if has_cost:
@@ -173,25 +223,22 @@ def sales(start_day, end_day, prev=None, today=None, wide=False, lines=None):
         series.append({"name": f"Kỳ trước ({prev[0]:%d/%m}–{prev[1]:%d/%m})", "values": aligned, "slot": "muted",
                        "label_end": False})
     tips = [f"{d:%d/%m}" + (" (hôm nay, tính đến giờ)" if d == today else "")
-            + (f" (kỳ trước {old_days[k]:%d/%m})" if k < len(old_days) and any(old_rev) else "")
+            + (f" (kỳ trước {old_days[k]:%d/%m}" + (" tính tới cùng giờ" if same_time and k == len(days) - 1 else "")
+               + ")" if k < len(old_days) and any(old_rev) else "")
             for k, d in enumerate(days)]
     trend_chart = charts.line([f"{d:%d/%m}" for d in days], series, value_fmt=charts.fmt, tip_labels=tips,
                               width=charts.WIDE if wide else charts.HALF, height=240) if cur.revenue else None
 
-    # Thứ × giờ: số đơn trung bình mỗi ngày cùng thứ (đếm số ngày từng thứ trong kỳ)
-    weekday_count = [0] * 7
-    for d in days:
-        weekday_count[d.weekday()] += 1
-    hours = sorted({h for _, h in cur.slots}) or list(range(7, 22))
-    hours = list(range(min(hours), max(hours) + 1))
-    values = [[len(cur.slots.get((w, h), ())) / weekday_count[w] if weekday_count[w] else 0 for h in hours]
-              for w in range(7)]
-    heat_chart = charts.heatmap(
-        WEEKDAYS, [f"{h}h" for h in hours], values, width=charts.HALF,
-        tip=lambda r, c, v: f"{WEEKDAY_NAMES[r]}, {hours[c]}–{hours[c] + 1} giờ: trung bình {_num(v, 1)} đơn mỗi ngày",
-        value_fmt=lambda v: _num(v, 1)) if cur.slots else None
-    peak = max(((w, h, values[w][i]) for w in range(7) for i, h in enumerate(hours)), key=lambda x: x[2],
-               default=None)
+    heat_period = (start_day, end_day)
+    heat_source = cur
+    if rolling_heat:
+        last = today - timedelta(days=1)
+        first = last - timedelta(days=HEAT_DAYS - 1)
+        rolling = _Period(first, last, prices)
+        if rolling.slots:
+            heat_source, heat_period = rolling, (first, last)
+    heat_days = [heat_period[0] + timedelta(days=k) for k in range((heat_period[1] - heat_period[0]).days + 1)]
+    heat_chart, peak = _heat(heat_source, heat_days)
 
     # Món: doanh thu, số ly, lãi gộp mỗi ly
     items = sorted(cur.items.items(), key=lambda x: -x[1]["revenue"])
@@ -233,27 +280,34 @@ def sales(start_day, end_day, prev=None, today=None, wide=False, lines=None):
 
     # Nhận định tự động cho Chủ quán: chỉ nêu điều số liệu cho thấy rõ.
     notes = []
-    if not cur.cost_complete:
-        notes.append("Có khoản thu trước, thu thêm hoặc giao dịch thiếu phân bổ lịch sử. Tiền theo ngày thực thu; "
-                     "số ly và phân bổ món theo lần thu đầu, không phải sản lượng sau đổi/hủy. "
-                     "Chưa hiển thị lãi gộp và ma trận lợi nhuận cho kỳ này vì chưa ghép đủ giá vốn tương ứng.")
+    if cur.legacy:
+        notes.append(f"{_money(cur.legacy)} thuộc giao dịch cũ chưa lưu phân bổ món; tổng tiền vẫn đủ"
+                     + ("." if has_cost else ", nhưng chưa tính lãi gộp vì phần này quá 5% doanh thu."))
     d_rev, d_ord, d_aov = _pct(cur.revenue, old.revenue), _pct(cur.orders, old.orders), _pct(aov, old_aov)
     if d_rev is not None and d_ord is not None and d_aov is not None and cur.revenue:
-        driver = "chủ yếu do số đơn" if abs(d_ord) >= abs(d_aov) else "chủ yếu do giá trị mỗi đơn"
-        notes.append(f"Doanh thu {'tăng' if d_rev >= 0 else 'giảm'} {abs(d_rev):.0f}% so với kỳ trước, {driver} "
-                     f"(số đơn {d_ord:+.0f}%, giá trị mỗi đơn {d_aov:+.0f}%).")
+        def move(v):
+            return "không đổi" if round(v) == 0 else f"{'tăng' if v > 0 else 'giảm'} {abs(v):.0f}%"
+
+        driver = "số đơn" if abs(d_ord) >= abs(d_aov) else "giá trị mỗi đơn"
+        if round(d_rev) == 0:
+            notes.append(f"Doanh thu gần như không đổi so với kỳ trước (số đơn {move(d_ord)}, giá trị mỗi đơn "
+                         f"{move(d_aov)}).")
+        else:
+            notes.append(f"Doanh thu {move(d_rev)} so với kỳ trước, chủ yếu do {driver} (số đơn {move(d_ord)}, "
+                         f"giá trị mỗi đơn {move(d_aov)}).")
     if peak and peak[2] > 0:
-        notes.append(f"Đông nhất vào {WEEKDAY_NAMES[peak[0]].lower()}, {peak[1]}–{peak[1] + 1} giờ: trung bình "
-                     f"{_num(peak[2], 1)} đơn mỗi ngày. Xếp đủ pha chế cho khung này.")
+        notes.append(f"Giờ đông nhất: {WEEKDAY_NAMES[peak[0]]} {peak[1]}–{peak[1] + 1} giờ, trung bình "
+                     f"{_num(peak[2], 1)} đơn" + (" (4 tuần gần nhất)" if heat_source is not cur else "")
+                     + ". Nên xếp đủ pha chế cho khung này.")
     if items and cur.revenue:
         name, it = items[0]
-        notes.append(f"{name} mang lại nhiều doanh thu nhất: {it['revenue'] / cur.revenue * 100:.0f}% doanh thu, "
-                     f"{it['cups']} ly.")
+        notes.append(f"Món doanh thu cao nhất: {name}, chiếm {it['revenue'] / cur.revenue * 100:.0f}% doanh thu "
+                     f"({it['cups']} ly).")
     plow = [r for r in matrix_rows if r["quad"] == "br"]
     if plow:
         r = max(plow, key=lambda r: r["cups"])
-        notes.append(f"{r['name']} bán chạy nhưng lãi mỏng ({_money(r['margin_per_cup'])}/ly, thấp hơn mức bình quân "
-                     f"{_money(cur.margin / cur.cups)}/ly): xem lại giá bán hoặc định mức.")
+        notes.append(f"{r['name']} bán chạy nhưng lãi mỏng: {_money(r['margin_per_cup'])}/ly so với bình quân "
+                     f"{_money(cur.margin / cur.cups)}/ly. Nên xem lại giá bán hoặc định mức.")
     if has_cost and cur.revenue:
         notes.append(f"Giá vốn nguyên liệu bằng {cur.cost / cur.revenue * 100:.0f}% doanh thu"
                      + (f" (kỳ trước {old.cost / old.revenue * 100:.0f}%)." if old.cost and old.revenue else "."))
@@ -261,7 +315,7 @@ def sales(start_day, end_day, prev=None, today=None, wide=False, lines=None):
     return {
         "has_sales": bool(cur.revenue), "kpis": kpis, "prev_period": prev, "trend_chart": trend_chart,
         "trend_table": [(d, cur_rev[k], old_rev[k] if k < len(old_rev) else None) for k, d in enumerate(days)],
-        "heat_chart": heat_chart, "top_chart": top_chart, "matrix_chart": matrix_chart, "matrix_rows": matrix_rows,
+        "heat_chart": heat_chart, "heat_period": heat_period, "same_time": same_time, "top_chart": top_chart, "matrix_chart": matrix_chart, "matrix_rows": matrix_rows,
         "group_chart": group_chart, "method_chart": method_chart, "notes": notes, "has_cost": has_cost,
         "revenue": cur.revenue, "orders": cur.orders, "cost": cur.cost,
     }
@@ -269,22 +323,22 @@ def sales(start_day, end_day, prev=None, today=None, wide=False, lines=None):
 
 def dimension_chart(data):
     """Biểu đồ cho báo cáo doanh thu theo một chiều: ngày → đường (đã có ở sales), khung giờ → cột theo giờ,
-    phương thức → thanh tỷ phần, chiều còn lại → thanh ngang xếp theo doanh thu."""
+    phương thức → thanh tỷ phần, chiều còn lại → thanh ngang xếp theo doanh thu thuần (thu trừ hoàn)."""
     rows, dim = data["rows"], data["dim"]
     if not rows or dim == "ngay":
         return None, None
-    total = data["total"] or 1
+    total = data["net"] or 1
     if dim == "khung_gio":
         return "columns", charts.columns(
-            [(r["key"].split("–")[0].lstrip("0") + "h", r["revenue"],
-              f"{r['key']}: {_money(r['revenue'])} · {r['orders']} đơn · {r['cups']} ly") for r in rows],
+            [(r["key"].split("–")[0].lstrip("0") + "h", r["net"],
+              f"{r['key']}: {_money(r['net'])} · {r['orders']} đơn · {r['cups']} ly") for r in rows],
             width=charts.WIDE, height=220)
     if dim == "phuong_thuc":
-        parts = sorted(rows, key=lambda r: -r["revenue"])
-        return "share", charts.share_bar([(r["key"], r["revenue"], slot) for r, slot in zip(parts, (1, 2, 3, "muted"))],
+        parts = sorted(rows, key=lambda r: -r["net"])
+        return "share", charts.share_bar([(r["key"], max(r["net"], 0), slot) for r, slot in zip(parts, (1, 2, 3, "muted"))],
                                          value_fmt=_money)
-    top = sorted(rows, key=lambda r: -r["revenue"])[:15]
+    top = sorted(rows, key=lambda r: -r["net"])[:15]
     return "hbars", charts.hbars([{
-        "label": r["key"], "value": r["revenue"], "text": f"{charts.fmt(r['revenue'])} · {r['revenue'] / total * 100:.0f}%",
-        "tip": f"{r['key']}: {_money(r['revenue'])}, {r['orders']} đơn, {r['cups']} ly"} for r in top],
+        "label": r["key"], "value": r["net"], "text": f"{charts.fmt(r['net'])} · {r['net'] / total * 100:.0f}%",
+        "tip": f"{r['key']}: {_money(r['net'])}, {r['orders']} đơn, {r['cups']} ly"} for r in top],
         label_w=190, width=charts.WIDE)

@@ -304,7 +304,7 @@ def _create_from_slip(user, order_key, clean, shift, sold_at, number, operation_
             done_quantity=line["quantity"], note=line["note"], recipe_version=line["version"],
             usage_per_unit=line["usage"], status=OrderLine.Status.SERVED, done_at=sold_at, served_at=sold_at,
             served_by=user)
-        OrderLineOption.objects.bulk_create([OrderLineOption(line=order_line, option=o, name=o.name,
+        OrderLineOption.objects.bulk_create([OrderLineOption(line=order_line, option=o, name=o.ticket_name,
                                                              extra_price=o.extra_price) for o in line["options"]])
         # Ly đã pha khi mất mạng: trừ tồn vật lý theo định mức đã chụp, không qua giữ chỗ.
         for ingredient_id, amount in line["usage"].items():

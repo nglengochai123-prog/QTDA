@@ -1,0 +1,19 @@
+{% comment %}Báo thiếu nguyên liệu còn mở, kể cả của ca trước, hiện ở quầy pha chế để ca sau không báo lặp.
+Biến: open_reports (QuickReport có earlier_shift).{% endcomment %}
+{% if open_reports %}
+<section class="notice notice-warn shortage-board" aria-labelledby="sb-title">
+  <div class="shortage-body">
+    <div class="shortage-head"><strong id="sb-title">Đang báo thiếu {{ open_reports|length }} nguyên liệu</strong>
+      <a href="{% url 'inventory:quick_report' %}">Xác nhận hoặc báo mới</a></div>
+    <ul class="plain-list shortage-list">
+      {% for r in open_reports %}
+      {% with left=r.last_estimated_left|default_if_none:r.estimated_left %}
+      <li><span class="pill {% if r.level == 'da_het' %}pill-danger{% else %}pill-warn{% endif %}">{{ r.get_level_display }}</span>
+        <strong>{{ r.ingredient.name }}</strong>{% if left is not None %} <span>còn khoảng {{ left|floatformat:"-2g" }} {{ r.ingredient.get_unit_display }}</span>{% endif %}
+        <span class="shortage-meta">{{ r.reporter }} báo {{ r.created_at|date:"H:i d/m" }}{% if r.earlier_shift %} · ca trước{% endif %}{% if r.confirm_count %} · {{ r.confirm_count }} lần xác nhận{% endif %}</span></li>
+      {% endwith %}
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endif %}

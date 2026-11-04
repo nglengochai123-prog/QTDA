@@ -70,11 +70,11 @@
   <ul class="row-list today-list">
     {% for r in board.rows %}<li class="is-{{ r.state }}"><span class="avatar-sm" aria-hidden="true">{{ r.user.initial }}</span>
       <span class="row-main"><strong>{{ r.user }}</strong><small>{{ r.shift.name }} {{ r.shift.start|time:"H:i" }}–{{ r.shift.end|time:"H:i" }} · {{ r.role }}</small></span>
-      <span class="today-times">{% if r.att %}{{ r.att.clock_in|date:"H:i" }}–{% if r.att.clock_out %}{{ r.att.clock_out|date:"H:i" }}{% endif %}{% endif %}</span>
+      <span class="today-times">{% if r.att %}{{ r.att.clock_in|date:"H:i" }}–{% if r.att.clock_out %}{{ r.att.clock_out|date:"H:i" }}{% else %}…{% endif %}{% endif %}</span>
       <span class="pill pill-{{ r.tone }}">{{ r.note }}</span></li>{% endfor %}
     {% for x in board.extra %}<li><span class="avatar-sm" aria-hidden="true">{{ x.user.initial }}</span>
       <span class="row-main"><strong>{{ x.user }}</strong><small>Không có trong lịch · {{ x.role }}</small></span>
-      <span class="today-times">{{ x.att.clock_in|date:"H:i" }}–{% if x.att.clock_out %}{{ x.att.clock_out|date:"H:i" }}{% endif %}</span>
+      <span class="today-times">{{ x.att.clock_in|date:"H:i" }}–{% if x.att.clock_out %}{{ x.att.clock_out|date:"H:i" }}{% else %}…{% endif %}</span>
       <span class="pill pill-info">Ngoài lịch{% if not x.att.clock_out %} · đang làm{% endif %}</span></li>{% endfor %}
   </ul>
   {% else %}<p class="empty-cell">Hôm nay chưa có ai trong lịch hay chấm công.</p>{% endif %}

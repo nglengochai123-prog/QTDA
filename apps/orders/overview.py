@@ -147,9 +147,22 @@ def _low_items():
                   key=lambda r: (r["left"], r["name"]))
 
 
+def _staffing(now):
+    """Người đang trong ca so với số người cần theo lịch tuần ở giờ này (rỗng khi chưa lập lịch)."""
+    from apps.accounts.models import Role
+    from apps.reports.services import staffing_now
+    from apps.staff.models import Attendance
+
+    present = {}
+    for att in Attendance.objects.filter(clock_out__isnull=True):
+        label = Role(att.role).label
+        present[label] = present.get(label, 0) + 1
+    return staffing_now(present, now)
+
+
 def shift_overview(user, now=None):
     from apps.accounts.permissions import Cap, user_can
-    from apps.inventory.models import QuickReport
+    from apps.inventory.operations import open_reports_board
     from apps.shifts.models import Shift
     from apps.shifts.services import figures
 
@@ -174,8 +187,8 @@ def shift_overview(user, now=None):
         "open_amount": sum(t["amount"] for t in busy),
         "bar": _bar(now, params.get("bar_backlog_limit")), "ready": _ready(now),
         "approvals": approvals, "my_approvals": sum(1 for a in approvals if a["mine"]),
-        "people": _people(now), "low_items": _low_items(),
-        "quick_reports": QuickReport.objects.filter(acknowledged_at__isnull=True).select_related("ingredient"),
+        "people": _people(now), "staffing": _staffing(now), "low_items": _low_items(),
+        "quick_reports": open_reports_board(),
         "wait_standard": wait_standard, "can_money": can_money,
         "can_bar": user_can(user, Cap.BAR_PREPARE), "can_pay": can_money,
         "can_approve": user_can(user, Cap.ORDER_ADJUST_APPROVE),

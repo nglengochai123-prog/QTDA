@@ -109,7 +109,7 @@
     </section>
 
     <section class="card" aria-labelledby="ov-people">
-      <div class="card-head"><h2 id="ov-people">Người trong ca</h2></div>
+      <div class="card-head"><div><h2 id="ov-people">Người trong ca</h2>{% if staffing %}<p class="card-sub">Có mặt / cần theo lịch: {% for r in staffing %}<span class="{% if r.short %}note-warn{% endif %}">{{ r.label|lower }} {{ r.present }}/{{ r.needed }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}</p>{% endif %}</div></div>
       {% if people %}
       <ul class="list">
         {% for p in people %}
@@ -125,11 +125,11 @@
     </section>
 
     <section class="card" aria-labelledby="ov-low">
-      <div class="card-head"><div><h2 id="ov-low">Món sắp hết</h2><p class="card-sub">Theo nguyên liệu còn trong kho.</p></div></div>
+      <div class="card-head"><div><h2 id="ov-low">Sắp hết</h2><p class="card-sub">Nguyên liệu nhân viên báo thiếu và món còn ít.</p></div></div>
       {% if low_items or quick_reports %}
       <ul class="list">
         {% for q in quick_reports %}
-        <li class="list-row ov-row"><span><strong>{{ q.ingredient.name }}</strong><span class="cell-sub">Nhân viên báo lúc {{ q.created_at|date:"H:i" }}</span></span>
+        <li class="list-row ov-row"><span><strong>{{ q.ingredient.name }}</strong><span class="cell-sub">{{ q.reporter }} · {{ q.created_at|date:"H:i d/m" }}{% if q.earlier_shift %} · ca trước{% endif %}{% if q.confirm_count %} · {{ q.confirm_count }} lần xác nhận{% endif %}</span></span>
           <span class="pill {% if q.level == 'da_het' %}pill-danger{% else %}pill-warn{% endif %}">{{ q.get_level_display }}</span></li>
         {% endfor %}
         {% for m in low_items %}
@@ -138,7 +138,7 @@
         {% endfor %}
       </ul>
       {% else %}
-      <p class="card-body muted">Món nào cũng còn đủ.</p>
+      <p class="card-body muted">Chưa có món hay nguyên liệu nào sắp hết.</p>
       {% endif %}
     </section>
   </div>

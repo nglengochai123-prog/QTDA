@@ -52,18 +52,48 @@ def record_shortage(ingredient, source, source_ref="", at=None):
 
 # ---------------- Báo nhanh (FR-23) ----------------
 
+RANK = {QuickReport.Level.LOW: 1, QuickReport.Level.OUT: 2}
+
+
 def quick_report(user, operation_key, ingredient_id, level, estimated_left=None):
+    """Báo Sắp hết/Đã hết. Nguyên liệu đã có báo còn mở (kể cả của ca trước) thì không tạo báo mới cùng mức:
+    ghi một lần xác nhận lại vào báo đang mở. Báo Đã hết khi đang có Sắp hết thì nâng mức (báo Sắp hết đóng lại)."""
     payload = {"ingredient": int(ingredient_id), "level": level, "left": str(estimated_left or "")}
 
     def action():
-        ingredient = Ingredient.objects.get(pk=payload["ingredient"], is_active=True)
+        from apps.shifts.models import Shift
+
+        ingredient = Ingredient.objects.select_for_update().get(pk=payload["ingredient"], is_active=True)
         if level not in QuickReport.Level.values:
             raise ValidationError("Chọn Sắp hết hoặc Đã hết.")
         left = _dec(estimated_left, "Lượng còn lại", allow_zero=True) if estimated_left not in (None, "") else None
+        now = timezone.now()
+        shift = Shift.objects.operating()
+        current = (QuickReport.objects.select_for_update().filter(ingredient=ingredient, acknowledged_at__isnull=True)
+                   .order_by("-created_at").first())
+        if current is not None and RANK[current.level] >= RANK[level]:
+            current.confirm_count += 1
+            current.last_confirmed_by, current.last_confirmed_at = user, now
+            if left is not None:
+                current.last_estimated_left = left
+            current.save(update_fields=["confirm_count", "last_confirmed_by", "last_confirmed_at",
+                                        "last_estimated_left", "updated_at"])
+            record(Action.UPDATE, actor=user, obj=current, object_type="inventory.QuickReport",
+                   after={"nguyen_lieu": ingredient.name, "muc": current.get_level_display(),
+                          "xac_nhan_lai": current.confirm_count, "con_lai": str(left or "")},
+                   reason="Đã có báo còn mở; ghi xác nhận lại, không tạo báo mới")
+            return {"report": current.pk, "shortage_recorded": False, "duplicate": True,
+                    "level": current.get_level_display(),
+                    "first": f"{current.reporter} lúc {timezone.localtime(current.created_at):%H:%M %d/%m}"}
         report = QuickReport.objects.create(store=ingredient.store, ingredient=ingredient, level=level,
-                                            estimated_left=left, reporter=user)
+                                            estimated_left=left, reporter=user, shift=shift)
+        if current is not None:  # Sắp hết → Đã hết: một báo mở cho mỗi nguyên liệu
+            current.acknowledged_by, current.acknowledged_at = user, now
+            current.note = f"Chuyển thành Đã hết (báo #{report.pk})"
+            current.save(update_fields=["acknowledged_by", "acknowledged_at", "note", "updated_at"])
         record(Action.CREATE, actor=user, obj=report, object_type="inventory.QuickReport",
-               after={"nguyen_lieu": ingredient.name, "muc": report.get_level_display(), "con_lai": str(left or "")})
+               after={"nguyen_lieu": ingredient.name, "muc": report.get_level_display(), "con_lai": str(left or ""),
+                      "ca": str(shift) if shift else ""})
         shortage = None
         if level == QuickReport.Level.OUT:
             from apps.accounts.models import User
@@ -74,7 +104,8 @@ def quick_report(user, operation_key, ingredient_id, level, estimated_left=None)
                          f"Đã hết {ingredient.name}", f"{user} báo lúc {timezone.localtime():%H:%M}.", "/kho/")
             if in_opening_hours():
                 shortage = record_shortage(ingredient, ShortageCase.Source.REPORTED_OUT, f"Báo nhanh #{report.pk}")
-        return {"report": report.pk, "shortage_recorded": shortage is not None}
+        return {"report": report.pk, "shortage_recorded": shortage is not None, "duplicate": False,
+                "level": report.get_level_display(), "first": ""}
 
     return run_once(operation_key, "quick_report", payload, action, actor=user)
 
@@ -88,8 +119,33 @@ def acknowledge(user, report_id, note=""):
     return report
 
 
+def close_reports_on_receipt(user, ingredient_ids, receipt):
+    """Nhập hàng nguyên liệu đang bị báo thiếu: đóng báo còn mở để ca sau không thấy báo cũ đã hết hiệu lực."""
+    now = timezone.now()
+    for report in QuickReport.objects.select_for_update().filter(ingredient_id__in=ingredient_ids,
+                                                                 acknowledged_at__isnull=True):
+        report.acknowledged_by, report.acknowledged_at = user, now
+        report.note = f"Đã nhập hàng (phiếu nhập #{receipt.pk})"
+        report.save(update_fields=["acknowledged_by", "acknowledged_at", "note", "updated_at"])
+        record(Action.STATUS_CHANGE, actor=user, obj=report, object_type="inventory.QuickReport",
+               before={"trang_thai": "Đang mở"}, after={"trang_thai": "Đã xử lý", "ghi_chu": report.note})
+
+
 def open_quick_reports():
-    return QuickReport.objects.filter(acknowledged_at__isnull=True).select_related("ingredient", "reporter")
+    return (QuickReport.objects.filter(acknowledged_at__isnull=True)
+            .select_related("ingredient", "reporter", "shift", "last_confirmed_by"))
+
+
+def open_reports_board():
+    """Báo thiếu còn mở để hiện cho ca đang làm; đánh dấu báo từ ca trước."""
+    from apps.shifts.models import Shift
+
+    shift = Shift.objects.operating()
+    # Đã hết lên trước Sắp hết (không sắp theo chữ của mã mức), cùng mức thì báo cũ trước.
+    reports = sorted(open_quick_reports(), key=lambda r: (-RANK[r.level], r.created_at))
+    for r in reports:
+        r.earlier_shift = shift is None or r.shift_id != shift.pk
+    return reports
 
 
 # ---------------- Đặt hàng (FR-30, BRU-23) ----------------
@@ -318,6 +374,7 @@ def create_receipt(user, operation_key, supplier_id, lines, payment_type, *, inv
                 CashEntry.objects.create(store=shift.store, shift=shift, kind=CashEntry.Kind.EXPENSE, amount=total,
                                          category=ExpenseCategory.MATERIALS, note=f"Phiếu nhập {receipt.code}",
                                          actor=user, operation_key=f"{operation_key[:56]}-quyca")
+        close_reports_on_receipt(user, {i.pk for i, *_ in parsed}, receipt)
         record(Action.CREATE, actor=user, obj=receipt, object_type="inventory.Receipt",
                after={"ma": receipt.code, "nha_cung_cap": supplier.name, "gia_tri": total,
                       "thanh_toan": receipt.get_payment_type_display(),

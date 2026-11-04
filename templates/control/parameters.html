@@ -2,13 +2,17 @@
 {% load humanize %}
 {% block title %}Tham số · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><div><h1>Tham số quản trị</h1><p class="page-sub">Mỗi lần lưu là một giá trị mới có thời điểm hiệu lực; giá trị cũ được giữ để các ca, yêu cầu và báo cáo đã chốt không bị tính lại. Để trống “Hiệu lực từ” nghĩa là áp dụng ngay.</p></div></header>
-<ul class="ruled-list">
-  {% for p in rows %}
+<header class="page-head"><div><h1>Tham số quản trị</h1><p class="page-sub">Các ngưỡng và thời hạn quán đang dùng. Mỗi lần lưu là một giá trị mới có thời điểm hiệu lực; ca, yêu cầu và báo cáo đã chốt vẫn giữ giá trị cũ. Để trống “hiệu lực từ” thì áp dụng ngay.</p></div></header>
+{% for g in groups %}
+<section class="card param-group" aria-labelledby="pg-{{ forloop.counter }}">
+  <div class="card-head"><h2 id="pg-{{ forloop.counter }}">{{ g.title }}</h2></div>
+  <ul class="ruled-list">
+  {% for p in g.rows %}
   <li class="param-row">
     <div class="exc-text"><strong>{{ p.label }}</strong>
-      <span class="muted">{{ p.source }} · mặc định {{ p.default|intcomma }} {{ p.unit }} · {{ p.basis_note }}</span>
-      {% if p.assumption %}<span class="flag-pending">Giả định chờ Chủ quán xác nhận</span>{% else %}<span class="muted">{{ p.basis }}</span>{% endif %}
+      <span class="param-help">{{ p.help }}</span>
+      <span class="muted">Mặc định {{ p.default|intcomma }} {{ p.unit }}{% if p.value != p.default %} · đang dùng {{ p.value|intcomma }} {{ p.unit }}{% endif %}</span>
+      {% if p.assumption %}<span class="param-flag">Mức tạm đặt, nên xem lại cho hợp với quán</span>{% endif %}
       {% for x in p.upcoming %}<span class="flag-pending">Sắp áp dụng {{ x.value|intcomma }} {{ p.unit }} từ {{ x.effective_from|date:"H:i d/m/Y" }}</span>{% endfor %}
       {% if p.log %}<details><summary class="muted">Lịch sử {{ p.log|length }} lần đặt</summary>
         <ul class="plain-list">{% for x in p.log %}<li class="muted">{{ x.value|intcomma }} {{ p.unit }} từ {{ x.effective_from|date:"H:i d/m/Y" }} · {{ x.set_by|default:"hệ thống" }}{% if x.reason %} · {{ x.reason }}{% endif %}</li>{% endfor %}</ul>
@@ -26,5 +30,7 @@
     </form>
   </li>
   {% endfor %}
-</ul>
+  </ul>
+</section>
+{% endfor %}
 {% endblock %}

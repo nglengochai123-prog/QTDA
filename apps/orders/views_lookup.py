@@ -82,9 +82,18 @@ def order_lookup(request):
     for entry in entries or []:
         if not page_ids.intersection(entry["order_ids"]):
             continue
-        payment = entry["payment"]
-        row = receipt_rows.setdefault(payment.pk, {"payment": payment, "amount": 0, "legacy": entry["legacy"]})
+        source = entry["source"]
+        if entry["kind"] == "thu":
+            label = f"Khoản thu #{source.pk} · {source.get_kind_display()}"
+        elif entry["kind"] == "hoan":
+            label = f"Khoản hoàn #{source.pk} · {source.get_kind_display()}"
+        else:
+            label = "Đổi món giữa các dòng (không có tiền ra vào)"
+        row = receipt_rows.setdefault((entry["kind"], source.pk), {
+            "label": label, "at": entry["at"], "shift": entry["shift"], "method": entry["method_label"],
+            "amount": 0, "cups": 0, "legacy": entry["legacy"]})
         row["amount"] += entry["amount"]
+        row["cups"] += entry["cups"]
     advanced = sum(1 for key in ADVANCED_FILTERS if request.GET.get(key))
     total = Order.objects.filter(pk__in=qs.values("pk")).aggregate(s=Sum("total"))["s"] or 0
     return render(request, "orders/lookup.html", {

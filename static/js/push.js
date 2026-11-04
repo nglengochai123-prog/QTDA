@@ -10,7 +10,8 @@
     method: "POST", credentials: "same-origin",
     headers: { "Content-Type": "application/json", "X-CSRFToken": box.dataset.csrf }, body: body || "{}",
   });
-  const say = (msg) => { text.textContent = msg; };
+  // Thẻ của nhân viên ẩn sẵn, chỉ hiện khi có điều cần nói, để trang không giật khi máy chủ chưa bật thông báo.
+  const say = (msg) => { text.textContent = msg; box.hidden = false; };
   const time = (iso) => iso ? new Date(iso).toLocaleTimeString("vi-VN") : "—";
   function b64(key) {
     const pad = "=".repeat((4 - (key.length % 4)) % 4);

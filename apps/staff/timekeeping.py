@@ -127,13 +127,24 @@ def valid_hours(att):
     return (Decimal(seconds) / 3600).quantize(Decimal("0.01"))
 
 
-def presence(start, end):
-    """Số người có mặt theo vai trò trong khung [start, end): làm ít nhất nửa khung (GD-20)."""
-    half = (end - start) / 2
+def presence(start, end, now=None):
+    """Số người có mặt theo vai trò trong khung [start, end): làm ít nhất nửa khung (GD-20).
+
+    Người đang trong ca (chưa ra ca) tính tới lúc này, để khung đang diễn ra của hôm nay không ghi 0 người. Lượt quên
+    ra ca (Thiếu giờ ra, AC-77) không được tính vì không biết lúc nào người đó thật sự về."""
+    now = now or timezone.now()
+    half = (min(end, max(now, start)) - start) / 2 if start < now < end else (end - start) / 2
+    forgotten = _forgotten_before(now)
     counts = {r: 0 for r in WORK_ROLES}
-    for att in Attendance.objects.filter(clock_in__lt=end).exclude(clock_out__lte=start).exclude(clock_out=None):
-        overlap = min(att.clock_out, end) - max(att.clock_in, start)
-        if overlap >= half:
+    for att in Attendance.objects.filter(clock_in__lt=end).exclude(clock_out__lte=start):
+        if att.clock_out is None:
+            if att.clock_in < forgotten:
+                continue
+            out = now
+        else:
+            out = att.clock_out
+        overlap = min(out, end) - max(att.clock_in, start)
+        if overlap > timedelta(0) and overlap >= half:
             counts[att.role] = counts.get(att.role, 0) + 1
     return counts
 

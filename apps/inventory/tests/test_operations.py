@@ -42,7 +42,10 @@ class OperationTests(TestCase):
         self.assertTrue(r1["shortage_recorded"])
         self.assertFalse(r2["shortage_recorded"])
         self.assertEqual(ShortageCase.objects.count(), 1)
-        self.assertEqual(ops.open_quick_reports().count(), 2)
+        # Người thứ hai báo trùng: ghi xác nhận lại vào báo đang mở, không tạo báo mới.
+        self.assertTrue(r2["duplicate"])
+        self.assertEqual(ops.open_quick_reports().count(), 1)
+        self.assertEqual(ops.open_quick_reports().get().confirm_count, 1)
 
     def test_out_report_reaches_owner_phone(self):
         with mock.patch("apps.core.push.notify_later") as notify:

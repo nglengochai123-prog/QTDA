@@ -173,7 +173,10 @@ def register(request):
         gone = len(set(choices) - set(WorkShift.objects.filter(pk__in=choices).values_list("pk", flat=True)))
         try:
             changed = sv.register(request.user, choices)
-            messages.success(request, "Đã gửi đăng ký." if changed else "Không có thay đổi.")
+            picked = sum(1 for v in choices.values() if v)
+            until = timezone.localtime(sv.deadline_for(week))
+            messages.success(request, (f"Đã gửi đăng ký {picked} ca." if picked else "Đã bỏ đăng ký các ca tuần này.")
+                             + f" Bạn vẫn sửa được đến {until:%H:%M %d/%m}." if changed else "Không có thay đổi.")
         except ValidationError as error:
             for m in error.messages:
                 messages.error(request, m)

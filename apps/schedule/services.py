@@ -25,7 +25,7 @@ from django.utils import timezone
 from apps.accounts.models import Role
 from apps.audit.models import Action
 from apps.audit.services import record
-from apps.core import params
+from apps.core import numbers, params
 
 from . import staffing
 from .models import Assignment, Registration, RoleNeed, WeekPublish, WorkShift
@@ -191,7 +191,7 @@ def _calm_hour_quantile(today, roles, window=56, q=0.98):
     return out
 
 
-def rates(today, window=56):
+def rates(today, window=56, work=None):
     """Sức làm mỗi người mỗi giờ khi bận liên tục, theo vị trí, cùng đơn vị với tải.
 
     Thứ tự: số đặt trong file tham số (apps/core/params.py); với pha chế, đo thông lượng lúc mọi pha chế đều bận (cần ít nhất 3 giờ-người bận);
@@ -202,22 +202,41 @@ def rates(today, window=56):
     for r in ROLES:
         value = params.get(f"schedule_productivity_{r}")
         if value:
-            out[r] = {"value": float(value), "source": "Đặt trong file tham số", "kind": "owner"}
+            out[r] = {"value": float(value), "source": "Theo số Chủ quán đặt", "kind": "owner"}
         else:
             auto.append(r)
     if Role.PHA_CHE in auto:
         rate, busy = staffing.saturated_rate(_bar_events(today, window))
         if rate and busy >= MIN_BUSY_HOURS:
             out[Role.PHA_CHE] = {"value": round(rate, 1), "kind": "measured",
-                                 "source": f"Đo lúc mọi pha chế đều bận ({busy:.0f} giờ-người trong {window // 7} tuần)"}
+                                 "source": f"Đo ở các giờ mọi pha chế đều bận, {window // 7} tuần qua"}
             auto.remove(Role.PHA_CHE)
     if auto:
-        for r, (value, n) in _calm_hour_quantile(today, auto, window).items():
+        if work is not None:  # mỗi vị trí đo theo đơn vị việc của chính nó (demand.UNITS)
+            from . import demand
+
+            found = demand.calm_rates(today, auto, work, window)
+        else:
+            found = _calm_hour_quantile(today, auto, window)
+        for r, (value, n) in found.items():
             out[r] = ({"value": round(value, 1), "kind": "conservative",
-                       "source": f"Giờ đông nhất đã làm kịp trong {n} giờ không quá tải; thường thấp hơn sức làm "
-                                 "thật nên gợi ý dư người"}
+                       "source": f"Ước tính thận trọng từ {n} giờ làm kịp, {window // 7} tuần qua"}
                       if value else None)
+            # Phục vụ, thu ngân hiếm khi bận hết sức nên số đo ở giờ không quá tải chỉ là nhu cầu, không phải sức làm.
+            # Không để gợi ý thấp hơn sức làm theo thời gian chuẩn mỗi việc (giả định, sửa trong file tham số).
+            minutes = params.get(f"schedule_task_minutes_{r}") if work is not None else None
+            if minutes:
+                floor = round(60 / float(minutes), 1)
+                if out[r] is None or out[r]["value"] < floor:
+                    out[r] = {"value": floor, "kind": "standard",
+                              "source": f"Theo thời gian chuẩn {numbers.fmt(minutes, 1)} phút mỗi {demand_unit(r)}"}
     return out
+
+
+def demand_unit(role):
+    from . import demand
+
+    return demand.UNITS.get(role, ("", "việc"))[1]
 
 
 def arrival_scv(today, window=56):
@@ -237,10 +256,15 @@ def arrival_scv(today, window=56):
 
 
 def staffing_inputs(today=None, window=56):
-    """Những gì gợi ý số người cần đọc từ dữ liệu, tính một lần cho cả tuần."""
+    """Những gì gợi ý số người cần đọc từ dữ liệu, tính một lần cho cả tuần.
+
+    drivers: khối việc riêng của từng vị trí (demand.py): tỷ lệ theo giờ của từng thứ và số việc mỗi ly."""
+    from . import demand
+
     today = today or timezone.localdate()
-    return {"today": today, "profile": _hourly_profile(today, window), "rates": rates(today, window),
-            "scv": arrival_scv(today, window)}
+    work, cups = demand.history(today, window)
+    return {"today": today, "profile": _hourly_profile(today, window), "rates": rates(today, window, work),
+            "scv": arrival_scv(today, window), "drivers": demand.profile(work, cups)}
 
 
 def _daily_cups(day, today):
@@ -267,6 +291,31 @@ def _daily_cups(day, today):
     return sum(totals) / len(totals), "Bình quân 4 ngày cùng thứ gần nhất"
 
 
+def _daily_sigma(day):
+    """Độ lệch chuẩn của số ly dự báo trong ngày, từ khoảng q10–q90 của lần phát hành gần nhất (coi các món độc lập).
+    0 khi không có dự báo cho ngày đó."""
+    from apps.forecast.services import latest_release
+
+    rel = latest_release()
+    if not rel:
+        return 0.0
+    idx = (day - rel.first_day).days
+    var = 0.0
+    for s in rel.series.all():
+        if 0 <= idx < len(s.daily):
+            row = s.daily[idx]
+            if row.get("q90") is not None:
+                var += max((float(row["q90"]) - float(row["mean"])) / 1.2816, 0.0) ** 2
+    return var ** 0.5
+
+
+def _z(percent):
+    """Phân vị chuẩn tắc của mức `percent`%."""
+    from statistics import NormalDist
+
+    return NormalDist().inv_cdf(min(max(percent, 50), 99.5) / 100)
+
+
 def _span(shift):
     """(giờ bắt đầu, giờ kết thúc) dạng số thập phân; ca kết thúc lúc 0 giờ tính là 24."""
     a = shift.start.hour + shift.start.minute / 60
@@ -277,13 +326,22 @@ def _span(shift):
 def suggest_day(day, shifts, inputs=None):
     """{ca.pk: {vị trí: (số người gợi ý, căn cứ)}} cho các ca của một ngày.
 
-    1. Tải từng giờ mở cửa = số ly dự kiến của ngày × tỷ lệ bán theo giờ × hệ số tải bình quân mỗi ly.
-    2. Số người từng giờ theo Erlang C (staffing.hourly_needs): nhỏ nhất để ít nhất `schedule_service_percent`% việc
+    1. Số ly cần lo của ngày: dự báo số ly, cộng thêm phần dự phòng để ngày đông hơn dự báo vẫn đủ người
+       (phân vị `schedule_demand_percent`% của dự báo).
+    2. Khối việc từng giờ của từng vị trí, theo đơn vị việc của vị trí đó (demand.py): pha chế theo tải pha chế,
+       phục vụ theo lượt nhận đơn và mang món, thu ngân theo giao dịch; tỷ lệ theo giờ của đúng thứ trong tuần.
+    3. Số người từng giờ theo Erlang C (staffing.hourly_needs): nhỏ nhất để ít nhất `schedule_service_percent`% việc
        chờ không quá `schedule_wait_target_minutes` phút; không dưới mức tối thiểu khi quán mở.
-    3. Chia vào các ca của ngày bằng bài toán phủ (staffing.cover_shifts): đủ người mọi giờ, ít giờ công nhất."""
+    4. Chia vào các ca của ngày bằng bài toán phủ (staffing.cover_shifts): đủ người mọi giờ, ít giờ công nhất."""
+    from . import demand
+
     inputs = inputs or staffing_inputs()
     (shares, load_per_cup), rate_by, scv = inputs["profile"], inputs["rates"], inputs["scv"]
-    cups, source = _daily_cups(day, inputs["today"])
+    drivers = inputs.get("drivers")
+    mean, source = _daily_cups(day, inputs["today"])
+    percent = params.get("schedule_demand_percent")
+    sigma = _daily_sigma(day) if mean is not None else 0.0
+    cups = mean + _z(percent) * sigma if mean is not None else None
     share = shares.get(day.weekday() >= 5, {})
     minimum = params.get("schedule_min_per_role")
     wait_min = params.get("schedule_wait_target_minutes")
@@ -291,10 +349,19 @@ def suggest_day(day, shifts, inputs=None):
     hours = list(range(params.get("open_hour"), params.get("close_hour")))
     spans = [_span(s) for s in shifts]
     out = {s.pk: {} for s in shifts}
-    loads = {h: (cups or 0) * share.get(h, 0) * load_per_cup for h in hours}
     for r in ROLES:
         rate = rate_by.get(r)
-        if cups is None or not share or rate is None or rate["value"] <= 0:
+        driver = drivers.get(r) if drivers else None
+        if driver is not None and cups is not None:
+            per_hour = demand.hourly_work(driver, day, cups)
+            loads = {h: (per_hour or {}).get(h, 0.0) for h in hours}
+            unit, unit_label = driver["unit"], driver["label"]
+            work_basis, per_cup = driver["basis"].get(day.weekday(), ""), driver["per_cup"].get(day.weekday())
+            ready = per_hour is not None
+        else:  # chưa có lịch sử theo vị trí: dùng chung tải pha chế như trước
+            loads = {h: (cups or 0) * share.get(h, 0) * load_per_cup for h in hours}
+            unit, unit_label, work_basis, per_cup, ready = "tải", "tải pha chế", "", load_per_cup, bool(share)
+        if cups is None or not ready or rate is None or rate["value"] <= 0:
             for s in shifts:
                 out[s.pk][r] = (None, {"missing": "Chưa đủ dữ liệu bán theo giờ hoặc sức làm; nhập số người cần."})
             continue
@@ -302,7 +369,10 @@ def suggest_day(day, shifts, inputs=None):
         for s, span, n in zip(shifts, spans, x):
             mine = [h for h in hours if staffing.covers(span, h)]
             out[s.pk][r] = (n, {
-                "cups": round(cups, 1), "cups_source": source, "rate": rate["value"], "rate_source": rate["source"],
+                "cups": round(cups, 1), "cups_mean": round(mean, 1), "cups_sigma": round(sigma, 1),
+                "demand_percent": percent, "cups_source": source, "unit": unit, "unit_label": unit_label,
+                "per_cup": round(per_cup, 3) if per_cup is not None else None, "work_basis": work_basis,
+                "rate": rate["value"], "rate_source": rate["source"],
                 "rate_kind": rate["kind"], "wait_minutes": wait_min, "service_percent": round(target * 100),
                 "scv": scv, "minimum": minimum,
                 "hours": [[h, round(loads[h], 1), need[h]] for h in mine],
@@ -350,12 +420,18 @@ def basis_by_day(rows):
             if not b or "hours" not in b:
                 continue
             day = days.setdefault(s.date, {"date": s.date, "cups": b["cups"], "cups_source": b["cups_source"],
+                                           "cups_mean": b.get("cups_mean", b["cups"]), "cups_sigma": b.get("cups_sigma", 0),
+                                           "demand_percent": b.get("demand_percent"),
                                            "uncovered": b["uncovered"], "roles": {}})
             role = day["roles"].setdefault(cell["role"], {"label": cell["label"], "rate": b["rate"],
                                                           "rate_source": b["rate_source"], "rate_kind": b["rate_kind"],
-                                                          "need": {}})
-            for h, _load, n in b["hours"]:
+                                                          "unit": b.get("unit", "tải"),
+                                                          "unit_label": b.get("unit_label", "tải pha chế"),
+                                                          "per_cup": b.get("per_cup"), "work_basis": b.get("work_basis", ""),
+                                                          "need": {}, "work": {}})
+            for h, load, n in b["hours"]:
                 role["need"][h] = n
+                role["work"][h] = load
     out = []
     for day in sorted(days.values(), key=lambda d: d["date"]):
         hours = sorted({h for r in day["roles"].values() for h in r["need"]})
@@ -364,6 +440,7 @@ def basis_by_day(rows):
             r = day["roles"].get(code)
             if r:
                 r["cells"] = [r["need"].get(h) for h in hours]
+                r["work_cells"] = [r["work"].get(h) for h in hours]
                 r["peak"] = max(r["need"].values(), default=0)
                 roles.append(r)
         out.append({**day, "hours": hours, "roles": roles})
@@ -443,12 +520,43 @@ def assign(owner, shift, user, role, source=Assignment.Source.OWNER):
         record(Action.CREATE, actor=owner, obj=a, object_type="schedule.Assignment",
                after={"ca": str(shift), "nhan_vien": str(user), "vi_tri": ROLE_LABEL[role]},
                reason="Chủ quán xếp sau hạn đăng ký" if late else "Chủ quán xếp")
-        _tell_if_published(user, shift, f"Thêm ca {_shift_text(shift)} · {ROLE_LABEL[role]}")
+        team = team_text(coworkers([shift.pk], user).get(shift.pk))
+        _tell_if_published(user, shift, f"Thêm ca {_shift_text(shift)} · {ROLE_LABEL[role]}" + (f" · {team}" if team else ""))
     return a
 
 
 def _shift_text(shift):
     return f"{shift.date:%d/%m} {shift.start:%H:%M}–{shift.end:%H:%M}"
+
+
+def coworkers(shift_ids, user):
+    """Người khác đang được xếp cùng ca với `user`, theo từng ca: {mã ca: [{name, short, initial, role}]}.
+
+    Chỉ trả cho những ca mà chính `user` đang được xếp, nên nhân viên không xem được người của ca mình không làm.
+    Thứ tự: pha chế, phục vụ, thu ngân, rồi theo tên. Tên ngắn là tên gọi; hai người trùng tên gọi thì để họ tên đủ.
+    """
+    mine = set(Assignment.objects.filter(user=user, shift_id__in=list(shift_ids), removed_at__isnull=True)
+               .values_list("shift_id", flat=True))
+    order = {r: k for k, r in enumerate(ROLES)}
+    out = {pk: [] for pk in mine}
+    for a in (Assignment.objects.filter(shift_id__in=mine, removed_at__isnull=True).exclude(user=user)
+              .select_related("user")):
+        out[a.shift_id].append({"name": str(a.user), "short": a.user.given_name, "initial": a.user.initial,
+                                "role": ROLE_LABEL.get(a.role, a.role), "role_key": a.role})
+    for people in out.values():
+        people.sort(key=lambda p: (order.get(p["role_key"], len(order)), p["name"]))
+        given = [p["short"] for p in people]
+        for p in people:
+            if given.count(p["short"]) > 1:
+                p["short"] = p["name"]
+    return out
+
+
+def team_text(people):
+    """Một dòng ngắn cho thông báo: "cùng ca: Trang (pha chế), Huy (phục vụ)"."""
+    if not people:
+        return ""
+    return "cùng ca: " + ", ".join(f"{p['short']} ({p['role'].lower()})" for p in people)
 
 
 def _tell_if_published(user, shift, body):
@@ -619,12 +727,23 @@ def publish(owner, week):
            after={"tuan": str(week), "con_thieu": len(gaps)})
     from apps.core.push import notify_later
 
-    per_user = defaultdict(list)
+    per_user, per_shift = defaultdict(list), defaultdict(list)
     for a in _active_assignments(week):
         per_user[a.user_id].append(a)
+        per_shift[a.shift_id].append(a)
+    order = {r: k for k, r in enumerate(ROLES)}
+
+    def team(a):
+        # Người cùng ca, để mỗi người biết mình làm với ai ngay trong thông báo (cùng quy tắc với coworkers()).
+        others = sorted((o for o in per_shift[a.shift_id] if o.user_id != a.user_id),
+                        key=lambda o: (order.get(o.role, len(order)), str(o.user)))
+        given = [o.user.given_name for o in others]
+        return team_text([{"short": o.user.given_name if given.count(o.user.given_name) == 1 else str(o.user),
+                           "role": ROLE_LABEL.get(o.role, o.role)} for o in others])
+
     for user_id, items in per_user.items():
         items.sort(key=lambda a: (a.shift.date, a.shift.start))
-        body = "; ".join(f"{a.shift.date:%d/%m} {a.shift.start:%H:%M}–{a.shift.end:%H:%M} {ROLE_LABEL[a.role]}"
+        body = "; ".join(f"{_shift_text(a.shift)} {ROLE_LABEL[a.role]}" + (f", {t}" if (t := team(a)) else "")
                          for a in items[:6]) + ("…" if len(items) > 6 else "")
         notify_later([user_id], f"Lịch làm tuần {week:%d/%m}", body, "/lich/cua-toi/")
     if previous is not None:

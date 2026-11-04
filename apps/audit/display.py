@@ -54,9 +54,40 @@ def model_of(object_type):
         return None
 
 
+# Loại dữ liệu không phải bảng, hoặc bảng chưa đặt tên tiếng Việt: tên hiện trên nhật ký.
+TYPE_LABELS = {
+    "capability": "Quyền truy cập", "schedule.Assignment": "Xếp ca", "schedule.Registration": "Đăng ký ca",
+    "schedule.RoleNeed": "Số người cần của ca", "schedule.WeekPublish": "Công bố lịch tuần",
+    "orders.PaymentAllocation": "Phân bổ tiền thu theo món", "shifts.RefundAllocation": "Phân bổ hoàn tiền theo món",
+    "forecast.MethodDecision": "Cách tính dùng cho đặt hàng", "forecast.OrderSuggestion": "Đề xuất đặt hàng",
+    "forecast.HistoryBatch": "Lịch sử bán nhập vào", "forecast.SeriesForecast": "Dự báo món",
+    "forecast.IngredientForecast": "Dự báo nguyên liệu", "forecast.HistoricalSale": "Lịch sử bán",
+    "forecast.HistoricalDay": "Ngày bán trong lịch sử", "forecast.SeriesConfig": "Cài đặt dự báo món",
+}
+DENIED = re.compile(r"^[a-z_]+: (.*)$")
+
+
 def type_label(object_type):
+    if object_type in TYPE_LABELS:
+        return TYPE_LABELS[object_type]
     model = model_of(object_type)
-    return str(model._meta.verbose_name).capitalize() if model else object_type
+    if model is None:
+        return object_type
+    # Bảng chưa đặt verbose_name thì Django tự sinh chữ tiếng Anh từ tên lớp: không đưa lên giao diện.
+    if "verbose_name" not in model._meta.original_attrs:
+        return "Dữ liệu khác"
+    return str(model._meta.verbose_name).capitalize()
+
+
+def reason_text(log):
+    """Lý do hiện cho người đọc. Lần bị từ chối quyền lưu "mã_quyền: mô tả"; chỉ hiện phần mô tả."""
+    reason = log.reason or ""
+    if log.object_type == "capability":
+        m = DENIED.match(reason)
+        if m:
+            reason = "Không có quyền: " + m.group(1)
+        reason = reason.replace(" (Giai đoạn 2)", "")
+    return reason
 
 
 def _field(model, key):
@@ -143,6 +174,7 @@ def describe(logs):
     for log in logs:
         model = model_of(log.object_type)
         log.type_label = type_label(log.object_type)
+        log.reason_text = reason_text(log)
         before = log.before if isinstance(log.before, dict) else {}
         after = log.after if isinstance(log.after, dict) else {}
         keys = [k for k in after if k not in SKIP] + [k for k in before if k not in after and k not in SKIP]

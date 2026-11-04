@@ -15,7 +15,7 @@
   {% if can_confirm %}<div class="stat"><p class="stat-label">Giá trị tồn kho</p><p class="stat-value">{{ totals.value|intcomma }} đ</p><p class="stat-note">Theo giá nhập của từng lô</p></div>{% endif %}
   <a class="stat{% if totals.expired %} stat-danger{% endif %}" href="?loc=expired"><p class="stat-label">Lô quá hạn còn trong kho</p><p class="stat-value">{{ totals.expired }}</p><p class="stat-note">{% if totals.expired %}Để riêng và hủy{% if can_confirm %}, {{ totals.expired_value|intcomma }} đ{% endif %}{% else %}Không có{% endif %}</p></a>
   <a class="stat{% if totals.near %} stat-warn{% endif %}" href="?loc=near"><p class="stat-label">Lô sắp hết hạn</p><p class="stat-value">{{ totals.near }}</p><p class="stat-note">Ưu tiên dùng trước</p></a>
-  <a class="stat" href="?loc=risk"><p class="stat-label">Dự kiến bỏ vì không dùng kịp</p><p class="stat-value">{% if can_confirm %}{{ totals.at_risk_value|intcomma }} đ{% else %}{{ totals.at_risk_value|yesno:"Có,Không" }}{% endif %}</p><p class="stat-note">Hàng sẽ hết hạn trước khi dùng hết</p></a>
+  <a class="stat{% if totals.risk %} stat-warn{% endif %}" href="?loc=risk"><p class="stat-label">Dự kiến bỏ vì không dùng kịp</p><p class="stat-value">{% if can_confirm %}{{ totals.at_risk_value|intcomma }} đ{% else %}{{ totals.risk }}{% endif %}</p><p class="stat-note">{% if can_confirm and totals.risk %}{{ totals.risk }} nguyên liệu sẽ hết hạn trước khi dùng hết{% elif can_confirm %}Không có hàng phải bỏ{% else %}Nguyên liệu sẽ hết hạn trước khi dùng hết{% endif %}</p></a>
   <a class="stat{% if totals.low %} stat-warn{% endif %}" href="?loc=low"><p class="stat-label">Dưới mức tồn an toàn</p><p class="stat-value">{{ totals.low }}</p><p class="stat-note">Nguyên liệu</p></a>
 </div>
 

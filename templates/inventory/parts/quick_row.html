@@ -1,0 +1,19 @@
+{% comment %}Một dòng báo nhanh. Biến: i (nguyên liệu có op_low, op_out), r (báo đang mở hoặc None).{% endcomment %}
+<li class="qr-row">
+  <div class="qr-text">
+    <span class="qr-name"><strong>{{ i.name }}</strong>{% if r %} <span class="pill {% if r.level == 'da_het' %}pill-danger{% else %}pill-warn{% endif %}">{{ r.get_level_display }}</span>{% endif %}</span>
+    <span class="qr-meta">{% if r %}{% with left=r.last_estimated_left|default_if_none:r.estimated_left %}{% if left is not None %}Báo còn khoảng {{ left|floatformat:"-2g" }} {{ i.get_unit_display }} · {% endif %}{% endwith %}{% endif %}Hệ thống còn {{ i.stock.available|floatformat:"-2g" }} {{ i.get_unit_display }}{% if r %} · {{ r.reporter }} báo {{ r.created_at|date:"H:i d/m" }}{% if r.earlier_shift %} · ca trước{% endif %}{% if r.confirm_count %} · {{ r.confirm_count }} lần xác nhận{% endif %}{% endif %}</span>
+  </div>
+  <div class="qr-actions">
+    {% if not r or r.level != 'da_het' %}<form method="post" class="inline-form" data-once>{% csrf_token %}
+      <input type="hidden" name="operation_key" value="{{ i.op_low }}"><input type="hidden" name="ingredient" value="{{ i.pk }}"><input type="hidden" name="level" value="sap_het">
+      <label class="visually-hidden" for="left-{{ i.pk }}">Còn lại khoảng ({{ i.get_unit_display }})</label>
+      <input class="input input-sm qr-left" id="left-{{ i.pk }}" name="left" inputmode="decimal" placeholder="Còn ({{ i.get_unit_display }})">
+      <button class="btn btn-quiet" type="submit">{% if r %}Vẫn sắp hết{% else %}Sắp hết{% endif %}</button>
+    </form>{% endif %}
+    <form method="post" data-once>{% csrf_token %}
+      <input type="hidden" name="operation_key" value="{{ i.op_out }}"><input type="hidden" name="ingredient" value="{{ i.pk }}"><input type="hidden" name="level" value="da_het">
+      <button class="btn btn-quiet btn-quiet-danger" type="submit">{% if r.level == 'da_het' %}Vẫn hết{% else %}Đã hết{% endif %}</button>
+    </form>
+  </div>
+</li>

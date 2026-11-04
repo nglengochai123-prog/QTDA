@@ -77,14 +77,28 @@
 
   {% elif tab == "gio" %}
   <div class="basis-list">
-    <p class="muted">Số người mỗi vị trí cần trong từng giờ theo số ly dự kiến của ngày. Bấm một ngày để xem chi tiết.</p>
+    <p class="basis-intro">Số người cần ở mỗi vị trí theo từng giờ, tính từ dự báo bán hàng của ngày đó.</p>
     {% for d in basis_days %}
-    <details class="basis-day"{% if forloop.first %} open{% endif %}><summary><strong>{{ d.day }} {{ d.date|date:"d/m" }}</strong> <span class="muted">{{ d.cups|floatformat:"0g" }} ly dự kiến · giờ đông nhất cần {% for r in d.roles %}{{ r.peak }} {{ r.label|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}</span></summary>
-      {% if d.uncovered %}<p class="wk-alert"><span class="dot dot-over"></span>Chưa có ca nào phủ giờ: {% for h in d.uncovered %}{{ h }}h{% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+    <details class="basis-day"{% if forloop.first %} open{% endif %}>
+      <summary>
+        <span class="basis-day-name">{{ d.day }} {{ d.date|date:"d/m" }}</span>
+        <span class="basis-day-meta">Dự báo {{ d.cups_mean|floatformat:"0g" }} ly{% if d.cups_sigma and d.cups != d.cups_mean %} · xếp người đủ cho {{ d.cups|floatformat:"0g" }} ly{% endif %}</span>
+        <span class="basis-day-peak">Cao điểm {% for r in d.roles %}<span>{{ r.peak }} {{ r.label|lower }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}</span>
+      </summary>
+      {% if d.uncovered %}<p class="wk-alert"><span class="dot dot-over"></span>Chưa có ca nào phủ: {% for h in d.uncovered %}{{ h }}h{% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
       <div class="table-wrap"><table class="data-table basis-table">
         <thead><tr><th scope="col">Vị trí</th>{% for h in d.hours %}<th scope="col" class="num">{{ h }}h</th>{% endfor %}</tr></thead>
-        <tbody>{% for r in d.roles %}<tr><th scope="row">{{ r.label }}</th>{% for n in r.cells %}<td class="num">{{ n|default_if_none:"" }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+        <tbody>{% for r in d.roles %}<tr><th scope="row">{{ r.label }}</th>{% for n in r.cells %}<td class="num{% if n and n == r.peak and r.peak > 1 %} is-peak{% endif %}">{{ n|default_if_none:"–" }}</td>{% endfor %}</tr>{% endfor %}</tbody>
       </table></div>
+      <details class="basis-why"><summary>Căn cứ tính</summary>
+        <div class="table-wrap"><table class="data-table basis-table basis-work-table">
+          <caption class="visually-hidden">Khối việc dự kiến mỗi giờ</caption>
+          <thead><tr><th scope="col">Việc dự kiến</th>{% for h in d.hours %}<th scope="col" class="num">{{ h }}h</th>{% endfor %}</tr></thead>
+          <tbody>{% for r in d.roles %}<tr><th scope="row">{{ r.label }} <span class="cell-sub">{{ r.unit }}</span></th>{% for w in r.work_cells %}<td class="num">{% if w is None %}–{% else %}{{ w|floatformat:"0g" }}{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
+        </table></div>
+        <ul class="basis-notes">{% for r in d.roles %}<li><strong>{{ r.label }}</strong>: một người làm khoảng {{ r.rate|floatformat:"0g" }} {{ r.unit }} mỗi giờ, {% if r.rate_kind == "owner" %}theo số Chủ quán đặt{% elif r.rate_kind == "measured" %}đo ở các giờ cao điểm 8 tuần qua{% elif r.rate_kind == "standard" %}theo thời gian chuẩn mỗi {{ r.unit }}{% else %}ước tính thận trọng từ 8 tuần qua{% endif %}.</li>{% endfor %}
+          <li>Dự báo số ly: {{ d.cups_source|lower }}. Phần dư để ngày đông hơn dự báo vẫn đủ người.</li></ul>
+      </details>
     </details>
     {% endfor %}
   </div>

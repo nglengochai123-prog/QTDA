@@ -21,7 +21,7 @@
     <td class="log-change stack-note" data-label="Thay đổi">{% if log.raw %}{% if log.before %}<del>{{ log.raw.0 }}</del> {% endif %}{% if log.after %}{{ log.raw.1 }}{% endif %}
       {% elif log.changes %}<ul class="log-diff">{% for label, old, new in log.changes %}<li><span>{{ label }}</span> {% if old is not None %}<del>{{ old }}</del>{% if new is not None %} → {% endif %}{% endif %}{% if new is not None %}<b>{{ new }}</b>{% endif %}</li>{% endfor %}
         {% if log.more %}<li class="muted">và {{ log.more }} mục khác</li>{% endif %}</ul>{% endif %}</td>
-    <td data-label="Lý do">{{ log.reason }}</td></tr>{% endfor %}</tbody>
+    <td data-label="Lý do">{{ log.reason_text }}</td></tr>{% endfor %}</tbody>
 </table></div>
 {% include "partials/pagination.html" %}
 {% else %}<div class="empty"><p><strong>Không có dòng nhật ký nào khớp bộ lọc.</strong></p></div>{% endif %}
