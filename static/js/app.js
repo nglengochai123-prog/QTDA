@@ -392,4 +392,48 @@
     if (input.form) input.form.addEventListener("reset", function () { setTimeout(show, 0); });
   }
   Array.prototype.forEach.call(document.querySelectorAll('input[type="file"]'), enhanceFile);
+
+  // Câu nhắc khi ô chưa hợp lệ bằng tiếng Việt, không phụ thuộc ngôn ngữ của trình duyệt. Ô nào đã có câu nhắc riêng
+  // (ví dụ chọn ảnh) thì giữ nguyên.
+  function viMessage(el) {
+    var v = el.validity;
+    if (v.valueMissing) {
+      if (el.tagName === "SELECT") return "Chọn một mục trong danh sách.";
+      if (el.type === "checkbox") return "Đánh dấu ô này để tiếp tục.";
+      if (el.type === "radio") return "Chọn một lựa chọn.";
+      return "Điền ô này trước khi lưu.";
+    }
+    if (v.badInput) return el.type === "number" ? "Nhập một số." : "Giá trị chưa đúng.";
+    if (v.rangeUnderflow) return "Nhập số từ " + el.min + " trở lên.";
+    if (v.rangeOverflow) return "Nhập số không quá " + el.max + ".";
+    if (v.stepMismatch) return "Số này không hợp lệ, kiểm tra lại phần lẻ.";
+    if (v.tooShort) return "Nhập ít nhất " + el.minLength + " ký tự.";
+    if (v.typeMismatch) return el.type === "email" ? "Nhập đúng địa chỉ email." : "Giá trị chưa đúng định dạng.";
+    if (v.patternMismatch) return el.title || "Giá trị chưa đúng định dạng.";
+    return "";
+  }
+  document.addEventListener("invalid", function (e) {
+    var el = e.target;
+    if (!el.validity || (el.validity.customError && !el.dataset.viMsg)) return;
+    el.setCustomValidity("");
+    var text = viMessage(el);
+    if (text) { el.setCustomValidity(text); el.dataset.viMsg = "1"; }
+  }, true);
+  function clearViMessage(e) {
+    var el = e.target;
+    if (el && el.dataset && el.dataset.viMsg) { el.setCustomValidity(""); delete el.dataset.viMsg; }
+  }
+  document.addEventListener("input", clearViMessage, true);
+  document.addEventListener("change", clearViMessage, true);
+
+  // Nhóm tùy chọn chỉ chọn một (Đá, Đường) trên phiếu nhập bù: chọn mục mới thì bỏ mục cũ cùng nhóm, cùng dòng.
+  document.addEventListener("change", function (e) {
+    var t = e.target;
+    if (!t.matches || !t.matches("input[type=checkbox][data-single]") || !t.checked) return;
+    var row = t.closest("fieldset") || t.form;
+    if (!row) return;
+    Array.prototype.forEach.call(row.querySelectorAll('input[data-single="' + t.dataset.single + '"]'), function (o) {
+      if (o !== t) o.checked = false;
+    });
+  });
 })();

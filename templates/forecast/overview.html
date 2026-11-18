@@ -9,6 +9,7 @@
     <form method="post" data-once>{% csrf_token %}<button class="btn btn-quiet btn-sm" type="submit">Cập nhật dự báo</button></form>
   </div>
 </header>
+{% if rel %}{% with old=rel.issued_at|so_ngay_truoc %}{% if old >= 2 %}<div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><div>Dự báo tính lúc {{ rel.issued_at|date:"H:i d/m" }}, đã cũ {{ old }} ngày. Bấm Cập nhật dự báo để tính theo số bán mới nhất.</div></div>{% endif %}{% endwith %}{% endif %}
 {% if rows %}
 <div class="stats stats-4">
   {% if t_today %}<div class="stat"><p class="stat-label">Hôm nay</p><p class="stat-value">{{ t_today.0|floatformat:"0g" }} <small>ly</small></p>

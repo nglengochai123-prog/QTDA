@@ -114,7 +114,8 @@ register(Resource(
     key="ca", title="Ca làm việc", singular="Ca", model=Shift,
     fields=["name", "starts_at", "ends_at", "payment_authorizer"],
     columns=[("Ca", str), ("Giờ", _shift_hours),
-             ("Ủy quyền thanh toán theo món", _authorizer_label), ("Trạng thái", "status")],
+             ("Ủy quyền thanh toán theo món", _authorizer_label),
+             ("Nguồn", lambda s: "Theo lịch làm tuần" if s.work_shift_id else "Tạo tay"), ("Trạng thái", "status")],
     save=_save_shift,
     search=("name",), filters=[("trang-thai", "Trạng thái", "status", Shift.Status.choices)],
     queryset=lambda: Shift.objects.select_related("payment_authorizer").order_by("-starts_at"),
@@ -166,6 +167,14 @@ def _set_password(request, employee, data):
     return f"Đã đặt mật khẩu cho {employee.user.username}."
 
 
+def _password_help(employee):
+    user = employee.user
+    if user.has_usable_password():
+        return (f"Tên đăng nhập: {user.username}. Dùng khi nhân viên quên mật khẩu: đặt mật khẩu mới rồi báo nhân viên; "
+                "mật khẩu cũ hết dùng và máy đang đăng nhập bằng mật khẩu cũ phải đăng nhập lại.")
+    return f"Tên đăng nhập: {user.username}. Tài khoản chưa có mật khẩu; đặt ở đây rồi báo nhân viên."
+
+
 def _unlock(request, employee, data):
     employee.user.reset_failed_logins()
     record(Action.UPDATE, request=request, obj=employee.user, after={"tam_khoa": "đã mở"})
@@ -186,9 +195,11 @@ register(Resource(
         ActionDef("mat-khau", "Đặt mật khẩu đăng nhập", _set_password, fields={
             "password1": forms.CharField(label="Mật khẩu mới", widget=forms.PasswordInput),
             "password2": forms.CharField(label="Nhập lại", widget=forms.PasswordInput)},
-            help="Tài khoản mới chưa có mật khẩu; đặt ở đây rồi báo nhân viên."),
+            help=_password_help),
         ActionDef("mo-khoa", "Mở khóa do nhập sai mật khẩu", _unlock,
-                  when=lambda e: bool(e.user.locked_until or e.user.failed_login_count)),
+                  when=lambda e: bool(e.user.locked_until or e.user.failed_login_count),
+                  help="Tài khoản đã nhập sai mật khẩu nên có thể đang bị khóa tạm. Mở khóa để nhân viên đăng nhập "
+                       "lại ngay; số lần nhập sai được đếm lại từ đầu."),
     ],
 ))
 
@@ -420,7 +431,9 @@ register(Resource(
     actions=[
         ActionDef("ap-dung", "Áp dụng từ bây giờ", _publish, when=lambda v: not v.is_published, primary=True,
                   help="Sau khi áp dụng, phiên bản này không sửa được; muốn đổi thì tạo bản nháp mới."),
-        ActionDef("tao-ban-nhap", "Tạo bản nháp mới từ phiên bản này", _copy, when=lambda v: v.is_published),
+        ActionDef("tao-ban-nhap", "Tạo bản nháp mới từ phiên bản này", _copy, when=lambda v: v.is_published,
+                  help="Phiên bản đã áp dụng không sửa được. Bản nháp chép sẵn các dòng của phiên bản này để sửa; "
+                       "định mức mới chỉ được dùng khi bấm Áp dụng ở bản nháp."),
     ],
     note="Lượng nguyên liệu cho một ly theo kích cỡ, cộng thêm khi khách chọn tùy chọn. Mỗi dòng chọn đúng một: "
          "kích cỡ hoặc tùy chọn.",

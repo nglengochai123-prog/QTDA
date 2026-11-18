@@ -19,12 +19,12 @@
   <a class="stat{% if totals.low %} stat-warn{% endif %}" href="?loc=low"><p class="stat-label">Dưới mức tồn an toàn</p><p class="stat-value">{{ totals.low }}</p><p class="stat-note">Nguyên liệu</p></a>
 </div>
 
-{% if quick_reports %}
+{% if quick_reports %}{% now "Ymd" as today_ymd %}
 <section class="card card-warn" aria-labelledby="qr-title">
   <div class="card-head"><h2 id="qr-title">Báo nhanh chưa xử lý</h2></div>
   <ul class="list">
     {% for r in quick_reports %}
-    <li class="list-row"><span><strong>{{ r.ingredient.name }}: {{ r.get_level_display }}</strong>{% if r.estimated_left is not None %} · còn khoảng {{ r.estimated_left|floatformat:"-2g" }} {{ r.ingredient.get_unit_display }}{% endif %} <span class="muted">· {{ r.reporter }} · {{ r.created_at|date:"H:i" }}</span></span>
+    <li class="list-row"><span><strong>{{ r.ingredient.name }}: {{ r.get_level_display }}</strong>{% if r.estimated_left is not None %} · còn khoảng {{ r.estimated_left|floatformat:"-2g" }} {{ r.ingredient.get_unit_display }}{% endif %} <span class="muted">· {{ r.reporter }} · {{ r.created_at|date:"H:i" }}{% if r.created_at|date:"Ymd" != today_ymd %} {{ r.created_at|date:"d/m" }}{% endif %}</span></span>
       {% if can_ack %}<form method="post" action="{% url 'inventory:acknowledge' r.pk %}" class="inline-form" data-once>{% csrf_token %}
         <input type="hidden" name="next" value="{{ request.path }}">
         <input class="input input-sm" name="note" placeholder="Đã xử lý thế nào">
@@ -60,7 +60,7 @@
     <tr>
       <th scope="row"><a href="{% url 'inventory:lot_detail' i.pk %}">{{ i.name }}</a>{% if i.is_critical %} <span class="tag">Trọng yếu</span>{% endif %}</th>
       <td class="stack-hide"><span class="rule" title="{{ i.rule_label }}">{{ i.rule_short }}</span></td>
-      <td class="num" data-label="Có thể dùng">{{ i.stock.available|floatformat:"-2g" }} <span class="unit">{{ i.get_unit_display }}</span>{% if i.stock.reserved %}<div class="cell-sub">đang giữ {{ i.stock.reserved|floatformat:"-2g" }}</div>{% endif %}</td>
+      <td class="num" data-label="Có thể dùng">{{ i.stock.available|floatformat:"-2g" }} <span class="unit">{{ i.get_unit_display }}</span>{% if i.stock.reserved %}<div class="cell-sub">đang giữ {{ i.stock.reserved|floatformat:"-2g" }}</div>{% endif %}{% if d.expired_qty %}<div class="cell-sub text-danger">{{ d.expired_qty|floatformat:"-2g" }} ở lô quá hạn</div>{% endif %}</td>
       <td class="num" data-label="Đủ dùng">{% if d.cover_days is not None %}{{ d.cover_days|floatformat:"0g" }} ngày{% else %}<span class="muted">—</span>{% endif %}</td>
       <td data-label="Lấy trước">{% if d.pick %}<span class="mono">{{ d.pick.code }}</span><div class="cell-sub">{% if d.pick.expiry_date %}HSD {{ d.pick.expiry_date|date:"d/m" }}{% if d.pick.days_left is not None %} · còn {{ d.pick.days_left }} ngày{% endif %}{% else %}Chưa rõ hạn{% endif %}</div>{% else %}<span class="muted">—</span>{% endif %}</td>
       <td class="num stack-hide">{{ d.lots|length }}</td>
@@ -80,7 +80,7 @@
   </table>
   </div>
 </section>
-<details class="help-tip"><summary>Cách đọc bảng</summary><p>Có thể dùng là tồn trong kho trừ phần đang giữ cho món đã gửi pha chế. Đủ dùng là số ngày tồn hiện có còn dùng được. Cột quy tắc xuất cho biết lô nào được lấy trước: "Theo hạn" lấy lô gần hết hạn nhất, dùng cho hàng có hạn dùng; "Nhập trước" lấy lô nhập sớm nhất, dùng cho hàng không có hạn (ly, ống hút); "Nhập sau" chỉ cho hàng không có hạn mà lô mới nằm trên, dễ lấy. Bấm tên nguyên liệu để xem từng lô.</p></details>
+<details class="help-tip"><summary>Cách đọc bảng</summary><p>Có thể dùng là tồn trong kho trừ phần đang giữ cho món đã gửi pha chế; phần nằm ở lô quá hạn được ghi riêng bên dưới, phải để riêng và hủy. Đủ dùng là số ngày tồn hiện có còn dùng được, không tính lô quá hạn. Cột quy tắc xuất cho biết lô nào được lấy trước: "Theo hạn" lấy lô gần hết hạn nhất, dùng cho hàng có hạn dùng; "Nhập trước" lấy lô nhập sớm nhất, dùng cho hàng không có hạn (ly, ống hút); "Nhập sau" chỉ cho hàng không có hạn mà lô mới nằm trên, dễ lấy. Bấm tên nguyên liệu để xem từng lô.</p></details>
 {% else %}
 <div class="empty"><p><strong>Chưa có nguyên vật liệu.</strong></p><p>Chủ quán khai báo nguyên vật liệu và tồn đầu kỳ ở Quản trị.</p></div>
 {% endif %}

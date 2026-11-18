@@ -23,7 +23,7 @@
 
 {% if not shift %}
 <h1>Ca của tôi</h1>
-<div class="empty"><p><strong>Hiện không có ca nào đang mở.</strong></p>{% if upcoming %}<p>Ca tiếp theo: <strong>{{ upcoming.name }} {{ upcoming.starts_at|date:"H:i" }}–{{ upcoming.ends_at|date:"H:i d/m" }}</strong>. Đến giờ bắt đầu ca thì bán hàng và ghi quỹ được.</p>{% elif request.user.is_owner %}<p>Tên ca, giờ và người được ủy quyền thanh toán điền sẵn theo ca gần nhất (nếu đã có ca); xem lại rồi lưu.</p><p><a class="btn btn-primary" href="{% url 'masterdata:create' 'ca' %}">Mở ca mới</a></p>{% else %}<p>Báo Chủ quán mở ca để bắt đầu bán hàng và ghi quỹ.</p>{% endif %}</div>
+<div class="empty"><p><strong>Hiện không có ca nào đang mở.</strong></p>{% if upcoming %}<p>Ca tiếp theo: <strong>{{ upcoming.name }} {{ upcoming.starts_at|date:"H:i" }}–{{ upcoming.ends_at|date:"H:i d/m" }}</strong>. Đến giờ bắt đầu ca thì bán hàng và ghi quỹ được.</p>{% elif request.user.is_owner %}<p>Tên ca, giờ và người được ủy quyền thanh toán điền sẵn theo ca gần nhất (nếu đã có ca); xem lại rồi lưu.</p><p><a class="btn btn-primary" href="{% url 'masterdata:create' 'ca' %}">Mở ca mới</a></p>{% else %}<p>Tới giờ ca trong lịch đã công bố thì mở ca bằng nút bên dưới; không có nút thì báo Chủ quán mở ca.</p>{% endif %}{% load ca_lich %}{% mo_ca_theo_lich %}</div>
 {% if recent %}<section class="panel" aria-labelledby="recent-title"><h2 id="recent-title">Ca vừa kết</h2>
   <ul class="ruled-list compact">{% for r in recent %}<li class="row-between"><a href="{% url 'shifts:my_shift_detail' r.shift.pk %}">{{ r.shift.name }} {{ r.shift.starts_at|date:"H:i" }}–{{ r.shift.ends_at|date:"H:i d/m" }}</a>
     {% if r.to_explain %}<span class="flag-pending">Cần giải trình {{ r.to_explain }} chênh lệch</span>{% else %}<span class="muted">Xem số liệu</span>{% endif %}</li>{% endfor %}</ul></section>{% endif %}
@@ -32,7 +32,7 @@
   <h1>{{ shift.name }} <span class="muted">{{ shift.starts_at|date:"H:i" }}–{{ shift.ends_at|date:"H:i d/m" }}</span></h1>
   <span class="chip">{{ shift.get_status_display }}</span>
 </header>
-{% if status.issues %}<div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><div><strong>{% if status.past_deadline %}Đã quá hạn báo cáo cuối ca ({{ status.deadline|date:"H:i d/m" }}){% else %}Cần xong trước hạn báo cáo cuối ca {{ status.deadline|date:"H:i d/m" }}{% endif %}</strong><ul class="notice-list">{% for issue in status.issues %}<li>{{ issue }}</li>{% endfor %}</ul></div></div>{% endif %}
+{% if status.issues %}<div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><div><strong>{% if status.past_deadline %}Đã quá hạn báo cáo cuối ca ({{ status.deadline|date:"H:i d/m" }}){% else %}Cần xong trước hạn báo cáo cuối ca {{ status.deadline|date:"H:i d/m" }}{% endif %}</strong><ul class="notice-list">{% for issue in status.issues %}<li>{{ issue }}</li>{% endfor %}</ul>{% if shift.overrun %}{% load ca_lich %}{% mo_ca_theo_lich %}{% endif %}</div></div>{% endif %}
 
 <div class="ledger-grid" aria-label="Số liệu quỹ ca">
   <section class="card ledger">

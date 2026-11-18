@@ -219,13 +219,12 @@ def shift_panel(user):
     from apps.orders.models import Order
     from apps.shifts.models import Shift
     from apps.shifts.services import figures
-    from apps.staff.models import Attendance
-    from apps.staff.timekeeping import WORK_ROLES
+    from apps.staff.timekeeping import WORK_ROLES, on_duty
     from apps.accounts.models import Role
 
     shift = Shift.objects.operating()
     present = {Role(r).label: 0 for r in WORK_ROLES}
-    for att in Attendance.objects.filter(clock_out__isnull=True):
+    for att in on_duty():
         present[att.get_role_display()] = present.get(att.get_role_display(), 0) + 1
     fig = figures(shift) if shift else None
     return {
@@ -424,6 +423,7 @@ def _critical_stock(today):
     Mỗi nguyên liệu một đơn vị (gram, ml, cái) nên không đặt chung một trục số lượng: 162 gram matcha nằm sát 0 cạnh
     11.070 gram cà phê dù matcha mới là thứ sắp hết. Quy ra ngày thì mọi dòng cùng thang và trả lời đúng câu Chủ quán
     cần: còn đủ dùng mấy ngày, đã chạm mức tồn an toàn chưa."""
+    from apps.inventory import lots
     from apps.inventory.lots import daily_usage
     from apps.inventory.models import Ingredient
 
@@ -431,12 +431,15 @@ def _critical_stock(today):
 
     ingredients = list(Ingredient.objects.filter(is_critical=True, is_active=True).select_related("stock"))
     usage = daily_usage([i.pk for i in ingredients], today)
+    # Lô quá hạn phải để riêng và hủy: không tính vào số ngày còn đủ dùng, cùng cách với trang Tồn kho.
+    expired = {pk: v["expired_qty"] for pk, v in lots.overview(ingredients, today).items()} if ingredients else {}
     critical, rows = [], []
     for ing in ingredients:
         stock = getattr(ing, "stock", None)
         available = stock.available if stock else Decimal(0)
         per_day = usage.get(ing.pk) or 0
-        days = float(available) / per_day if per_day > 0 else None
+        out_of_date = expired.get(ing.pk, 0)
+        days = max(float(available) - out_of_date, 0) / per_day if per_day > 0 else None
         unit = ing.get_unit_display()
         c = {"ingredient": ing, "physical": stock.physical if stock else Decimal(0), "available": available,
              # cùng điều kiện với ô Dưới tồn an toàn và trang Tồn kho
@@ -448,9 +451,11 @@ def _critical_stock(today):
         safety_days = float(ing.safety_stock) / per_day
         rows.append({"label": ing.name, "value": min(max(days, 0), COVER_CAP_DAYS),
                      "marker": min(safety_days, COVER_CAP_DAYS) or None, "below": c["below"],
-                     "status": "warn" if c["below"] else None,
+                     "status": "warn" if c["below"] or days <= 0 else None,  # 0 ngày: chỉ còn lô quá hạn hoặc hết
                      "text": f"{numbers.fmt(max(days, 0), 1)} ngày",
-                     "tip": f"{ing.name}: có thể dùng {numbers.fmt(available, 0)} {unit}, dùng bình quân "
+                     "tip": f"{ing.name}: có thể dùng {numbers.fmt(available, 0)} {unit}"
+                            + (f" (không tính {numbers.fmt(out_of_date, 0)} {unit} ở lô quá hạn)" if out_of_date else "")
+                            + f", dùng bình quân "
                             f"{numbers.fmt(per_day, 0)} {unit}/ngày, đủ khoảng {numbers.fmt(max(days, 0), 1)} ngày; tồn an "
                             f"toàn {numbers.fmt(ing.safety_stock, 0)} {unit} (khoảng {numbers.fmt(safety_days, 1)} ngày)"})
     rows.sort(key=lambda r: r["value"])
@@ -483,7 +488,7 @@ def dashboard(today=None, month=None):
         by_manager[r["manager"]] = by_manager.get(r["manager"], 0) + r["total"]
     acc_chart = charts.hbars([{"label": m, "value": v, "marker": limit, "below": v > limit,
                                "text": f"{numbers.fmt(v, 0)} đ",
-                               "tip": f"{m}: thiếu chưa giải thích {numbers.fmt(v, 0)} đ, ngưỡng {numbers.fmt(limit, 0)} đ"}
+                               "tip": f"{m}: thiếu chưa được chấp nhận {numbers.fmt(v, 0)} đ, ngưỡng {numbers.fmt(limit, 0)} đ"}
                               for m, v in sorted(by_manager.items())], "marker", label_w=130, width=charts.HALF)
     bo01_chart = charts.stacked([("Tổn thất đã xác minh", control["verified"], 1),
                                  ("Thiếu tiền đang xử lý", control["in_process"], 2)], BO01_MONTHLY_TARGET)

@@ -629,5 +629,8 @@ def accuracy(request):
                "stockout_items": sum(1 for r in rows if r["stockout_days"]),
                "expired_items": [r for r in rows if r["expired"]],
                "recon_flags": sum(1 for r in rows if r["recon_flag"])}
+    # Mọi số đều tạm (quán chưa đủ 8 tuần dữ liệu): nói một lần ở đầu biểu đồ thay vì gắn chữ "tạm" vào từng thanh.
+    all_tentative = bool(measured) and not any(r["measured"] for r in measured)
     return render(request, "forecast/accuracy.html", {"total": total, "rows": rows, "measured": measured,
+                                                      "all_tentative": all_tentative,
                                                       "unused": len(unused), "figures": figures, "run": run})

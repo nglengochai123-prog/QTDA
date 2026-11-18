@@ -695,7 +695,7 @@ class CashierWithoutShiftTests(Base):
         self.client.force_login(self.cashier)
         self.assertNotContains(self.client.get("/thu-ngan/"), "Chưa có ca đang mở")
         Shift.objects.update(status=Shift.Status.CLOSED)
-        self.assertContains(self.client.get("/thu-ngan/"), "Báo Chủ quán mở ca")
+        self.assertContains(self.client.get("/thu-ngan/"), "không có nút thì báo Chủ quán mở ca")
         self.client.force_login(self.manager)
         self.assertContains(self.client.get("/thu-ngan/"), "/du-lieu/ca/moi/")
 

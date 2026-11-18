@@ -13,6 +13,7 @@
   đều tạo ngoại lệ. Kết ca bị chặn khi chưa khai báo số phiếu cuối đã dùng hoặc còn số chưa xử lý.
 """
 
+import re
 from datetime import datetime, timedelta
 from decimal import Decimal
 
@@ -94,6 +95,35 @@ def _range_for(number):
 
 # ---------------- Nhập bù ----------------
 
+SHORT_CODE = 8  # màn Tạo đơn hiện 8 ký tự đầu của mã nghiệp vụ để ghi lên phiếu (order.js, shortKey)
+
+
+def _code_key(code):
+    """Mã ghi trên phiếu, so khớp không phân biệt hoa thường, bỏ khoảng trắng và gạch nối người ghi tay thêm vào."""
+    return re.sub(r"[^0-9a-z]", "", str(code or "").lower())
+
+
+def _order_for_code(raw):
+    """Tìm đơn đã lưu theo mã trên phiếu, đủ mã hoặc 8 ký tự đầu. Trả (đơn hoặc None, mã đã chuẩn hóa)."""
+    code = _code_key(raw)
+    if not code:
+        return None, ""
+    order = Order.objects.filter(operation_key=code).first()
+    if order is None and len(code) >= SHORT_CODE:
+        found = list(Order.objects.filter(operation_key__startswith=code)[:2])
+        if len(found) > 1:
+            raise ValidationError(f"Mã {raw} khớp nhiều đơn; kiểm tra lại mã trên phiếu.")
+        order = found[0] if found else None
+    if order is None:
+        if len(code) < SHORT_CODE:
+            raise ValidationError(f"Mã trên phiếu gồm {SHORT_CODE} ký tự như màn Tạo đơn hiện; kiểm tra lại, hoặc "
+                                  "để trống nếu phiếu không ghi mã.")
+        if OperationRecord.objects.filter(key__startswith=code).exists():
+            raise ValidationError("Mã trên phiếu thuộc một thao tác khác, không phải đơn; kiểm tra lại trước khi "
+                                  "nhập bù.")
+    return order, code
+
+
 def enter_slip(user, operation_key, payload):
     """payload: number, operation_code, sold_at, restored_at, method, transfer_confirmed, table, lines."""
     clean = {
@@ -142,11 +172,7 @@ def enter_slip(user, operation_key, payload):
             raise ValidationError(f"{shift} đã kết; phiếu dự phòng phải nhập bù trước khi kết ca.")
         _check_method(clean["method"], clean["transfer_confirmed"])
 
-        code = clean["operation_code"]
-        order = Order.objects.filter(operation_key=code).first() if code else None
-        if code and order is None and OperationRecord.objects.filter(key=code).exists():
-            raise ValidationError("Mã nghiệp vụ trên phiếu thuộc một thao tác khác, không phải đơn; kiểm tra lại "
-                                  "trước khi nhập bù.")
+        order, code = _order_for_code(clean["operation_code"])
         if order is not None:
             if hasattr(order, "backup_slip"):
                 raise ValidationError(f"Đơn {order.code} đã liên kết phiếu {fmt(order.backup_slip.number)}.")
@@ -274,8 +300,8 @@ def confirm_slip(user, operation_key, slip_id, prices=None, versions=None, note=
         if missing:
             raise ValidationError("Còn thiếu: " + "; ".join(m["text"] for m in missing) + ".")
         clean = slip.payload
-        order = _create_from_slip(user, clean.get("operation_code") or f"pdp-{slip.number}-{slip.operation_key[:40]}",
-                                  clean, shift, slip.sold_at, slip.number, slip.operation_key, lines)
+        order = _create_from_slip(user, _code_key(clean.get("operation_code"))
+                                  or f"pdp-{slip.number}-{slip.operation_key[:40]}", clean, shift, slip.sold_at, slip.number, slip.operation_key, lines)
         slip.status, slip.order, slip.confirmed_by, slip.confirmed_at = (BackupSlip.Status.ENTERED, order, user,
                                                                          timezone.now())
         slip.confirmation = {"gia": payload["prices"], "dinh_muc": payload["versions"], "ghi_chu": payload["note"]}

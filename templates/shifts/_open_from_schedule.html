@@ -1,0 +1,7 @@
+{% if rows %}<div class="open-from-schedule">{% for r in rows %}
+  <form method="post" action="{% url 'shifts:open_from_schedule' %}" data-once data-online-only>{% csrf_token %}
+    <input type="hidden" name="work_shift" value="{{ r.ws.pk }}"><input type="hidden" name="next" value="{{ next }}">
+    <button class="btn btn-primary" type="submit">Mở {{ r.ws.name|lower }} {{ r.start|date:"H:i" }}–{{ r.end|date:"H:i" }} theo lịch</button>
+  </form>{% endfor %}
+  <p class="hint">Mở đúng giờ và người phụ trách trong lịch đã công bố; Chủ quán được báo.</p>
+</div>{% endif %}

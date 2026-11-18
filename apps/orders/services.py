@@ -143,7 +143,10 @@ def submit_order(user, operation_key, payload):
     if spec is not None:
         clean_payload["payment"] = spec  # cùng mã mà khác cách thanh toán thì bị từ chối, không trả kết quả cũ
 
-    existing = Order.objects.filter(operation_key=operation_key).select_related("table").first()
+    # Phiếu dự phòng có thể chỉ ghi 8 ký tự đầu của mã (màn Tạo đơn hiện như vậy), nên đơn nhập bù mang mã ngắn.
+    existing = (Order.objects.filter(operation_key=operation_key).select_related("table").first()
+                or Order.objects.filter(operation_key=str(operation_key or "")[:8].lower(), backup_slip__isnull=False)
+                .select_related("table").first())
     if existing is not None and BackupSlip.objects.filter(order=existing).exists():
         # NFR-16: nháp đã chuyển sang phiếu dự phòng và đã nhập bù thì gửi lại không tạo đơn mới.
         return ({"order_id": existing.pk, "code": existing.code, "table": existing.table.code, "total": existing.total,

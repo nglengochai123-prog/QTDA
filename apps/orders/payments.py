@@ -34,7 +34,10 @@ def bill(table):
             else:
                 blockers.append(f"Đơn {order.code} có yêu cầu \"{req.summary()}\" đang {req.waiting_text()}.")  # AC-09
         elif order.status != Order.Status.SERVED:
-            blockers.append(f"Đơn {order.code} đang ở trạng thái {order.get_status_display()}, chưa phục vụ xong.")
+            where = ("còn món đang pha" if order.status == Order.Status.SENT else
+                     "đã pha xong nhưng chưa mang ra bàn" if order.status == Order.Status.PREPARED else
+                     order.get_status_display().lower())
+            blockers.append(f"Đơn {order.code} {where}, chưa phục vụ xong.")
     if exhausted:
         shift = exhausted[0].order.shift or Shift.objects.operating()
         who = (f"{shift.authorizer} (được ủy quyền thu tiền ca này)"

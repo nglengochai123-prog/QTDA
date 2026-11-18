@@ -12,7 +12,7 @@ from apps.accounts.models import User
 from apps.accounts.permissions import Cap, capability_required
 from apps.catalog.models import ItemSize, Option, Table
 from apps.inventory.models import RecipeVersion
-from apps.core import errors
+from apps.core import errors, params
 from apps.core.idempotency import OperationKeyError
 
 from . import backup
@@ -95,5 +95,5 @@ def backup_slips(request):
         "sizes": ItemSize.objects.select_related("item").filter(item__status="dang_ban").order_by("item__name", "price"),
         "rows": range(LINE_ROWS), "now": now, "operation_key": uuid.uuid4().hex, "pending": pending,
         "options": Option.objects.filter(is_active=True).select_related("group").order_by("group__name", "sort_order"),
-        "is_owner": request.user.is_owner,
+        "is_owner": request.user.is_owner, "entry_hours": params.get("backup_entry_hours"),
     })

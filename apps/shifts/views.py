@@ -144,6 +144,23 @@ def cancel_handover(request, entry_id):
     return links.back(request, "core:home")
 
 
+@capability_required(Cap.CASH_FUND)
+@require_POST
+def open_from_schedule(request):
+    """Thu ngân mở ca quỹ đúng theo ca trong lịch đã công bố (điều kiện kiểm lại ở from_schedule)."""
+    from . import from_schedule
+
+    try:
+        shift, created = from_schedule.open_from_schedule(request.user, request.POST.get("work_shift"))
+    except ValidationError as error:
+        for message in _errors(error):
+            messages.error(request, message)
+        return links.back(request, "shifts:my_shift")
+    messages.success(request, f"Đã mở {shift.name.lower()} theo lịch. Xác nhận tiền đầu ca để bắt đầu thu tiền."
+                     if created else f"{shift.name} đã được mở trước đó.")
+    return redirect("shifts:my_shift_detail", shift_id=shift.pk)
+
+
 @capability_required(Cap.SHIFT_CLOSE)
 @require_POST
 def close(request, shift_id):

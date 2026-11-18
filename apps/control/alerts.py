@@ -102,7 +102,7 @@ def _discrepancy(now):
 def _exceptions(now):
     for exc in ExceptionCase.objects.filter(status=ExceptionCase.Status.OPEN).select_related("order", "ingredient"):
         if exc.kind == ExceptionCase.Kind.CONSUMPTION_OVER:
-            yield {"subject": f"nl-{exc.pk}", "title": f"Kiểm tra chênh lệch tiêu hao: {exc.ingredient}",
+            yield {"subject": f"nl-{exc.pk}", "title": f"Kiểm tra chênh lệch tiêu hao: {exc.ingredient.name if exc.ingredient_id else 'nguyên liệu'} dùng nhiều hơn theo đơn",
                    "detail": exc.detail, "assignee": None, "role": OWNER, "severity": Alert.Severity.IMPORTANT,
                    "due": exc.created_at + timedelta(hours=params.get("consumption_check_hours")),
                    "link": f"/kiem-soat/ngoai-le/{exc.pk}/", "escalate": True}

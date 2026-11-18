@@ -118,11 +118,11 @@ def _people(now):
     from apps.accounts.models import Role
     from apps.schedule.models import Assignment, WeekPublish
     from apps.schedule.services import week_start
-    from apps.staff.models import Attendance
+    from apps.staff.timekeeping import on_duty
 
     local = timezone.localtime(now)
     rows = {}
-    for att in Attendance.objects.filter(clock_out__isnull=True).select_related("user").order_by("clock_in"):
+    for att in on_duty(now).select_related("user").order_by("clock_in"):
         rows[att.user_id] = {"user": att.user, "role": att.get_role_display(), "since": att.clock_in, "absent": False}
     if WeekPublish.objects.filter(week_start=week_start(local.date())).exists():
         planned = (Assignment.objects.filter(removed_at__isnull=True, shift__date=local.date(),
@@ -151,10 +151,10 @@ def _staffing(now):
     """Người đang trong ca so với số người cần theo lịch tuần ở giờ này (rỗng khi chưa lập lịch)."""
     from apps.accounts.models import Role
     from apps.reports.services import staffing_now
-    from apps.staff.models import Attendance
+    from apps.staff.timekeeping import on_duty
 
     present = {}
-    for att in Attendance.objects.filter(clock_out__isnull=True):
+    for att in on_duty(now):
         label = Role(att.role).label
         present[label] = present.get(label, 0) + 1
     return staffing_now(present, now)

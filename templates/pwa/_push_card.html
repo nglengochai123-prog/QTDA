@@ -1,5 +1,5 @@
 {# Thẻ bật thông báo đẩy trên thiết bị đang dùng. with log=True: kèm bảng các lần gửi gần đây (trang Cảnh báo). #}
-<section class="card" aria-labelledby="push-title" data-push data-status-url="{% url 'core:push_status' %}" data-subscribe-url="{% url 'core:push_subscribe' %}" data-test-url="{% url 'core:push_test' %}" data-log-url="{% url 'core:push_log' %}" data-csrf="{{ csrf_token }}"{% if not log %} hidden{% endif %}>
+<section class="card" aria-labelledby="push-title" data-push data-status-url="{% url 'core:push_status' %}" data-subscribe-url="{% url 'core:push_subscribe' %}" data-test-url="{% url 'core:push_test' %}" data-log-url="{% url 'core:push_log' %}" data-csrf="{{ csrf_token }}"{% if user.is_owner %} data-owner{% endif %}{% if not log %} hidden{% endif %}>
   <div class="card-head"><div><h2 id="push-title">Thông báo trên điện thoại</h2><p class="card-sub" data-push-text>Đang kiểm tra…</p></div>
     <div class="card-tools"><button class="btn btn-primary btn-sm" type="button" data-push-enable hidden>Bật trên thiết bị này</button>
       <button class="btn btn-quiet btn-sm" type="button" data-push-test hidden>Gửi thử</button></div></div>

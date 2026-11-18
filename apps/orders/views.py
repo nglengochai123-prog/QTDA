@@ -73,6 +73,8 @@ def _menu_data():
 def create(request):
     from apps.accounts.permissions import user_can
 
+    from apps.shifts.models import Shift
+
     from .prepaid import duty_problem
 
     tables = [{"id": t.pk, "code": t.code, "area": t.area} for t in Table.objects.filter(is_active=True)]
@@ -81,6 +83,7 @@ def create(request):
         "menu": _menu_data(), "tables": tables, "operation_key": uuid.uuid4().hex, "stock": _available_map(),
         # Chỉ người có quyền thu tiền thấy lựa chọn Thanh toán ngay; máy chủ vẫn kiểm tra lại khi gửi.
         "can_prepay": can_pay, "prepay_problem": duty_problem(request.user) if can_pay else "",
+        "no_shift": Shift.objects.operating() is None,
     })
 
 

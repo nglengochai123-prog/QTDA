@@ -9,7 +9,7 @@
   <div class="page-tools">{% if can_ledger %}<a class="btn btn-quiet" href="{% url 'inventory:ledger' %}?nvl={{ ing.pk }}">Sổ kho</a>{% endif %}<a class="btn btn-quiet" href="{% url 'inventory:waste' %}">Ghi hao hụt</a></div>
 </header>
 
-<div class="stats">
+<div class="stats {% if show_value %}stats-5{% else %}stats-4{% endif %}">
   <div class="stat"><p class="stat-label">Tồn vật lý</p><p class="stat-value">{{ ing.stock.physical|floatformat:"-2g" }} <small>{{ ing.get_unit_display }}</small></p><p class="stat-note">{{ data.lots|length }} lô</p></div>
   <div class="stat"><p class="stat-label">Dùng mỗi ngày</p><p class="stat-value">{{ data.rate|floatformat:"-1g" }} <small>{{ ing.get_unit_display }}</small></p><p class="stat-note">Mức dùng gần đây</p></div>
   <div class="stat"><p class="stat-label">Đủ dùng</p><p class="stat-value">{% if data.cover_days is not None %}{{ data.cover_days|floatformat:"0g" }} <small>ngày</small>{% else %}—{% endif %}</p></div>
@@ -58,14 +58,13 @@
 </section>
 {% endif %}
 
-<div class="grid-2">
 <section class="card">
-  <div class="card-head"><h2>Xuất nhập theo lô</h2></div>
+  <div class="card-head"><div><h2>Xuất nhập theo lô</h2>{% if draws_more %}<p class="card-sub">{{ draws|length }} lần gần nhất.{% if can_ledger %} Xem đủ ở <a href="{% url 'inventory:ledger' %}?nvl={{ ing.pk }}">Sổ kho</a>.{% endif %}</p>{% endif %}</div></div>
   {% if draws %}
   <div class="table-wrap"><table class="data-table compact table-stack">
-    <thead><tr><th scope="col">Lúc</th><th scope="col">Lô</th><th scope="col">Nghiệp vụ</th><th scope="col" class="num">Lượng</th></tr></thead>
+    <thead><tr><th scope="col">Lúc</th><th scope="col">Lô</th><th scope="col">Việc</th><th scope="col" class="num">Lượng</th></tr></thead>
     <tbody>{% for d in draws %}<tr><th scope="row">{{ d.created_at|date:"d/m H:i" }}</th><td data-label="Lô"><span class="mono">{{ d.lot.code }}</span></td>
-      <td data-label="Nghiệp vụ">{% if d.movement %}{{ d.movement.get_kind_display }}{% if d.movement.actor %} <span class="muted">· {{ d.movement.actor }}</span>{% endif %}{% else %}Chuyển sang theo dõi lô{% endif %}{% if d.note %}<div class="cell-sub">{{ d.note }}</div>{% endif %}</td>
+      <td data-label="Việc">{% if d.movement %}{{ d.movement.get_kind_display }}{% if d.movement.actor %} <span class="muted">· {{ d.movement.actor }}</span>{% endif %}{% else %}Chuyển sang theo dõi lô{% endif %}{% if d.note %}<div class="cell-sub">{{ d.note }}</div>{% endif %}</td>
       <td class="num {% if d.quantity < 0 %}neg{% else %}pos{% endif %}" data-label="Lượng">{% if d.quantity > 0 %}+{% endif %}{{ d.quantity|floatformat:"-2g" }}</td></tr>{% endfor %}</tbody>
   </table></div>
   {% else %}<div class="empty-cell">Chưa có xuất nhập.</div>{% endif %}
@@ -79,5 +78,4 @@
   </table></div>
   {% else %}<div class="empty-cell">Chưa có lô nào dùng hết.</div>{% endif %}
 </section>
-</div>
 {% endblock %}

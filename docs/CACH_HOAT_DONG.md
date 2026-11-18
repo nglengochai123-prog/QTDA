@@ -72,7 +72,13 @@ Ba nguyên tắc chạy xuyên suốt:
 
 ## 3. Ca làm việc
 
-**Ai:** Chủ quán khai báo ở Quản trị › Ca làm việc (`/du-lieu/ca/`).
+**Ai:** Ca quỹ được tạo theo lịch làm tuần đã công bố. Chủ quán vẫn tạo tay được ở Quản trị › Ca làm việc (`/du-lieu/ca/`); cột Nguồn cho biết ca nào theo lịch, ca nào tạo tay.
+
+**Ca quỹ theo lịch** (`apps/shifts/from_schedule.py`):
+- Chỉ ca có vị trí thu ngân thành ca quỹ: có thu ngân được xếp, hoặc số thu ngân cần lớn hơn 0. Ca chỉ có pha chế hay phục vụ không giữ tiền.
+- **Công bố lịch** (kể cả công bố lại) thì tạo ca quỹ còn thiếu, theo đúng tên và giờ trong lịch. Chủ quán công bố là người phụ trách ca. Thu ngân được xếp là người được ủy quyền thanh toán theo món thực nhận.
+- Ca quỹ **chưa bắt đầu** đổi theo lịch (giờ, tên, thu ngân), hoặc bị bỏ khi ca không còn thu ngân hay bị xóa khỏi lịch, nếu chưa có gì gắn vào. Ca quỹ đã bắt đầu giữ nguyên. Ca đã tạo tay trùng tên và giờ bắt đầu được gắn với lịch, không tạo trùng.
+- **Thu ngân mở ca theo lịch:** tới giờ một ca trong lịch đã công bố (sớm tối đa 30 phút) mà chưa có ca quỹ nào trong khung giờ, trang Ca của tôi, Thu ngân và Tổng quan ca hiện nút "Mở … theo lịch". Thu ngân không sửa được giờ hay người phụ trách. Máy chủ kiểm tra lại quyền và mọi điều kiện, bấm hai lần không tạo hai ca. Chủ quán nhận thông báo, nhật ký ghi người mở.
 
 **Một ca gồm:** tên, giờ bắt đầu, giờ kết thúc, Chủ quán phụ trách (người tạo ca), người được ủy quyền thanh toán theo món thực nhận. Biểu mẫu gợi ý sẵn ca kế tiếp theo giờ của ca gần nhất.
 

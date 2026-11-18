@@ -156,6 +156,21 @@ def stacked_columns(labels, series, height=230, tips=None, value_fmt=fmt, width=
 
 # ---------------- Đường (xu hướng theo thời gian) ----------------
 
+def _gapped_path(pts, coords):
+    """Đường đứt ở vị trí không có số (giờ không có khách) thay vì nối thẳng qua; điểm đứng riêng vẽ thành chấm."""
+    parts, run = [], []
+    for (i, _), (x, y) in zip(pts, coords):
+        if run and i != run[-1][0] + 1:
+            parts.append(run)
+            run = []
+        run.append((i, x, y))
+    parts.append(run)
+    d = []
+    for run in parts:
+        d.append("M" + " L".join(f"{x:.1f},{y:.1f}" for _, x, y in run) + (" l0.01,0" if len(run) == 1 else ""))
+    return " ".join(d)
+
+
 def line(labels, series, height=230, value_fmt=fmt, tip_labels=None, floor_zero=True, width=WIDTH, bands=None,
          divider=None, tips=None):
     """series: [{"name", "values" (None = không có số), "slot" (1..3 hoặc "muted"), "area": bool, "label_end": bool,
@@ -199,6 +214,8 @@ def line(labels, series, height=230, value_fmt=fmt, tip_labels=None, floor_zero=
             continue
         coords = [xy(i, v) for i, v in pts]
         d = "M" + " L".join(f"{x:.1f},{y:.1f}" for x, y in coords)
+        if not s.get("area"):
+            d = _gapped_path(pts, coords)
         area = None
         if s.get("area"):
             area = d + f" L{coords[-1][0]:.1f},{pad_t + plot_h:.1f} L{coords[0][0]:.1f},{pad_t + plot_h:.1f} Z"

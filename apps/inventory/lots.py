@@ -297,16 +297,18 @@ def overview(ingredients, today=None):
                                  p["used_up"], p["waste"], lot.unit_cost or costs.get(ing.pk), p["start"]))
         usable = [v for v in views if v.state != EXPIRED]
         total = sum(float(v.lot.remaining) for v in views)
+        expired_qty = sum(float(v.lot.remaining) for v in views if v.state == EXPIRED)
         out[ing.pk] = {
             "lots": views, "pick": usable[0] if usable else None,
             "expired": [v for v in views if v.state == EXPIRED],
             "near": [v for v in views if v.state == NEAR],
             "unknown": [v for v in views if v.state == UNKNOWN],
             "at_risk": sum(v.waste for v in usable), "at_risk_value": sum(v.waste_value for v in usable),
-            "expired_qty": sum(float(v.lot.remaining) for v in views if v.state == EXPIRED),
+            "expired_qty": expired_qty,
             "expired_value": sum(v.value for v in views if v.state == EXPIRED),
             "value": sum(v.value for v in views), "rate": rate, "total": total,
-            "cover_days": (total / rate) if rate > 0 else None, "near_days": near,
+            # Lô quá hạn phải để riêng và hủy, không tính vào số ngày còn đủ dùng.
+            "cover_days": (max(total - expired_qty, 0) / rate) if rate > 0 else None, "near_days": near,
         }
     return out
 

@@ -42,9 +42,11 @@
   if (!window.isSecureContext) { say("Thông báo đẩy cần mở ứng dụng qua HTTPS."); return; }
   fetch(box.dataset.statusUrl, { credentials: "same-origin" }).then((r) => r.json()).then(async (st) => {
     if (!st.ready) {
-      // Nhân viên không sửa được cấu hình máy chủ: ẩn thẻ; Chủ quán (thẻ có bảng nhật ký) xem lý do để xử lý.
+      // Nhân viên không sửa được cấu hình máy chủ: ẩn thẻ, hoặc ở trang Cảnh báo chỉ nói ngắn gọn;
+      // Chủ quán xem lý do kỹ thuật để chuyển cho người cài đặt máy chủ.
       if (!log) { box.hidden = true; return; }
-      say("Máy chủ chưa sẵn sàng gửi thông báo: " + st.reason); return;
+      if (!("owner" in box.dataset)) { say("Quán chưa bật thông báo trên điện thoại. Khi Chủ quán bật, bạn sẽ bật được ở đây."); return; }
+      say("Chưa gửi được thông báo lên điện thoại. " + st.reason + " Người cài đặt máy chủ cần xử lý việc này."); return;
     }
     const reg = await navigator.serviceWorker.ready;
     const current = await reg.pushManager.getSubscription();

@@ -105,6 +105,9 @@ def board(request):
                        after={"nguoi_da_dang_ky": len(registrants)})
                 label = f"{s.name} {s.date:%d/%m} {s.start:%H:%M}–{s.end:%H:%M}"
                 upcoming = s.date >= timezone.localdate()
+                from apps.shifts.from_schedule import drop_for
+
+                drop_for(s)  # ca quỹ đi kèm chưa bắt đầu, chưa có gì gắn vào thì bỏ theo
                 s.delete()
                 if registrants and upcoming:
                     from apps.core.push import notify_later
@@ -146,8 +149,12 @@ def board(request):
             elif action == "publish":
                 if not p.get("confirm"):
                     raise ValidationError("Đánh dấu xác nhận trước khi công bố.")
-                sv.publish(user, week)
-                messages.success(request, "Đã công bố lịch; mỗi nhân viên nhận lịch của mình trên điện thoại.")
+                pub = sv.publish(user, week)
+                made = pub.cash_shifts
+                words = (("created", "tạo"), ("updated", "cập nhật"), ("removed", "bỏ"))
+                cash = ", ".join(f"{w} {made[k]}" for k, w in words if made[k])
+                messages.success(request, "Đã công bố lịch; mỗi nhân viên nhận lịch của mình trên điện thoại."
+                                 + (f" Ca quỹ theo lịch: {cash}." if cash else ""))
         except (ValidationError, ValueError) as error:
             for m in errors.messages_of(error):
                 messages.error(request, m)

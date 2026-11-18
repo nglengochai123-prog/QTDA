@@ -11,6 +11,12 @@
 <form method="post" class="record-form" data-once>{% csrf_token %}
   {% if form.non_field_errors %}<div class="notice notice-error" role="alert">{% for e in form.non_field_errors %}{{ e }} {% endfor %}</div>{% endif %}
   <section class="panel">
+    {% if not editable %}
+    {# Bản ghi chỉ xem (định mức đã áp dụng, ca đã đóng, nhận định đã ghi): viết giá trị thành chữ thay cho ô nhập bị khóa. #}
+    <dl class="field-grid read-grid">
+      {% for field in form.visible_fields %}<div class="field-row"><dt>{{ field.label }}</dt><dd>{{ field|gia_tri }}</dd></div>{% endfor %}
+    </dl>
+    {% else %}
     <div class="field-grid">
       {% for field in form %}
       <div class="field-row{% if field.errors %} has-error{% endif %}{% if field.field.widget.input_type == 'checkbox' and not field.field.widget.allow_multiple_selected %} is-check{% endif %}">
@@ -23,11 +29,20 @@
       </div>
       {% endfor %}
     </div>
+    {% endif %}
   </section>
 
   {% for item in formsets %}{% with fs=item.fs %}
   <section class="panel">
     <h2>{{ item.inline.label }}</h2>
+    {% if not item.editable %}
+    <div class="table-wrap"><table class="data-table table-stack read-table">
+      <thead><tr>{% for f in fs.empty_form.visible_fields %}{% if f.name != "DELETE" %}<th scope="col"{% if f|la_so %} class="num"{% endif %}>{{ f.label }}</th>{% endif %}{% endfor %}</tr></thead>
+      <tbody>{% for sub in fs.forms %}{% if sub.instance.pk %}
+        <tr>{% for f in sub.visible_fields %}{% if f.name != "DELETE" %}{% with v=f|gia_tri num=f|la_so %}<td data-label="{{ f.label }}"{% if num or v == "—" %} class="{% if num %}num{% endif %}{% if v == "—" %} is-empty{% endif %}"{% endif %}>{{ v }}</td>{% endwith %}{% endif %}{% endfor %}</tr>
+      {% endif %}{% empty %}<tr><td colspan="9" class="muted">Chưa có dòng nào.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}
     {{ fs.management_form }}
     {% if fs.non_form_errors %}<div class="notice notice-error">{{ fs.non_form_errors|join:" " }}</div>{% endif %}
     <div class="table-wrap"><table class="data-table inline-table table-stack">
@@ -40,6 +55,7 @@
         {% if sub.non_field_errors %}<tr><td colspan="9"><p class="error">{{ sub.non_field_errors|join:" " }}</p></td></tr>{% endif %}
       {% endif %}{% empty %}<tr><td colspan="9" class="muted">Chưa có dòng nào.</td></tr>{% endfor %}</tbody>
     </table></div>
+    {% endif %}
   </section>
   {% endwith %}{% endfor %}
   {% if not obj and r.inlines %}<p class="page-note">Lưu trước, sau đó thêm {{ r.inlines.0.label|lower }} ở trang tiếp theo.</p>{% endif %}
@@ -55,7 +71,7 @@
 {% for item in actions %}
 <section class="panel">
   <h2>{{ item.a.label }}</h2>
-  {% if item.a.help %}<p class="page-note">{{ item.a.help }}</p>{% endif %}
+  {% if item.help %}<p class="page-note">{{ item.help }}</p>{% endif %}
   <form method="post" action="{% url 'masterdata:action' r.key obj.pk item.a.key %}" class="inline-action" data-once data-online-only>{% csrf_token %}
     {% for field in item.form %}<div class="field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}</div>{% endfor %}
     <button class="btn {% if item.a.primary %}btn-primary{% else %}btn-quiet{% endif %}" type="submit">{{ item.a.label }}</button>

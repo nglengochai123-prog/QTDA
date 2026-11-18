@@ -51,6 +51,9 @@ class Shift(StoreScopedModel):
     # Doanh thu chốt khi kết ca, làm căn cứ đối soát (BRU-06).
     closed_cash_revenue = models.BigIntegerField("Doanh thu tiền mặt đã chốt", null=True, blank=True)
     closed_transfer_revenue = models.BigIntegerField("Doanh thu chuyển khoản đã chốt", null=True, blank=True)
+    # Ca quỹ tạo từ lịch làm tuần đã công bố, hoặc thu ngân mở theo lịch; trống là ca Chủ quán tạo tay.
+    work_shift = models.OneToOneField("schedule.WorkShift", verbose_name="Ca trong lịch", on_delete=models.SET_NULL,
+                                      null=True, blank=True, related_name="cash_shift")
 
     objects = ShiftQuerySet.as_manager()
 

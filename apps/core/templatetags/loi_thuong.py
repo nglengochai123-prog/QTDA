@@ -81,3 +81,61 @@ def chenh_tien(value):
         return "Khớp"
     amount = f"{abs(value):,}".replace(",", ".")
     return f"Thiếu {amount} đ" if value < 0 else f"Dư {amount} đ"
+
+
+@register.filter
+def so_ngay_truoc(value):
+    """Số ngày từ thời điểm `value` đến hôm nay theo giờ quán (0 là hôm nay); dùng để báo số liệu đã cũ."""
+    if not value:
+        return None
+    from django.utils import timezone
+
+    return (timezone.localdate() - timezone.localtime(value).date()).days
+
+
+@register.filter
+def gia_tri(bound_field):
+    """Giá trị một ô biểu mẫu viết thành chữ cho trang chỉ xem: tên mục đã chọn thay cho ô chọn bị khóa, ngày giờ và số
+    theo cách viết Việt Nam, "—" khi để trống."""
+    from datetime import datetime, time
+    from decimal import Decimal
+
+    from django import forms
+    from django.template.defaultfilters import date as date_filter, floatformat
+    from django.utils import timezone
+
+    field, value = bound_field.field, bound_field.value()
+    if isinstance(field, forms.BooleanField):
+        return "Có" if value else "Không"
+    if value is None or value == "" or value == []:
+        return "—"
+    chosen = [str(v) for v in value] if isinstance(value, (list, tuple, set)) else [str(value)]
+    if isinstance(field, forms.ModelChoiceField):
+        # Hỏi thẳng theo khóa: danh sách chọn có thể đã lọc bỏ mục cũ (món ngừng bán) mà bản ghi vẫn trỏ tới.
+        objs = field.queryset.model._default_manager.filter(pk__in=chosen)
+        return ", ".join(field.label_from_instance(o) for o in objs) or "—"
+    if hasattr(field, "choices"):
+        labels = []
+        for key, label in field.choices:
+            if isinstance(label, (list, tuple)):  # nhóm lựa chọn
+                labels += [str(lb) for k, lb in label if str(k) in chosen]
+            elif str(key) in chosen:
+                labels.append(str(label))
+        return ", ".join(labels) or "—"
+    if isinstance(value, datetime):
+        return date_filter(timezone.localtime(value) if timezone.is_aware(value) else value, "H:i d/m/Y")
+    if isinstance(value, date):
+        return date_filter(value, "d/m/Y")
+    if isinstance(value, time):
+        return date_filter(value, "H:i")
+    if isinstance(value, (Decimal, float)) or (isinstance(value, int) and not isinstance(value, bool)):
+        return floatformat(value, "-3g")
+    return value
+
+
+@register.filter
+def la_so(bound_field):
+    """Ô số (lượng, giá, số phút) để canh phải cột trong bảng chỉ xem."""
+    from django import forms
+
+    return isinstance(bound_field.field, (forms.IntegerField, forms.DecimalField, forms.FloatField))

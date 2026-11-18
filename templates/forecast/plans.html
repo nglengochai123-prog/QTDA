@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load loi_thuong %}
 {% block title %}Kế hoạch mua · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <header class="page-head">
@@ -8,6 +9,7 @@
     <form method="post" data-once>{% csrf_token %}<input type="hidden" name="action" value="tinh_lai"><button class="btn btn-quiet btn-sm" type="submit">Tính lại</button></form>
   </div>
 </header>
+{% if last_run %}{% with old=last_run.started_at|so_ngay_truoc %}{% if old >= 2 %}<div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><div>Kế hoạch tính lúc {{ last_run.started_at|date:"H:i d/m" }}, đã cũ {{ old }} ngày nên số đề xuất và ngày đặt có thể đã sai. Bấm Tính lại để có số mới.</div></div>{% endif %}{% endwith %}{% endif %}
 
 <div class="stats stats-4">
   <a class="stat{% if counts.now %} stat-danger{% endif %}" href="#dat-ngay"><p class="stat-label">Đặt ngay</p><p class="stat-value">{{ counts.now }}</p><p class="stat-note">{% if counts.now %}phải đặt trong hôm nay{% else %}không có{% endif %}</p></a>
@@ -35,8 +37,8 @@
       <th scope="row"><a href="{% url 'forecast:plan' p.ingredient_id %}">{{ p.ingredient.name }}</a>
         {% if r.infeasible %} <span class="chip chip-danger">Không khả thi</span>{% elif r.urgent %} <span class="chip chip-danger">Mua gấp</span>{% elif p.action == "thuc_giao" %} <span class="chip chip-warn">{{ v.action_label }}</span>{% elif p.action == "mua_bo_sung" %} <span class="chip">{{ v.action_label }}</span>{% endif %}{% if v.fc.provisional %} <span class="chip">Tạm thời</span>{% endif %}
         <span class="cell-sub">{{ p.ingredient.main_supplier|default:"Chưa có nhà cung cấp chính" }}</span></th>
-      <td class="num" data-label="Đề xuất">{% if p.packs %}<strong>{{ p.packs }} {{ cfg.pack_label }}</strong><span class="cell-sub">{{ p.suggested_quantity|floatformat:"-2g" }} {{ cfg.unit }}</span>{% elif p.action == "thieu_du_lieu" %}<span class="muted">{{ v.action_label }}</span>{% elif p.order_by %}<span class="muted">Chưa cần đặt hôm nay</span>{% else %}<span class="muted">Chưa cần</span>{% endif %}</td>
-      <td data-label="Đặt chậm nhất">{% if p.order_now and p.action != "khong_can" %}<strong class="text-danger">Hôm nay</strong>{% elif p.order_by %}{{ p.order_by|date:"D d/m" }}{% else %}–{% endif %}</td>
+      <td class="num" data-label="Đề xuất">{% if p.packs %}<strong>{{ p.packs }} {{ cfg.pack_label }}</strong><span class="cell-sub">{{ p.suggested_quantity|floatformat:"-2g" }} {{ cfg.unit }}</span>{% elif p.action == "thieu_du_lieu" %}<span class="muted">{{ v.action_label }}</span>{% elif p.order_by and p.order_by < today %}<span class="muted">Bấm Tính lại để có số mới</span>{% elif p.order_by %}<span class="muted">Chưa cần đặt hôm nay</span>{% else %}<span class="muted">Chưa cần</span>{% endif %}</td>
+      <td data-label="Đặt chậm nhất">{% if p.order_now and p.action != "khong_can" %}<strong class="text-danger">Hôm nay</strong>{% elif p.order_by %}{{ p.order_by|date:"D d/m" }}{% if p.order_by < today %} <span class="text-danger">(đã qua)</span>{% endif %}{% else %}–{% endif %}</td>
       <td data-label="Còn đủ dùng">{% if r.cover_days is not None %}khoảng {{ r.cover_days|floatformat:"-1g" }} ngày{% elif p.action == "thieu_du_lieu" %}–{% else %}hơn 5 tuần{% endif %}
         {% if p.action != "thieu_du_lieu" %}<div class="meter runway" aria-hidden="true"><span style="width:{{ v.cover_pct }}%"></span></div>{% endif %}</td>
       <td class="row-action"><a class="btn btn-quiet btn-sm" href="{% url 'forecast:plan' p.ingredient_id %}">{% if p.packs %}Xem và đặt{% else %}Xem{% endif %}</a></td>

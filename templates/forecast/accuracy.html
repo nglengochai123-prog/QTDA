@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% load loi_thuong %}
 {% block title %}Độ chính xác dự báo · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <header class="page-head">
   <div><div class="head-title"><h1><a class="back" href="{% url 'forecast:plans' %}" aria-label="Quay lại kế hoạch mua"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg></a>Độ chính xác của dự báo</h1></div>
-  <p class="page-sub">Dự báo các tuần đã qua được so lại với thực tế mỗi ngày. Số càng nhỏ càng tốt.{% if run %} Tính lúc {{ run.started_at|date:"H:i d/m" }}.{% endif %}</p></div>
+  <p class="page-sub">Dự báo các tuần đã qua được so lại với thực tế mỗi ngày. Số càng nhỏ càng tốt.{% if run %} Tính lúc {{ run.started_at|date:"H:i d/m" }}{% with old=run.started_at|so_ngay_truoc %}{% if old >= 2 %}, đã cũ {{ old }} ngày; bấm Tính lại ở Kế hoạch mua để có số mới{% endif %}{% endwith %}.{% endif %}</p></div>
 </header>
 
 <div class="stats stats-4">
@@ -18,17 +19,17 @@
 </div>
 
 {% if measured %}<section class="card">
-  <div class="card-head"><div><h2>Sai số theo nguyên liệu</h2><p class="card-sub">Lượng dùng 7 ngày dự báo trước lệch bao nhiêu phần trăm so với thực tế. Thanh dài là nguyên liệu khó đoán hơn.</p></div></div>
+  <div class="card-head"><div><h2>Sai số theo nguyên liệu</h2><p class="card-sub">Lượng dùng 7 ngày dự báo trước lệch bao nhiêu phần trăm so với thực tế. Thanh dài là nguyên liệu khó đoán hơn.{% if all_tentative %} Tất cả là số tạm vì chưa đủ 8 tuần dữ liệu.{% endif %}</p></div></div>
   <div class="card-body">
     <ul class="barlist" aria-label="Sai số tổng 7 ngày theo nguyên liệu">{% for r in measured %}
       <li tabindex="0" data-tip="{{ r.tip }}"><span class="barlist-label">{{ r.ing.name }}</span>
         <span class="barlist-track" aria-hidden="true"><span class="barlist-seg s-1" style="width:{{ r.pct|stringformat:'.1f' }}%"></span></span>
-        <span class="barlist-value">{{ r.wape|floatformat:"1g" }}%{% if not r.measured %} <small>tạm</small>{% endif %}</span></li>{% endfor %}
+        <span class="barlist-value">{{ r.wape|floatformat:"1g" }}%{% if not r.measured and not all_tentative %} <small>tạm</small>{% endif %}</span></li>{% endfor %}
     </ul>
   </div>
 </section>{% endif %}
 
-<section class="card"><div class="card-head"><div><h2>Chi tiết từng nguyên liệu</h2><p class="card-sub">Tính trong 8 tuần gần nhất.{% if unused %} {{ unused }} nguyên liệu chưa dùng tới nên chưa có số.{% endif %}</p></div></div>
+<section class="card"><div class="card-head"><div><h2>Chi tiết từng nguyên liệu</h2><p class="card-sub">Tính trong 8 tuần gần nhất.{% if all_tentative %} Sai số là số tạm vì chưa đủ 8 tuần dữ liệu.{% endif %}{% if unused %} {{ unused }} nguyên liệu chưa dùng tới nên chưa có số.{% endif %}</p></div></div>
   {% if rows %}
   <div class="table-wrap"><table class="data-table table-stack">
     <thead><tr><th scope="col">Nguyên liệu</th>
@@ -37,7 +38,7 @@
       <th scope="col" class="num">Hao hụt pha chế</th><th scope="col" class="num">Sổ kho lệch định mức</th></tr></thead>
     <tbody>{% for r in rows %}<tr>
       <th scope="row"><a href="{% url 'forecast:plan' r.ing.pk %}">{{ r.ing.name }}</a></th>
-      <td class="num" data-label="Sai số tuần">{% if r.wape is not None %}{{ r.wape }}%{% if not r.measured %} <span class="chip">Tạm</span>{% endif %}{% else %}–{% endif %}</td>
+      <td class="num" data-label="Sai số tuần">{% if r.wape is not None %}{{ r.wape }}%{% if not r.measured and not all_tentative %} <span class="chip">Tạm</span>{% endif %}{% else %}–{% endif %}</td>
       <td data-label="Thực tế so với dự báo">{% if r.wape is None %}–{% elif r.bias > 0 %}dùng nhiều hơn {{ r.bias }}%{% elif r.bias < 0 %}dùng ít hơn {{ r.bias|stringformat:".1f"|slice:"1:" }}%{% else %}sát dự báo{% endif %}</td>
       <td class="num" data-label="Ngày thiếu hàng">{{ r.stockout_days }}</td>
       <td class="num" data-label="Hư hỏng, hết hạn">{% if r.expired %}{{ r.expired|floatformat:"-1g" }} {{ r.unit }}{% if r.expired_pct %} <span class="muted">({{ r.expired_pct }}%)</span>{% endif %}{% else %}0{% endif %}</td>

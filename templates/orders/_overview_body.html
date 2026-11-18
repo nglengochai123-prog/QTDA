@@ -1,4 +1,7 @@
 {% load humanize loi_thuong %}
+{% load ca_lich %}{% if not shift %}<div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><div>Chưa có ca nào đang mở. Đơn mới vẫn được nhận nhưng chưa thuộc ca nào; ca có trong lịch đã công bố thì thu ngân mở theo lịch, không thì Chủ quán mở ở Quản trị, mục Ca làm việc.{% mo_ca_theo_lich %}</div></div>{% endif %}
+{# Ca quá giờ mà chưa kết là việc phải xử lý trước tiên: báo ngay trên đầu, trước các ô số. #}
+{% include "shifts/_overrun.html" %}
 <div class="stats ov-stats">
   <a class="stat" href="{% url 'orders:open_orders' %}"><p class="stat-label">Bàn có khách</p>
     <p class="stat-value">{{ tables_busy }}<small class="stat-of"> / {{ tables_total }}</small></p>
@@ -20,7 +23,6 @@
   {% if can_pay %}</a>{% else %}</div>{% endif %}
 </div>
 
-{% include "shifts/_overrun.html" %}
 {% if shift %}
 <section class="card" aria-labelledby="ov-shift">
   <div class="card-head"><div><h2 id="ov-shift">Ca này đến giờ</h2>
@@ -38,8 +40,6 @@
     {% endif %}
   </div>
 </section>
-{% else %}
-<p class="notice notice-warn">Chưa có ca nào đang mở. Đơn mới vẫn được nhận nhưng chưa thuộc ca nào; Chủ quán mở ca ở Quản trị, mục Ca làm việc.</p>
 {% endif %}
 
 <div class="ov-grid">
@@ -115,7 +115,7 @@
         {% for p in people %}
         <li class="list-row ov-row">
           <span><strong>{{ p.user }}</strong><span class="cell-sub">{{ p.role }}</span></span>
-          {% if p.absent %}<span class="pill pill-warn">Chưa chấm công</span>{% else %}<span class="muted">vào {{ p.since|date:"H:i" }}</span>{% endif %}
+          {% if p.absent %}<span class="pill pill-warn">Chưa chấm công</span>{% else %}<span class="muted">vào {{ p.since|date:"H:i" }}{% if p.since|date:"Ymd" != now|date:"Ymd" %} {{ p.since|date:"d/m" }}{% endif %}</span>{% endif %}
         </li>
         {% endfor %}
       </ul>

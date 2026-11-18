@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load humanize %}
+{% load humanize loi_thuong %}
 {% block title %}Báo cáo kiểm soát doanh thu · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <header class="page-head"><div><h1>Báo cáo kiểm soát doanh thu</h1><p class="page-sub">{{ start|date:"d/m/Y" }} – {{ end|date:"d/m/Y" }}. Tiền thất thoát của tháng, chênh lệch tiền theo ca, yêu cầu điều chỉnh và ngoại lệ trong kỳ.</p></div></header>
@@ -22,10 +22,10 @@
 <section class="card" aria-labelledby="d-title">
   <div class="card-head"><h2 id="d-title">Chênh lệch tiền theo ca</h2></div>
   {% if discrepancies %}<div class="table-wrap"><table class="data-table table-stack"><thead><tr><th scope="col">Ca</th><th scope="col">Phương thức</th><th scope="col">Người phụ trách ca</th><th scope="col" class="num">Chênh lệch</th><th scope="col">Tình trạng</th></tr></thead>
-  <tbody>{% for d in discrepancies %}<tr><th scope="row"><a href="{% url 'shifts:my_shift_detail' d.shift_id %}">{{ d.shift }}</a></th><td data-label="Phương thức">{{ d.get_method_display }}</td><td data-label="Người phụ trách ca">{{ d.manager }}</td><td class="num" data-label="Chênh lệch">{{ d.difference|intcomma }} đ</td><td data-label="Tình trạng">{% if d.decision %}{{ d.get_decision_display }}{% elif d.explanation %}Đã giải trình{% else %}<span class="pill pill-warn">Chưa giải thích</span>{% endif %}{% if d.over_threshold %} <span class="pill pill-danger">Vượt ngưỡng</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+  <tbody>{% for d in discrepancies %}<tr><th scope="row"><a href="{% url 'shifts:my_shift_detail' d.shift_id %}">{{ d.shift }}</a></th><td data-label="Phương thức">{{ d.get_method_display }}</td><td data-label="Người phụ trách ca">{{ d.manager }}</td><td class="num" data-label="Chênh lệch">{{ d.difference|chenh_tien }}</td><td data-label="Tình trạng">{% if d.decision %}{{ d.get_decision_display }}{% elif d.explanation %}Đã giải trình, chờ Chủ quán xem{% else %}<span class="pill pill-warn">Chưa giải thích</span>{% endif %}{% if d.over_threshold %} <span class="pill pill-danger">Vượt ngưỡng</span>{% endif %}</td></tr>{% endfor %}</tbody></table></div>
   {% else %}<p class="empty-cell">Không có chênh lệch trong kỳ.</p>{% endif %}
-  {% for m in months %}{% if m.accumulated %}<div class="card-body rc-acc"><h3 class="card-h3">Thiếu chưa giải thích cộng dồn tháng {{ m.month|date:"m/Y" }}</h3>
-    <ul class="row-list">{% for r in m.accumulated %}<li><span class="row-main">{{ r.manager }}<small>{{ r.shift_type }}</small></span><span class="num-cell">{{ r.total|intcomma }} đ</span></li>{% endfor %}</ul></div>{% endif %}{% endfor %}
+  {% for m in months %}{% if m.accumulated %}<div class="card-body rc-acc"><h3 class="card-h3">Thiếu tiền cộng dồn tháng {{ m.month|date:"m/Y" }}, chưa được Chủ quán chấp nhận</h3>
+    <ul class="row-list">{% for r in m.accumulated %}<li><span class="row-main">{{ r.manager }}<small>Phụ trách {{ r.shift_type|lower }}</small></span><span class="num-cell">{{ r.total|intcomma }} đ</span></li>{% endfor %}</ul></div>{% endif %}{% endfor %}
 </section>
 
 <section class="card" aria-labelledby="cases-title">

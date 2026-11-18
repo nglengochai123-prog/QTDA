@@ -541,7 +541,7 @@
       sending = false;
       saveDraft();
       setFeedback("warn", "Chưa chắc đơn đã tới máy chủ.",
-        ["Mã nghiệp vụ: " + shortKey(state.key)],
+        ["Mã ghi lên phiếu: " + shortKey(state.key)],
         "Bấm \"Gửi lại đơn này\". Gửi lại an toàn: nếu đơn đã được nhận, hệ thống trả đúng đơn đó. Nếu phải bán bằng phiếu dự phòng, ghi mã này lên phiếu.");
       render();
     });
@@ -550,7 +550,7 @@
   function shortKey(k) { return (k || "").slice(0, 8).toUpperCase(); }
 
   if (state.pending) {
-    setFeedback("warn", "Đơn trước chưa có xác nhận từ máy chủ.", ["Mã nghiệp vụ: " + shortKey(state.key)],
+    setFeedback("warn", "Đơn trước chưa có xác nhận từ máy chủ.", ["Mã ghi lên phiếu: " + shortKey(state.key)],
       "Bấm \"Gửi lại đơn này\" để kiểm tra. Hệ thống không tạo đơn trùng. Nếu phải bán bằng phiếu dự phòng, ghi mã này lên phiếu.");
   }
   renderMeta();

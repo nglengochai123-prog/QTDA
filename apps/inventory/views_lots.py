@@ -65,6 +65,9 @@ def lot_list(request):
     })
 
 
+DRAWS_SHOWN = 30
+
+
 @capability_required(Cap.STOCK_OPERATIONS)
 @require_GET
 def lot_detail(request, ingredient_id):
@@ -72,12 +75,15 @@ def lot_detail(request, ingredient_id):
     data = lots.overview([ing])[ing.pk]
     for v in data["lots"]:
         v.op = uuid.uuid4().hex
-    draws = (LotDraw.objects.filter(lot__ingredient=ing).select_related("lot", "movement", "movement__actor")
-             .order_by("-created_at", "-id")[:60])
+    # Chỉ hiện các lần gần nhất; đủ cả lịch sử xem ở Sổ kho, tránh trang dài hàng trăm dòng.
+    draws = list(LotDraw.objects.filter(lot__ingredient=ing).select_related("lot", "movement", "movement__actor")
+                 .order_by("-created_at", "-id")[:DRAWS_SHOWN + 1])
+    draws_more = len(draws) > DRAWS_SHOWN
+    draws = draws[:DRAWS_SHOWN]
     used = (StockLot.objects.filter(ingredient=ing, remaining=0).select_related("supplier")
             .order_by("-received_at")[:10])
     return render(request, "inventory/lot_detail.html", {
-        "ing": ing, "data": data, "draws": draws, "used": used, "today": timezone.localdate(),
+        "ing": ing, "data": data, "draws": draws, "draws_more": draws_more, "used": used, "today": timezone.localdate(),
         "timeline": charts.lot_timeline(data["lots"], ing.get_unit_display(), timezone.localdate()),
         "show_value": user_can(request.user, Cap.STOCK_CONFIRM_ORDERING), "rules": ing._meta.get_field("issue_rule"),
         "can_ledger": user_can(request.user, Cap.VIEW_DASHBOARD),

@@ -126,6 +126,17 @@ class LotFlowTests(TestCase):
         with self.assertRaises(ValidationError):
             self.milk.full_clean()
 
+    def test_cover_days_leave_out_expired_lots(self):
+        from unittest import mock
+
+        old = self.receive(400, expiry=TODAY + timedelta(days=1))
+        self.receive(600, expiry=TODAY + timedelta(days=6))
+        StockLot.objects.filter(pk=old.pk).update(expiry_date=TODAY - timedelta(days=1))
+        with mock.patch.object(lots, "daily_usage", return_value={self.milk.pk: 100.0}):
+            view = lots.overview([self.milk])[self.milk.pk]
+        self.assertEqual((view["total"], view["expired_qty"]), (1000, 400))
+        self.assertEqual(view["cover_days"], 6)  # 600 còn hạn / 100 mỗi ngày, không tính 400 quá hạn
+
     def test_expired_lot_is_never_suggested_but_waste_takes_it_first(self):
         old = self.receive(400, expiry=TODAY + timedelta(days=1))
         fresh = self.receive(1000, expiry=TODAY + timedelta(days=6))

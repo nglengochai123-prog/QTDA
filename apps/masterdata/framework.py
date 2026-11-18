@@ -51,7 +51,7 @@ class ActionDef:
     handler: Callable  # (request, obj, cleaned_data) -> thông báo thành công; lỗi thì ném ValidationError
     when: Callable = None  # obj -> bool
     fields: dict = field(default_factory=dict)  # tên -> forms.Field
-    help: str = ""
+    help: str | Callable = ""  # chữ cố định, hoặc obj -> chữ khi lời dặn tùy bản ghi
     primary: bool = False
 
 
@@ -271,7 +271,7 @@ def edit_view(request, key, pk=None):
                 action_form = forms.Form(prefix=a.key)
                 action_form.fields.update({name: f for name, f in a.fields.items()})
                 _style(action_form)
-                actions.append({"a": a, "form": action_form})
+                actions.append({"a": a, "form": action_form, "help": a.help(obj) if callable(a.help) else a.help})
     return render(request, "masterdata/form.html", {
         "r": resource, "obj": obj, "form": form, "formsets": formsets, "editable": editable, "actions": actions,
     })

@@ -144,8 +144,14 @@ def count(request):
     if request.method == "POST":
         p = request.POST
         if p.get("action") in ("confirm", "reject"):
-            _run(request, lambda: ops.confirm_count(request.user, p.get("count"), p.get("action") == "confirm"),
-                 "Đã ghi xác nhận kiểm kê.")
+            done = _run(request, lambda: ops.confirm_count(request.user, p.get("count"), p.get("action") == "confirm"), "")
+            if done is not None:
+                diff = done.difference or 0
+                change = f"{'+' if diff > 0 else '−'}{floatformat(abs(diff), '-2g')} {done.ingredient.get_unit_display()}"
+                messages.success(request, (
+                    f"Đã xác nhận kiểm kê {done.ingredient.name}: tồn đã điều chỉnh {change}."
+                    if done.status == StockCount.Status.APPLIED else
+                    f"Không xác nhận kiểm kê {done.ingredient.name}: tồn giữ nguyên, nên cho đếm lại."))
         else:
             result = _run(request, lambda: ops.submit_count(request.user, p.get("operation_key", ""), p.get("ingredient"),
                                                             p.get("counted", ""), p.get("reason", "")), "")

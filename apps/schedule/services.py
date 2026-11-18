@@ -725,6 +725,10 @@ def publish(owner, week):
     pub = WeekPublish.objects.create(week_start=week, published_by=owner, gaps=gaps)
     record(Action.STATUS_CHANGE, actor=owner, obj=pub, object_type="schedule.WeekPublish",
            after={"tuan": str(week), "con_thieu": len(gaps)})
+    from apps.shifts.from_schedule import sync_week
+
+    # Ca có vị trí thu ngân thành ca quỹ luôn, Chủ quán không phải nhập lại giờ ca ở Quản trị.
+    pub.cash_shifts = sync_week(owner, week)
     from apps.core.push import notify_later
 
     per_user, per_shift = defaultdict(list), defaultdict(list)

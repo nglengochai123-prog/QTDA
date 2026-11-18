@@ -487,7 +487,7 @@ def produce_semi(user, operation_key, product_id, batches, actual_output=None, n
         product = Ingredient.objects.select_related("semi_recipe").get(pk=payload["product"], is_active=True)
         recipe = getattr(product, "semi_recipe", None) if product.is_semi else None
         if recipe is None:
-            raise ValidationError(f"{product.name} chưa có định mức mẻ; khai ở Danh mục, Bán thành phẩm.")
+            raise ValidationError(f"{product.name} chưa có định mức mẻ; Chủ quán khai ở Quản trị, mục Định mức bán thành phẩm.")
         n = _dec(batches, "Số mẻ").quantize(Decimal("0.01"))
         if n <= 0:
             raise ValidationError("Số mẻ phải lớn hơn 0.")
@@ -623,7 +623,7 @@ def _check_count_accumulated(count):
         counters = sorted({str(c.counter) for c in month})
         open_exception(ExceptionCase.Kind.COUNT_ACCUMULATED, ingredient=ingredient, period=f"{now:%Y-%m}",
                        store=ingredient.store,
-                       rule=f"Thiếu kiểm kê tích lũy tháng của {ingredient.name} vượt {stock.fmt_vn(threshold)} "
+                       rule=f"Kiểm kê {ingredient.name} thiếu cộng dồn trong tháng vượt {stock.fmt_vn(threshold)} "
                             f"{ingredient.get_unit_display()}",
                        detail=f"Tổng thiếu {stock.fmt_vn(total)} {ingredient.get_unit_display()} qua {month.count()} lần "
                               f"kiểm kê; người kiểm kê: {', '.join(counters)}.")

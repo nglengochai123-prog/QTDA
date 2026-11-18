@@ -114,6 +114,13 @@ def is_forgotten(att, now=None):
     return att.clock_out is None and att.clock_in < _forgotten_before(now or timezone.now())
 
 
+def on_duty(now=None):
+    """Lượt đang trong ca: chưa ra ca và chưa bị coi là quên bấm Ra ca (AC-77), để màn tổng quan và bảng điều khiển
+    không đếm người đã về từ hôm trước là đang làm."""
+    now = now or timezone.now()
+    return Attendance.objects.filter(clock_out__isnull=True, clock_in__gte=_forgotten_before(now))
+
+
 def missing_clock_out(now=None):
     """Lượt vào ca của ngày trước mà chưa ra ca: Thiếu giờ ra (AC-77)."""
     now = now or timezone.now()

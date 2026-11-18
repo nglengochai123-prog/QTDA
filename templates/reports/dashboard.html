@@ -16,7 +16,7 @@
 
 <section class="card today-card" aria-labelledby="ops-title">
   <div class="card-head"><div><h2 id="ops-title">Hôm nay</h2>
-    <p class="card-sub">{% if ops.shift %}{{ ops.shift.name|default:"Ca đang mở" }} {{ ops.shift.starts_at|date:"H:i" }}–{{ ops.shift.ends_at|date:"H:i" }}{% else %}Chưa mở ca{% endif %}{% if ops.present %} · đang làm: {% for role, n in ops.present.items %}{{ n }} {{ role|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</p></div>
+    <p class="card-sub">{% if ops.shift %}{{ ops.shift.name|default:"Ca đang mở" }} {{ ops.shift.starts_at|date:"H:i" }}–{{ ops.shift.ends_at|date:"H:i" }}{% now "Ymd" as today_ymd %}{% if ops.shift.starts_at|date:"Ymd" != today_ymd %} {{ ops.shift.starts_at|date:"d/m" }}{% endif %}{% else %}Chưa mở ca{% endif %}{% if ops.present %} · đang làm: {% for role, n in ops.present.items %}{{ n }} {{ role|lower }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</p></div>
     <a class="btn btn-ghost btn-sm" href="{% url 'orders:overview' %}">Tổng quan ca</a></div>
   <div class="mini-stats">
     <a class="mini-stat" href="{% url 'reports:revenue' %}?tu={{ ops.today_date|date:'Y-m-d' }}&amp;den={{ ops.today_date|date:'Y-m-d' }}"><span>Doanh thu</span><strong>{{ ops.today.net|intcomma }} <small>đ</small></strong><small>{% if ops.today.delta == 0 %}Bằng {{ ops.today.weekday }} tuần trước, cùng giờ{% elif ops.today.delta is not None %}<span class="stat-delta {% if ops.today.delta >= 0 %}up{% else %}down{% endif %}"><span aria-hidden="true">{% if ops.today.delta >= 0 %}▲{% else %}▼{% endif %}</span> {{ ops.today.delta|stringformat:"d"|cut:"-" }}%</span> so với {{ ops.today.weekday }} tuần trước, cùng giờ{% else %}{{ ops.today.weekday|capfirst }} tuần trước chưa có doanh thu{% endif %}</small></a>
@@ -114,7 +114,7 @@
   </section>
 
   <section class="card" aria-labelledby="ctl-title">
-    <div class="card-head"><div><h2 id="ctl-title">Kiểm soát</h2><p class="card-sub">Cảnh báo và ngoại lệ đang mở, tiền thiếu chưa giải thích.</p></div><a class="btn btn-ghost btn-sm" href="{% url 'control:alerts' %}">Cảnh báo</a></div>
+    <div class="card-head"><div><h2 id="ctl-title">Kiểm soát</h2><p class="card-sub">Cảnh báo và ngoại lệ đang mở, tiền thiếu chưa được Chủ quán chấp nhận.</p></div><a class="btn btn-ghost btn-sm" href="{% url 'control:alerts' %}">Cảnh báo</a></div>
     <div class="mini-stats">
       <a class="mini-stat{% if alerts.khan %} is-danger{% endif %}" href="{% url 'control:alerts' %}"><span>Cảnh báo khẩn</span><strong>{{ alerts.khan }}</strong></a>
       <a class="mini-stat{% if alerts.quan_trong %} is-warn{% endif %}" href="{% url 'control:alerts' %}"><span>Cảnh báo quan trọng</span><strong>{{ alerts.quan_trong }}</strong></a>
@@ -135,7 +135,7 @@
       {% else %}<p class="muted">Chưa có tổn thất hay khoản thiếu nào trong tháng.</p>{% endif %}
       <p class="note">Đã thu hồi {{ control.recovered|intcomma }} đ · đã xác minh còn lại {{ control.verified_remaining|intcomma }} đ · <a href="{% url 'reports:revenue_control' %}?tu={{ first|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}">Xem vụ việc</a></p>
       {% endif %}
-      <h3 class="card-h3">Thiếu tiền chưa giải thích: {{ accumulated|intcomma }} đ</h3>
+      <h3 class="card-h3">Thiếu tiền chưa được chấp nhận: {{ accumulated|intcomma }} đ</h3>
       {% if acc_chart %}{% include "reports/charts/hbars.html" with c=acc_chart warn_label="Vượt ngưỡng" label="Thiếu tiền tích lũy theo người phụ trách ca" %}
       <ul class="chart-legend"><li><span class="key key-1"></span>Theo người phụ trách ca</li><li><span class="key key-target"></span>Ngưỡng {{ acc_limit|intcomma }} đ</li></ul>
       {% else %}<p class="muted">Chưa có khoản thiếu nào trong tháng.</p>{% endif %}

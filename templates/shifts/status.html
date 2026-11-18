@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load humanize %}
+{% load humanize loi_thuong %}
 {% block title %}Tình trạng ca · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <header class="page-head"><div><h1>Tình trạng ca và đối soát</h1><p class="page-sub">Khoản chênh lệch cần bạn quyết định, thiếu tiền tích lũy và tình trạng kết ca, báo cáo của các ca gần đây.</p></div></header>
@@ -44,7 +44,7 @@
     {% for d in pending_decisions %}
     <li><span class="row-main"><strong>{{ d.shift }}</strong>
       <small>{{ d.get_method_display }} · {{ d.manager }} · {% if d.explanation %}giải trình: {{ d.explanation }}{% elif d.over_threshold %}vượt ngưỡng, chờ người phụ trách ca giải trình{% elif d.difference < 0 %}dưới ngưỡng, đã cộng vào thiếu tiền tích lũy{% else %}dư dưới ngưỡng{% endif %}</small></span>
-      <strong class="decision-amount{% if d.difference < 0 %} neg{% endif %}">{{ d.difference|intcomma }} đ</strong>
+      <strong class="decision-amount{% if d.difference < 0 %} neg{% endif %}">{{ d.difference|chenh_tien }}</strong>
       {% if request.user.is_owner and d.explanation or request.user.is_owner and not d.over_threshold %}
       <span class="approval-actions">
         <form method="post" action="{% url 'shifts:decide' d.pk %}" data-once>{% csrf_token %}<input type="hidden" name="decision" value="reject"><button class="btn btn-quiet btn-sm" type="submit">Không chấp nhận</button></form>
@@ -57,7 +57,7 @@
 </section>
 
 <section class="panel" aria-labelledby="acc-title">
-  <h2 id="acc-title">Thiếu tiền chưa giải thích tích lũy tháng {{ month }}</h2>
+  <h2 id="acc-title">Thiếu tiền tích lũy tháng {{ month }}, chưa được Chủ quán chấp nhận</h2>
   {% if accumulated %}
   <div class="table-wrap"><table class="data-table">
     <thead><tr><th scope="col">Người phụ trách</th><th scope="col">Loại ca</th><th scope="col" class="num">Tích lũy</th></tr></thead>
