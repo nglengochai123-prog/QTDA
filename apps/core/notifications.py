@@ -4,7 +4,7 @@ Hai phần hiện trong bảng của chuông:
 1. Thông báo: sự việc đã xảy ra và gửi riêng cho người đó (món pha xong cho người nhận đơn, yêu cầu duyệt cho Chủ
    quán, báo hết nguyên liệu, cảnh báo, lịch làm thay đổi, tiền nộp chờ xác nhận...). Mỗi thông báo có trạng thái đã
    đọc; số trên chuông là số chưa đọc.
-2. Việc đang chờ (tính tại lúc xem theo quyền) hiện ở Trang chủ, không lặp trên chuông.
+2. Việc đang chờ: tính tại lúc mở chuông theo quyền (cùng danh sách ở trang Việc và thông báo).
 
 Thông báo đẩy lên điện thoại (core/push.py) đi cùng: mọi chỗ gọi `push.notify_later` hoặc `push.notify_alert` đều ghi
 một thông báo ở đây, nên vẫn thấy được khi máy chủ chưa bật Web Push.
@@ -180,12 +180,15 @@ def forecast_stale(now=None):
 
 
 def summary(user, limit=8):
-    """Dữ liệu cho bảng của chuông: số chưa đọc và thông báo gần nhất. Việc đang chờ nằm ở Trang chủ, không lặp ở đây."""
+    """Dữ liệu cho bảng của chuông: việc đang chờ (chỉ việc có số), số chưa đọc và thông báo gần nhất.
+    Không còn trang chủ riêng nên chuông là nơi duy nhất thấy việc chờ từ mọi màn hình."""
     items = [{"id": n.pk, "kind": n.kind, "kind_label": n.get_kind_display(), "title": n.title, "body": n.body,
               "url": reverse("core:notification_open", args=[n.pk]), "read": n.read_at is not None,
               "at": n.created_at.isoformat(), "ago": ago(n.created_at)}
              for n in user.notifications.all()[:limit]]
-    return {"unread": unread(user).count(), "items": items}
+    waiting = [t for t in pending_tasks(user) if t["count"] and t["url"] != reverse("orders:open_orders")]
+    waiting.sort(key=lambda t: not t["urgent"])
+    return {"unread": unread(user).count(), "waiting": waiting, "items": items}
 
 
 def ago(moment, now=None):

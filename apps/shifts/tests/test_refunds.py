@@ -108,6 +108,6 @@ class RefundTests(Base):
         page = c.get("/thu-ngan/").content.decode()
         self.assertIn("Hoàn tiền đã duyệt, chờ trả khách", page)
         self.assertNotIn("Chưa có ca đang mở", page)
-        self.assertIn("Hoàn tiền chờ trả khách", c.get("/").content.decode())
+        self.assertIn("Hoàn tiền chờ trả khách", c.get("/thong-bao/").content.decode())
         Shift.objects.update(status=Shift.Status.CLOSED)
         self.assertIn("Chưa có ca đang mở", c.get("/thu-ngan/").content.decode())

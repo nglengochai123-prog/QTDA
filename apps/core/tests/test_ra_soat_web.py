@@ -198,7 +198,7 @@ class HomeOverdueShiftTests(TestCase):
         now = timezone.now()
         shift = Shift.objects.create(store=self.d["store"], name="Ca sáng", starts_at=now - timedelta(days=2),
                                      ends_at=now - timedelta(days=2) + timedelta(hours=8), approver=self.d["owner"])
-        html = self.client.get(reverse("core:home")).content.decode()
+        html = self.client.get(reverse("core:notifications")).content.decode()
         self.assertIn(f"Việc quá hạn của ca sáng {timezone.localtime(shift.starts_at):%d/%m}", html)
 
     def test_home_quiet_while_shift_is_running(self):
@@ -211,7 +211,7 @@ class HomeOverdueShiftTests(TestCase):
         now = timezone.now()
         Shift.objects.create(store=self.d["store"], name="Ca sáng", starts_at=now - timedelta(hours=1),
                              ends_at=now + timedelta(hours=4), approver=self.d["owner"])
-        self.assertNotIn("của ca sáng", self.client.get(reverse("core:home")).content.decode())
+        self.assertNotIn("của ca sáng", self.client.get(reverse("core:notifications")).content.decode())
 
 
 class PasswordHelpTests(TestCase):

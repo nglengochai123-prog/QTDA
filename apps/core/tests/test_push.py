@@ -103,11 +103,11 @@ class DataNoticeTests(TestCase):
     def test_notice_banner_until_acknowledged(self):
         User.objects.create_user("pv", password="matkhau-thu-123", role=Role.PHUC_VU)
         self.client.login(username="pv", password="matkhau-thu-123")
-        self.assertContains(self.client.get(reverse("core:home")), "thông báo xử lý dữ liệu cá nhân")
+        self.assertContains(self.client.get(reverse("core:home"), follow=True), "thông báo xử lý dữ liệu cá nhân")
         self.assertContains(self.client.get(reverse("core:data_notice")), "Kiểm soát doanh thu và thất thoát")
         self.client.post(reverse("core:data_notice"))
         self.client.post(reverse("core:data_notice"))
         from apps.core.models import DataNoticeAck
 
         self.assertEqual(DataNoticeAck.objects.count(), 1)
-        self.assertNotContains(self.client.get(reverse("core:home")), "thông báo xử lý dữ liệu cá nhân")
+        self.assertNotContains(self.client.get(reverse("core:home"), follow=True), "thông báo xử lý dữ liệu cá nhân")

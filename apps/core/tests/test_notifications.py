@@ -63,9 +63,9 @@ class ReadyItemTests(TestCase):
         data = self.client.get(reverse("core:notification_summary")).json()
         self.assertEqual(data["unread"], 1)
         self.assertEqual(data["items"][0]["kind"], "mon_san_sang")
-        self.assertNotIn("waiting", data)  # việc đang chờ nằm ở Trang chủ, không lặp trên chuông
+        self.assertIn("Ly pha xong chờ mang ra", [t["label"] for t in data["waiting"]])
         self.assertEqual(self.client.get(reverse("core:notification_summary") + "?chi_so=1").json(), {"unread": 1})
-        page = self.client.get(reverse("core:home")).content.decode()
+        page = self.client.get(reverse("core:notifications")).content.decode()
         self.assertIn('data-notif-badge>1</span>', page)
         self.assertIn("Ly pha xong chờ mang ra", page)
         # Pha chế không nhận thông báo món pha xong (đó là việc của người nhận đơn).
@@ -179,7 +179,7 @@ class BellTests(TestCase):
         notifications.create([self.owner.pk], "Chưa đọc", url="/duyet/")
         self.client.login(username="chuquan", password=PASSWORD)
         html = self.client.get(reverse("core:notifications")).content.decode()
-        self.assertIn("1 thông báo chưa đọc", html)
+        self.assertIn("Thông báo · 1 chưa đọc", html)
         self.assertIn("Đọc rồi", html)
         html = self.client.get(reverse("core:notifications") + "?loc=chua-doc").content.decode()
         self.assertNotIn("Đọc rồi", html)
@@ -207,31 +207,35 @@ class BellTests(TestCase):
 
 
 class HomeTests(TestCase):
-    """Trang chủ chỉ là việc đang chờ; không lặp lại chức năng đã có ở menu."""
+    """Không còn trang chủ: "/" mở màn việc chính của vai trò; việc đang chờ ở chuông và trang Việc và thông báo."""
 
     def setUp(self):
         self.d = build_menu()
 
-    def test_waiter_home_is_only_waiting_work(self):
-        self.client.login(username="phucvu", password=PASSWORD)
-        html = self.client.get(reverse("core:home")).content.decode()
-        self.assertIn("<h1>Việc chờ tôi xử lý</h1>", html)
-        self.assertIn("Không có việc nào đang chờ.", html)
-        for gone in ("home-action", "app-card", "data-app-search", "go-item"):
-            self.assertNotIn(gone, html)
+    def test_each_role_lands_on_its_main_screen(self):
+        from apps.accounts.models import Role, User
 
-    def test_owner_home_lists_only_non_zero_work(self):
+        User.objects.create_user("thungan", password=PASSWORD, role=Role.THU_NGAN)
+        for user, url in [("phucvu", "/don/moi/"), ("phache", reverse("orders:bar")),
+                          ("thungan", reverse("orders:cashier")), ("chuquan", reverse("core:notifications"))]:
+            self.client.login(username=user, password=PASSWORD)
+            self.assertRedirects(self.client.get("/"), url, fetch_redirect_response=False, msg_prefix=user)
+        # Quán còn thiếu nhân viên nên Chủ quán vào trang Việc để khai báo; khai báo đủ thì vào Bảng điều khiển.
+        from apps.staff.models import Employee
+
+        Employee.objects.create(store=self.d["store"], user=self.d["waiter"], full_name="Phục vụ", phone="0901234567")
+        self.assertRedirects(self.client.get("/"), reverse("reports:dashboard"), fetch_redirect_response=False)
+
+    def test_work_page_lists_only_non_zero_work_and_no_home_tab(self):
         result, _ = services.submit_order(self.d["waiter"], key(), cart(self.d))
         line = Order.objects.get(pk=result["order_id"]).lines.get()
         with self.captureOnCommitCallbacks(execute=True):
             services.complete_line(self.d["barista"], key(), line.pk, 1, 0)
         self.client.login(username="chuquan", password=PASSWORD)
-        html = self.client.get(reverse("core:home")).content.decode()
+        html = self.client.get(reverse("core:notifications")).content.decode()
         self.assertIn("Ly pha xong chờ mang ra", html)
         self.assertNotIn("Kiểm kê chờ xác nhận", html)  # số 0 thì không hiện
-        self.assertNotIn("Đơn đang mở</span>", html)
-        self.assertNotIn("Mở nhanh", html)
-        # Thanh trên chỉ còn chuông và tài khoản; Duyệt, Tham số đã ở trong menu.
+        self.assertNotIn(">Trang chủ<", html)
         self.assertNotIn('title="Duyệt điều chỉnh"', html)
         self.assertNotIn('title="Tham số"', html)
 
@@ -271,9 +275,9 @@ class HomeLogicTests(TestCase):
         rel = ForecastRelease.objects.create(issued_at=timezone.now() - timedelta(hours=40),
                                              first_day=timezone.localdate(), horizon_days=14, model_version="t",
                                              data_version="x")
-        html = self.client.get(reverse("core:home")).content.decode()
+        html = self.client.get(reverse("core:notifications")).content.decode()
         self.assertIn("chưa cập nhật từ", html)
         self.assertIn("tác vụ hằng đêm chưa chạy", html)
         rel.issued_at = timezone.now() - timedelta(hours=2)
         rel.save()
-        self.assertNotIn("tác vụ hằng đêm chưa chạy", self.client.get(reverse("core:home")).content.decode())
+        self.assertNotIn("tác vụ hằng đêm chưa chạy", self.client.get(reverse("core:notifications")).content.decode())

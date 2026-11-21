@@ -85,7 +85,7 @@ class FreshInstallTests(TestCase):
         owner = User.objects.create_user("chu", password=PASSWORD, role=Role.CHU_QUAN)
         c = Client()
         c.force_login(owner)
-        body = c.get("/").content.decode()
+        body = c.get("/", follow=True).content.decode()  # quán mới cài: vào thẳng trang Việc và thông báo
         self.assertIn("<h2>Cần khai báo trước khi bán</h2>", body)
         self.assertIn('<span class="status-warn">0 bàn</span>', body)
         self.assertIn("Quản trị, mục Bàn", c.get("/don/moi/").content.decode())
@@ -180,14 +180,14 @@ class PasswordChangeTests(TestCase):
         c = Client()
         self.assertEqual(c.get("/tai-khoan/doi-mat-khau/").status_code, 302)
         c.force_login(waiter)
-        self.assertIn("Đổi mật khẩu", c.get("/").content.decode())
+        self.assertIn("Đổi mật khẩu", c.get("/", follow=True).content.decode())
         wrong = c.post("/tai-khoan/doi-mat-khau/", {"old_password": "sai-roi", "new_password1": "ca-phe-sua-da-77",
                                                     "new_password2": "ca-phe-sua-da-77"})
         self.assertEqual(wrong.status_code, 200)
         response = c.post("/tai-khoan/doi-mat-khau/", {"old_password": PASSWORD, "new_password1": "ca-phe-sua-da-77",
                                                        "new_password2": "ca-phe-sua-da-77"}, follow=True)
         self.assertIn("Đã đổi mật khẩu", response.content.decode())
-        self.assertEqual(c.get("/").status_code, 200)  # vẫn đăng nhập
+        self.assertEqual(c.get("/", follow=True).status_code, 200)  # vẫn đăng nhập
         waiter.refresh_from_db()
         self.assertTrue(waiter.check_password("ca-phe-sua-da-77"))
         self.assertTrue(AuditLog.objects.filter(object_id=str(waiter.pk), after__mat_khau="tự đổi").exists())

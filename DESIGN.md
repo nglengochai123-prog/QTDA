@@ -84,13 +84,13 @@ Giao diện chỉ hiện kết quả, không hiện cách tính: không công th
 ## Bố cục
 
 - **Máy tính (từ 900px):**
-  - **Thanh trên** 56px dính đầu trang, nền trắng mờ, viền dưới mảnh. Trái: biểu tượng ly cà phê nét mảnh và chữ "LAM Coffee" (không có ô vuông đen). Giữa: các phân hệ theo quyền (Trang chủ, Bán hàng, Ca, nhân sự, Kho, Dự báo, Kiểm soát, Báo cáo, Quản trị); phân hệ đang mở là viên xám `--surface-3`. Phải: chuông thông báo (số chưa đọc) và nút tên có viền, ảnh đại diện tròn xám. Duyệt và Tham số đã ở trong menu nên không có nút riêng.
+  - **Thanh trên** 56px dính đầu trang, nền trắng mờ, viền dưới mảnh. Trái: biểu tượng ly cà phê nét mảnh và chữ "LAM Coffee" (không có ô vuông đen). Giữa: các phân hệ theo quyền (Tổng quan, Bán hàng, Ca, nhân sự, Kho, Dự báo, Kiểm soát, Báo cáo, Quản trị); phân hệ đang mở là viên xám `--surface-3`. Phải: chuông thông báo (số chưa đọc) và nút tên có viền, ảnh đại diện tròn xám. Duyệt và Tham số đã ở trong menu nên không có nút riêng.
   - **Thanh trái** 256px nền trắng, viền phải mảnh. Tiêu đề là tên phân hệ đang mở (21px đậm), dưới là các mục chữ thường, không biểu tượng; mục đang mở nền `--surface-3`, chữ đậm.
   - **Nội dung** đệm 28–36px, rộng tối đa 1440px.
   - Dưới 1200px: thanh trái 224px, nút tên ẩn chỉ còn ảnh đại diện, thanh phân hệ cuộn ngang nếu thiếu chỗ.
 - **Điện thoại (dưới 900px):** ẩn thanh phân hệ và thanh trái. Thanh trên 54px còn biểu tượng, tên quán và công cụ; các mục của phân hệ đang mở là thẻ gạch chân cuộn ngang; thanh điều hướng dưới 60px với 4 mục ưu tiên và "Tất cả".
-- **Trang chủ (làm lại 21/11/2026, Hai: chức năng đã có ở menu thì trang chủ không lặp lại):** tiêu đề "Việc chờ tôi xử lý" kèm ngày và vai trò; một danh sách chỉ gồm việc có số (việc gấp có chấm đỏ, số nền đỏ), hết việc thì một dòng "Không có việc nào đang chờ"; ca làm sắp tới; khối "Cần khai báo trước khi bán" chỉ hiện khi quán còn thiếu nhân viên, món đang bán, bàn hoặc nguyên liệu. Không có lối tắt, nút chức năng hay lưới thẻ.
-- **Một con số chỉ ở một chỗ chính:** việc đang chờ nằm ở Trang chủ, không lặp trên chuông; chuông chỉ chứa thông báo (sự việc đã xảy ra, có đã đọc). Cảnh báo ngoại lệ không đếm thêm vào dòng Cảnh báo khi đã có dòng Ngoại lệ. Món chờ mang ra luôn đếm theo ly.
+- **Không có trang chủ (21/11/2026, Hai):** vào "/" là tới thẳng màn việc chính của vai trò chính (Chủ quán: Bảng điều khiển, hoặc trang Việc và thông báo khi quán còn thiếu khai báo; thu ngân: Thu ngân; pha chế: Quầy pha chế; phục vụ: Tạo đơn). Việc đang chờ (chỉ việc có số) nằm trong chuông và trang "Việc và thông báo" (`/thong-bao/`), cùng ca làm sắp tới và khối "Cần khai báo trước khi bán". Nhắc đọc thông báo dữ liệu cá nhân là dải báo ở mọi trang tới khi xác nhận.
+- **Một con số chỉ ở một chỗ chính:** việc đang chờ chỉ ở chuông và trang Việc và thông báo. Cảnh báo ngoại lệ không đếm thêm vào dòng Cảnh báo khi đã có dòng Ngoại lệ. Món chờ mang ra luôn đếm theo ly.
 - **Lưới:** `.grid-2`, `.grid-3` như cũ; dưới 1000px thành một cột với `minmax(0, 1fr)`.
 - **Thẻ (`.card`, `.panel`):** nền trắng, viền 1px `--border`, bo 16px, không bóng.
 - **Ô số liệu (`.stat`, `.mini-stat`):** ô cần chú ý có chấm màu trước nhãn, không vạch màu bên trái.

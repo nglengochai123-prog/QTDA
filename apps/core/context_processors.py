@@ -11,7 +11,7 @@ def site(request):
 # Biểu tượng, nhãn ngắn trên thanh trên và màu ô biểu tượng (trang chủ) của từng phân hệ.
 GROUP_ICONS = {"Tổng quan": "home", "Bán hàng": "order", "Ca và nhân sự": "shift", "Kho": "stock", "Dự báo": "forecast",
                "Kiểm soát": "control_report", "Báo cáo": "revenue", "Quản trị": "params"}
-GROUP_SHORT = {"Tổng quan": "Trang chủ", "Ca và nhân sự": "Ca, nhân sự"}
+GROUP_SHORT = {"Ca và nhân sự": "Ca, nhân sự"}
 GROUP_TONES = {"Tổng quan": "blue", "Bán hàng": "orange", "Ca và nhân sự": "green", "Kho": "teal", "Dự báo": "indigo",
                "Kiểm soát": "red", "Báo cáo": "pink", "Quản trị": "gray"}
 
@@ -92,8 +92,7 @@ def navigation(request):
         "md_ban-thanh-pham", "md_nha-cung-cap", "md_ly-do", "schedule", "fc_overview", "fc_plans", "fc_prior", "fc_season", "fc_history"}
     # Nhóm điều hướng theo nghiệp vụ (DESIGN.md: bố cục quản trị); trên điện thoại chỉ hiện tối đa 5 mục.
     groups = [
-        (None, [("home", "Trang chủ", reverse("core:home"), None),
-                ("dashboard", "Bảng điều khiển", reverse("reports:dashboard"), Cap.VIEW_DASHBOARD),
+        (None, [("dashboard", "Bảng điều khiển", reverse("reports:dashboard"), Cap.VIEW_DASHBOARD),
                 ("alerts", "Cảnh báo", reverse("control:alerts"), Cap.HANDLE_ALERTS)]),
         ("Bán hàng", [
             ("overview", "Tổng quan ca", reverse("orders:overview"), Cap.ORDER_CREATE),
@@ -162,7 +161,7 @@ def navigation(request):
         item["group_start"] = item["group"] if item["group"] != last and item["group"] else ""
         last = item["group"]
     # Thanh dưới điện thoại giữ tối đa 5 mục theo thứ tự ưu tiên; các mục còn lại xem trên máy tính.
-    priority = ["home", "order", "approve", "shift", "register", "alerts", "attendance", "stock", "open", "ready"]
+    priority = ["order", "bar", "cashier", "approve", "shift", "register", "alerts", "attendance", "stock", "open", "ready"]
     mobile = [key for key in priority if any(i["key"] == key and not i["desktop_only"] for i in nav)][:4]
     for item in nav:
         item["desktop_only"] = item["key"] not in mobile
@@ -197,6 +196,13 @@ def navigation(request):
     return {"NAV_ITEMS": nav, "HEADER": header, "NAV_GROUPS": nav_groups, "NAV_ACTIVE_GROUP": active_group,
             "NAV_SIDE_GROUP": active_group or (nav_groups[0] if nav_groups else None), "APPROVALS_COUNT_URL": reverse("orders:approvals_count") if can_approve else "",
             "QUICK_REPORT_COUNT_URL": reverse("inventory:quick_report_count") if user_can(user, Cap.VIEW_WORKLOAD) else "",
-            "STOCK_URL": reverse("inventory:stock"),
+            "STOCK_URL": reverse("inventory:stock"), "DATA_NOTICE_PENDING": _notice_pending(user),
             "APPROVALS_URL": reverse("orders:approvals") if can_approve else "", "READY_COUNT_URL": reverse("orders:ready_count") if can_order else "",
             "READY_URL": reverse("orders:ready") if can_order else ""}
+
+
+def _notice_pending(user):
+    """Nhân viên chưa xác nhận đã đọc thông báo xử lý dữ liệu cá nhân bản hiện hành (NFR-13): nhắc ở mọi trang."""
+    from .models import DATA_NOTICE_VERSION, DataNoticeAck
+
+    return not DataNoticeAck.objects.filter(user=user, version=DATA_NOTICE_VERSION).exists()

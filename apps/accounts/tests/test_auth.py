@@ -21,7 +21,7 @@ class LoginLogoutTests(TestCase):
 
     def test_login_success_redirects_home_and_logs(self):
         response = self._login()
-        self.assertRedirects(response, reverse("core:home"))
+        self.assertRedirects(response, reverse("core:home"), fetch_redirect_response=False)
         self.assertTrue(AuditLog.objects.filter(action=Action.LOGIN, actor=self.user).exists())
 
     def test_wrong_password_shows_error_and_logs(self):
@@ -64,7 +64,7 @@ class AccountLockTests(TestCase):
         User.objects.filter(pk=self.user.pk).update(
             locked_until=timezone.now() - timedelta(minutes=1), failed_login_count=3)
         response = self._login(PASSWORD)
-        self.assertRedirects(response, reverse("core:home"))
+        self.assertRedirects(response, reverse("core:home"), fetch_redirect_response=False)
         self.user.refresh_from_db()
         self.assertEqual(self.user.failed_login_count, 0)
         self.assertIsNone(self.user.locked_until)

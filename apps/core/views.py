@@ -7,18 +7,47 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 
-# Trang chủ chỉ là danh sách việc đang chờ mình; mọi chức năng đã có ở thanh trên, thanh trái và thanh dưới điện thoại,
-# nên không lặp lại lối tắt hay nút chức năng ở đây (Hai, 21/11/2026).
+# Không còn trang chủ riêng (Hai, 21/11/2026): mọi chức năng đã có ở menu. Vào "/" là tới thẳng màn việc chính của
+# vai trò chính; việc đang chờ nằm ở chuông và trang Việc và thông báo.
+LANDING = [("chu_quan", "reports:dashboard"), ("thu_ngan", "orders:cashier"), ("pha_che", "orders:bar"),
+           ("phuc_vu", "orders:create")]
+
+
+def landing_url(user):
+    """Màn hình mở đầu theo vai trò chính; không có quyền thì lấy mục đầu tiên trên menu của người đó."""
+    from django.test import RequestFactory
+    from django.urls import reverse
+
+    from .context_processors import navigation
+
+    if user.is_owner and my_work(user).get("setup"):
+        return reverse("core:notifications")  # quán mới cài: việc đầu tiên là khai báo cho đủ để bán
+    request = RequestFactory().get("/")
+    request.user = user
+    items = navigation(request).get("NAV_ITEMS", [])
+    urls = {i["url"] for i in items}
+    for role, name in sorted(LANDING, key=lambda r: r[0] != user.role):
+        url = reverse(name)
+        if (role == user.role or user.has_role(role)) and url in urls:
+            return url
+    return items[0]["url"] if items else reverse("core:notifications")
+
+
 @login_required
 def home(request):
-    """Việc đang chờ tôi (chỉ việc có số) và ca làm sắp tới."""
+    from django.shortcuts import redirect
+
+    return redirect(landing_url(request.user))
+
+
+def my_work(user):
+    """Việc đang chờ tôi (chỉ việc có số), ca làm sắp tới, phần còn thiếu để bán được (Chủ quán)."""
     from django.urls import reverse
 
     from apps.accounts.permissions import Cap, user_can
 
     from .notifications import pending_tasks
 
-    user = request.user
     can = lambda cap: user_can(user, cap)  # noqa: E731
     # Đơn đang mở là việc nền của cả ca, không phải việc chờ riêng mình; món pha xong thì cần mang ra ngay.
     tasks = [t for t in pending_tasks(user) if t["count"] and t["url"] != reverse("orders:open_orders")]
@@ -57,10 +86,7 @@ def home(request):
             ("Nguyên vật liệu", md("nguyen-lieu"), f"{ingredients} loại", not ingredients),
         ]
         context["setup"] = [row for row in setup if row[3]]
-    from .models import DATA_NOTICE_VERSION, DataNoticeAck
-
-    context["notice_pending"] = not DataNoticeAck.objects.filter(user=user, version=DATA_NOTICE_VERSION).exists()
-    return render(request, "core/home.html", context)
+    return context
 
 
 @require_GET
@@ -251,7 +277,7 @@ def notification_open(request, pk):
 @login_required
 @require_GET
 def notifications_page(request):
-    """Tất cả thông báo của tôi, lọc chưa đọc hoặc theo loại; kèm thẻ bật thông báo trên điện thoại."""
+    """Việc đang chờ tôi và mọi thông báo của tôi (lọc chưa đọc hoặc theo loại); kèm thẻ bật thông báo trên điện thoại."""
     from . import notifications
     from .models import Notification
     from .paging import paginate
@@ -268,4 +294,4 @@ def notifications_page(request):
         n.ago = notifications.ago(n.created_at)
     return render(request, "core/notifications.html", {
         "page": page, "qs": query, "only_unread": only_unread, "kind": kind, "kinds": Notification.Kind.choices,
-        "unread_count": notifications.unread(request.user).count()})
+        "unread_count": notifications.unread(request.user).count(), **my_work(request.user)})

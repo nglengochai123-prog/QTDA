@@ -14,14 +14,13 @@ class FoundationTests(TestCase):
         response = self.client.get(reverse("core:home"))
         self.assertRedirects(response, f"{reverse('accounts:login')}?next=/")
 
-    def test_home_after_login(self):
+    def test_home_goes_straight_to_role_screen(self):
+        # Không còn trang chủ riêng: phục vụ vào thẳng Tạo đơn, chức năng khác ở menu.
         User.objects.create_user("phucvu1", password="matkhau-thu-123", role=Role.PHUC_VU)
         self.client.login(username="phucvu1", password="matkhau-thu-123")
         response = self.client.get(reverse("core:home"))
-        self.assertContains(response, "Phục vụ")
-        # Trang chủ chỉ có việc đang chờ; chức năng nằm ở menu.
-        self.assertContains(response, "Việc chờ tôi xử lý")
-        self.assertNotContains(response, "home-action")
+        self.assertRedirects(response, "/don/moi/")
+        self.assertNotContains(self.client.get("/don/moi/"), ">Trang chủ<")
 
     def test_pwa_files(self):
         self.assertEqual(self.client.get("/manifest.webmanifest").status_code, 200)

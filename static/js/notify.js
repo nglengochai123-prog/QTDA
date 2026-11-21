@@ -38,6 +38,17 @@
   }
   function render(data) {
     body.textContent = "";
+    if (data.waiting && data.waiting.length) {
+      body.appendChild(el("p", "notif-section", "Việc chờ bạn"));
+      data.waiting.forEach((t) => {
+        const a = el("a", "notif-wait" + (t.urgent ? " is-urgent" : ""));
+        a.href = t.url;
+        a.appendChild(el("span", null, t.label));
+        if (t.badge) a.appendChild(el("b", null, String(t.count)));
+        body.appendChild(a);
+      });
+      body.appendChild(el("p", "notif-section", "Thông báo"));
+    }
     if (!data.items.length) {
       body.appendChild(el("p", "notif-empty", "Chưa có thông báo nào."));
     } else {

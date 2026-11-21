@@ -66,7 +66,7 @@ class CashFundTests(ShiftBase):
             self.entry("nop", 100000, receiver_id=self.d["owner"].pk)
         self.assertEqual(notify.call_args.args[:2], ([self.d["owner"].pk], "Xác nhận nhận 100.000 đ tiền nộp"))
         self.client.force_login(self.d["owner"])
-        self.assertContains(self.client.get("/"), "Tiền nộp chờ tôi xác nhận")
+        self.assertContains(self.client.get("/thong-bao/"), "Tiền nộp chờ tôi xác nhận")
 
     def test_handover_to_wrong_person_can_be_dropped_so_shift_closes(self):
         self.entry("dau_ca", 1500000)
