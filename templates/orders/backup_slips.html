@@ -2,7 +2,7 @@
 {% load humanize %}
 {% block title %}Phiếu dự phòng · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><div><h1>Phiếu dự phòng và nhập bù</h1><p class="page-sub">Khi mất kết nối, quán bán bằng phiếu giấy đánh số. Có mạng lại thì nhập bù từng phiếu trong {{ entry_hours|floatformat:"-1" }} giờ. Phiếu thiếu số, trùng số, nhập trễ hoặc khai báo hủy đều được ghi vào Ngoại lệ để Chủ quán xem.</p></div></header>
+<header class="page-head"><div><h1>Phiếu dự phòng và nhập bù</h1><p class="page-sub">Có mạng lại thì nhập bù từng phiếu giấy trong {{ entry_hours|floatformat:"-1" }} giờ.</p></div></header>
 
 <section class="panel" aria-labelledby="enter-title">
   <h2 id="enter-title">Nhập bù một phiếu</h2>

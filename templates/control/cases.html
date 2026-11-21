@@ -2,7 +2,7 @@
 {% load humanize %}
 {% block title %}Vụ việc tổn thất · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><div><h1>Vụ việc tổn thất</h1><p class="page-sub">Gom các ngoại lệ và khoản thiếu tiền gây mất tiền thật vào một vụ việc, xác nhận giá trị mất rồi theo dõi số đã thu hồi. Bằng chứng cùng một giao dịch chỉ tính một lần.</p></div></header>
+<header class="page-head"><div><h1>Vụ việc tổn thất</h1><p class="page-sub">Khoản mất tiền thật, từ lúc xác nhận tới khi thu hồi.</p></div></header>
 
 <form method="post" class="card case-new" data-once>{% csrf_token %}<input type="hidden" name="operation_key" value="{{ operation_key }}">
   <label class="field"><span>Lập vụ việc mới</span><input class="input" name="title" maxlength="200" placeholder="Ví dụ: Thiếu tiền ca chiều 12/10" required></label>

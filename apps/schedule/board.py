@@ -8,6 +8,7 @@ from datetime import timedelta
 from django.utils import timezone
 
 from . import services as sv
+from .explain import explain
 from .models import Assignment, WeekPublish, WorkShift
 
 DAY_NAMES = ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ nhật"]
@@ -41,6 +42,7 @@ def _card(row, today):
             "state": state, "short": c["short"], "surplus": c["surplus"], "need": c["need"],
             "suggested": c["need"].suggested if c["need"] else None,
             "reason": c["need"].reason if c["need"] else "",
+            "why": explain(c["need"].suggested, c["need"].basis, c["label"]) if c["need"] else None,
             "assigned": [{"a": a, "name": short_name(a.user), "manual": a.source == Assignment.Source.OWNER}
                          for a in c["assigned"]],
             "waiting": c["unassigned_regs"], "registered": len(c["registered"]),
@@ -58,7 +60,7 @@ def _details(card, context):
     details = []
     for role in sv.ROLES:
         r = have.get(role) or {"role": role, "label": sv.ROLE_LABEL[role], "needed": 0, "have": 0, "state": "none",
-                               "short": 0, "surplus": 0, "need": None, "suggested": None, "reason": "",
+                               "short": 0, "surplus": 0, "need": None, "suggested": None, "reason": "", "why": None,
                                "assigned": [], "waiting": [], "registered": 0}
         waiting_ids = {reg.user_id for reg in r["waiting"]}
         r["others"] = [x for x in sv.replacements(card["shift"], role, context) if x["user"].pk not in waiting_ids]
@@ -181,5 +183,7 @@ def build(week, now=None):
         "people": _people(week, shifts), "previous_count": previous,
         "presets": [{"name": n, "start": a, "end": b} for n, a, b in presets],
         "has_suggestions": any(r["suggested"] is not None for c in cards for r in c["roles"]),
+        # Ca sắp tới chưa có số gợi ý nào: nhắc Chủ quán bấm tính, vì gợi ý chỉ có sau lần tính đó.
+        "unsuggested": sum(1 for c in cards if not c["past"] and not any(r["suggested"] is not None for r in c["roles"])),
         "basis_days": basis_days, "uncovered": [d for d in basis_days if d["uncovered"]],
     }

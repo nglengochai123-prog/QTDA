@@ -20,6 +20,7 @@ def run_all(now=None):
         "du_bao": _daily_forecast(now),
         "ke_hoach_mua": _purchase_plans(now),
         "canh_bao": _sync_alerts(now),
+        "don_thong_bao_cu": _purge_notifications(now),
     }
 
 
@@ -48,3 +49,9 @@ def _remind_missing_out(now):
     from apps.staff.timekeeping import remind_missing
 
     return remind_missing(now)
+
+
+def _purge_notifications(now):
+    from .notifications import purge
+
+    return purge(now)

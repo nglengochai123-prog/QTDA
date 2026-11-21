@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Làm bán thành phẩm · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><div><h1>Làm bán thành phẩm</h1><p class="page-sub">Ghi mỗi mẻ cà phê cốt, nước đường, foam vừa làm. Hệ thống trừ nguyên liệu gốc theo định mức mẻ và cộng bán thành phẩm vào kho thành một lô; món bán ra trừ bán thành phẩm nên nguyên liệu gốc không bị trừ hai lần.</p></div></header>
+<header class="page-head"><div><h1>Làm bán thành phẩm</h1><p class="page-sub">Ghi mỗi mẻ cà phê cốt, nước đường, foam vừa làm.</p></div></header>
 {% if not rows %}<div class="empty"><p><strong>Chưa có bán thành phẩm.</strong></p><p>Khai nguyên liệu loại Bán thành phẩm và định mức mẻ của nó ở mục Quản trị{% if can_setup %}: <a href="{% url 'masterdata:list' 'ban-thanh-pham' %}">Định mức bán thành phẩm</a>{% endif %}.</p></div>{% endif %}
 {% for r in rows %}{% with i=r.ingredient rc=r.recipe %}
 <section class="panel semi-card" aria-labelledby="btp-{{ i.pk }}">

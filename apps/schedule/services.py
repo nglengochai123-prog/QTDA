@@ -375,7 +375,7 @@ def suggest_day(day, shifts, inputs=None):
                 "rate": rate["value"], "rate_source": rate["source"],
                 "rate_kind": rate["kind"], "wait_minutes": wait_min, "service_percent": round(target * 100),
                 "scv": scv, "minimum": minimum,
-                "hours": [[h, round(loads[h], 1), need[h]] for h in mine],
+                "hours": [[h, round(loads[h], 3), need[h]] for h in mine],
                 "peak_load": round(max((loads[h] for h in mine), default=0), 1),
                 "uncovered": uncovered})
     return out

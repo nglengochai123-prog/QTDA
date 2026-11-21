@@ -2,7 +2,7 @@
 {% load static %}
 {% block title %}Phiếu nhập · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><div><h1>Lập phiếu nhập</h1><p class="page-sub">Ghi hàng thực nhận theo hóa đơn. Mỗi dòng thành một lô có mã riêng; không ghi hạn sử dụng thì hệ thống ước tính theo thời hạn khai ở nguyên liệu.</p></div></header>
+<header class="page-head"><div><h1>Lập phiếu nhập</h1><p class="page-sub">Ghi hàng thực nhận theo hóa đơn.</p></div></header>
 
 {% include "partials/missing_setup.html" %}
 <form data-draft="phieu-nhap" method="post" enctype="multipart/form-data" class="rc-form" data-once>{% csrf_token %}

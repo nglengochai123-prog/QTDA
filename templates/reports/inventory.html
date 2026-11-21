@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% load humanize %}
-{% block title %}Báo cáo kho · {{ STORE_NAME }}{% endblock %}
+{% block title %}Tồn và hạn dùng · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <header class="page-head">
-  <div><h1>Báo cáo kho</h1><p class="page-sub">{{ start|date:"d/m/Y" }} – {{ end|date:"d/m/Y" }}. Tiền tính theo giá nhập; tồn hiện tại tính theo giá từng lô.</p></div>
+  <div><h1>Tồn và hạn dùng</h1><p class="page-sub">{{ start|date:"d/m/Y" }} – {{ end|date:"d/m/Y" }}. Tiền tính theo giá nhập.</p></div>
   <div class="page-tools"><a class="btn btn-quiet" href="{% url 'reports:materials' %}?tu={{ start|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}">Bảng nhập xuất tồn</a><a class="btn btn-quiet" href="{% url 'inventory:report' %}">Hao hụt và kiểm kê</a></div>
 </header>
 {% include "reports/_period.html" %}

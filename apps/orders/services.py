@@ -236,12 +236,32 @@ def complete_line(user, operation_key, line_id, cups, expected_done):
         line._progress_update = True
         line.save(update_fields=["done_quantity", "status", "done_at", "updated_at"])
         line.order.refresh_status()
+        if line.status == OrderLine.Status.DONE:
+            _tell_ready(line)
         record(Action.STATUS_CHANGE, actor=user, obj=line, object_type="orders.OrderLine",
                before={"done": payload["expected_done"]}, after={"done": line.done_quantity, "so_ly": applied},
                reason=f"Đã pha chế {applied} ly, đơn {line.order.code}")
         return {"line": line.pk, "done": line.done_quantity, "applied": applied, "message": ""}
 
     return run_once(operation_key, "bar_complete", payload, action, actor=user)
+
+
+def _tell_ready(line):
+    """Báo người nhận đơn trên chuông khi cả đơn đã pha xong (không còn món chờ pha): một thông báo cho mỗi đơn,
+    liệt kê các món chờ mang ra. Không đẩy lên điện thoại vì việc này lặp lại cả trăm lần mỗi ngày và màn Món sẵn
+    sàng đã có băng báo riêng; thông báo đẩy để dành cho việc cần người xử lý."""
+    from apps.core.push import notify_later
+
+    order = line.order
+    lines = list(order.lines.all())
+    if any(other.status == OrderLine.Status.WAITING for other in lines):
+        return  # còn món đang pha: chờ xong cả đơn rồi báo một lần
+    ready = [other for other in lines if other.status == OrderLine.Status.DONE]
+    cups = sum(other.quantity - other.cancelled_quantity for other in ready)
+    names = ", ".join(f"{other.quantity - other.cancelled_quantity} × {other.item_name}" for other in ready)
+    notify_later([order.created_by_id], f"Bàn {order.table.code}: {cups} món đã pha xong"[:120],
+                 f"{names}. Đơn {order.code}."[:300], "/don/san-sang/", kind="mon_san_sang",
+                 key=f"mon-xong-{order.pk}-{line.pk}", push=False)
 
 
 def serve_line(user, operation_key, line_id):
@@ -263,6 +283,11 @@ def serve_line(user, operation_key, line_id):
         record(Action.STATUS_CHANGE, actor=user, obj=line, object_type="orders.OrderLine",
                before={"status": OrderLine.Status.DONE}, after={"status": OrderLine.Status.SERVED},
                reason=f"Đã mang ra bàn {line.order.table.code}, đơn {line.order.code}")
+        # Đã mang hết món của đơn ra bàn thì thông báo "đã pha xong" không còn việc gì: coi như đã đọc.
+        if not line.order.lines.filter(status=OrderLine.Status.DONE).exists():
+            from apps.core.notifications import mark_key_read
+
+            mark_key_read(f"mon-xong-{line.order_id}-", line.served_at)
         return {"line": line.pk, "applied": True, "message": ""}
 
     return run_once(operation_key, "serve_line", payload, action, actor=user)

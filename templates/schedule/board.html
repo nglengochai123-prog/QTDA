@@ -46,6 +46,9 @@
   </div>
 
   {% if tab == "ca" %}
+  {% if unsuggested %}<form method="post" class="wk-suggest" data-once>{% csrf_token %}<input type="hidden" name="tuan" value="{{ week|date:'Y-m-d' }}">
+    <p><strong>{{ unsuggested }} ca chưa có số người gợi ý.</strong> Hệ thống tính từ dự báo số ly và lịch sử bán theo giờ, riêng cho pha chế, phục vụ, thu ngân; mở từng ca để xem vì sao.</p>
+    <button class="btn btn-primary btn-sm" name="action" value="suggest_needs">Tính gợi ý cho cả tuần</button></form>{% endif %}
   {% if uncovered %}<p class="wk-alert"><span class="dot dot-over"></span>Quán mở nhưng chưa có ca nào phủ giờ: {% for d in uncovered %}{{ d.day }} {% for h in d.uncovered %}{{ h }}h{% if not forloop.last %}, {% endif %}{% endfor %}{% if not forloop.last %}; {% endif %}{% endfor %}.</p>{% endif %}
   <div class="wk-grid" role="table" aria-label="Ca theo ngày">
     <div class="wk-row wk-row-head" role="row">

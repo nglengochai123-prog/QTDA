@@ -12,11 +12,14 @@ Mốc 1 không bảo đảm mốc 2: điện thoại tắt mạng, tắt quyền
 """
 
 import json
+import logging
 import os
 
 from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 
 def public_key():
@@ -84,25 +87,43 @@ def notify_alert(alert):
     else:
         role = Role.CHU_QUAN if (alert.level or alert.assignee_role == Role.CHU_QUAN) else alert.assignee_role
         targets = [u for u in User.objects.filter(is_active=True) if u.has_role(role)]
+    title = ("Khẩn: " if alert.severity == "khan" else "") + alert.title
+    # Chuông chỉ nhận cảnh báo Khẩn; cảnh báo khác đã có ở trang Cảnh báo và mục Việc chờ trên Trang chủ,
+    # ghi thêm lên chuông chỉ là đếm một việc hai lần.
+    from . import notifications
+
+    if alert.severity == "khan":
+        notifications.create_later([u.pk for u in targets], title, alert.detail, alert.link or "/canh-bao/", kind="canh_bao",
+                                   key=f"canh-bao-{alert.pk}-{alert.level or 0}-{alert.reminded_count or 0}")
     for user in targets:
-        send_to_user(user, ("Khẩn: " if alert.severity == "khan" else "") + alert.title, alert.detail[:160],
-                     alert.link or "/canh-bao/")
+        send_to_user(user, title, alert.detail[:160], alert.link or "/canh-bao/")
 
 
 
-def notify_later(user_ids, title, body, url):
-    """Gửi sau khi giao dịch ghi xong; giao dịch bị hủy thì không gửi. Lỗi gửi không ảnh hưởng nghiệp vụ."""
+def notify_later(user_ids, title, body, url, kind=None, key="", push=True):
+    """Gửi sau khi giao dịch ghi xong; giao dịch bị hủy thì không gửi. Lỗi gửi không ảnh hưởng nghiệp vụ.
+
+    Luôn ghi cả thông báo trong ứng dụng (chuông, core/notifications.py), kể cả khi chưa bật Web Push.
+    push=False: chỉ ghi trên chuông, không gửi lên điện thoại (việc lặp lại nhiều lần trong ca)."""
     from django.db import transaction
+
+    from . import notifications
 
     ids = list(user_ids)
 
     def send():
+        try:
+            notifications.create(ids, title, body, url, kind=kind, key=key)
+        except Exception:  # noqa: BLE001
+            logger.exception("Không ghi được thông báo trong ứng dụng: %s", title)
+        if not push:
+            return
         from apps.accounts.models import User
 
         for user in User.objects.filter(pk__in=ids, is_active=True):
             try:
                 send_to_user(user, title, body, url, kind="phe_duyet")
             except Exception:  # noqa: BLE001
-                pass
+                logger.exception("Không gửi được thông báo đẩy: %s", title)
 
     transaction.on_commit(send)

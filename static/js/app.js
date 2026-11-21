@@ -91,32 +91,25 @@
     topTabs.scrollLeft = currentGroup.offsetLeft - (topTabs.clientWidth - currentGroup.offsetWidth) / 2;
   }
 
-  // --- Trang chủ: lọc thẻ chức năng theo phân hệ và theo chữ gõ ---
-  var appFilter = document.querySelector("[data-app-filter]");
+  // --- Trang chủ Chủ quán: gõ để tìm chức năng; ô trống thì chỉ hiện các lối tắt ---
   var appSearch = document.querySelector("[data-app-search]");
-  if (appFilter && appSearch) {
-    var cards = Array.prototype.slice.call(document.querySelectorAll(".app-card"));
+  if (appSearch) {
+    var results = document.querySelector("[data-app-results]");
+    var cards = results ? Array.prototype.slice.call(results.querySelectorAll("a[data-search]")) : [];
+    var shortcuts = document.querySelector("[data-shortcuts]");
     var appEmpty = document.querySelector("[data-app-empty]");
-    var group = "";
     var applyFilter = function () {
       var words = appSearch.value.trim().toLowerCase();
       var shown = 0;
       cards.forEach(function (card) {
-        var ok = (!group || card.dataset.group === group) && (!words || card.dataset.search.indexOf(words) !== -1);
+        var ok = !!words && card.dataset.search.indexOf(words) !== -1;
         card.hidden = !ok;
         if (ok) shown += 1;
       });
-      if (appEmpty) appEmpty.hidden = shown > 0;
+      if (results) results.hidden = !words;
+      if (shortcuts) shortcuts.hidden = !!words;
+      if (appEmpty) appEmpty.hidden = !words || shown > 0;
     };
-    appFilter.addEventListener("click", function (event) {
-      var tab = event.target.closest("a[data-group]");
-      if (!tab) return;
-      event.preventDefault();
-      group = tab.dataset.group;
-      appFilter.querySelectorAll("a").forEach(function (a) { a.removeAttribute("aria-current"); });
-      tab.setAttribute("aria-current", "true");
-      applyFilter();
-    });
     appSearch.addEventListener("input", applyFilter);
   }
 
@@ -170,7 +163,7 @@
         var onReadyPage = location.pathname === readyBanner.getAttribute("href");
         readyBanner.hidden = !data.count || onReadyPage;
         readyBanner.querySelector("[data-text]").textContent =
-          data.count + " món đã pha xong · Bàn " + data.tables.join(", ");
+          (data.cups || data.count) + " ly đã pha xong · Bàn " + data.tables.join(", ");
       })
       .catch(function () {});
   }

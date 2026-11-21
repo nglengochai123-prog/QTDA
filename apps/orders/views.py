@@ -208,7 +208,9 @@ def ready_queue(request):
 @require_GET
 def ready_count(request):
     ctx = _ready_context()
-    return JsonResponse({"count": ctx["ready_count"], "tables": [code for code, _ in ctx["ready"]]})
+    # Băng báo đếm theo ly, cùng đơn vị với Trang chủ và Tổng quan ca; count giữ số dòng món như trước.
+    cups = sum(l.quantity - l.cancelled_quantity for _code, lines in ctx["ready"] for l in lines)
+    return JsonResponse({"count": ctx["ready_count"], "cups": cups, "tables": [code for code, _ in ctx["ready"]]})
 
 
 @capability_required(Cap.ORDER_CREATE)

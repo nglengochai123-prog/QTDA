@@ -19,9 +19,15 @@
       {% for g in NAV_GROUPS %}<a href="{{ g.url }}"{% if g.active %} aria-current="true"{% endif %}>{{ g.short }}</a>{% endfor %}
     </nav>
     <div class="header-tools">
-      {% if HEADER.alerts %}<a class="tool" href="{{ HEADER.alerts }}" title="Cảnh báo" aria-label="Cảnh báo"><svg class="icon" aria-hidden="true"><use href="#i-alerts"/></svg></a>{% endif %}
-      {% if HEADER.approvals %}<a class="tool" href="{{ HEADER.approvals }}" title="Duyệt điều chỉnh" aria-label="Duyệt điều chỉnh"><svg class="icon" aria-hidden="true"><use href="#i-approve"/></svg><span class="tool-badge" data-approvals-badge hidden></span></a>{% endif %}
-      {% if HEADER.settings %}<a class="tool" href="{{ HEADER.settings }}" title="Tham số" aria-label="Tham số"><svg class="icon" aria-hidden="true"><use href="#i-gear"/></svg></a>{% endif %}
+      <details class="notif" data-notif data-summary-url="{% url 'core:notification_summary' %}" data-read-url="{% url 'core:notification_read' %}" data-csrf="{{ csrf_token }}">
+        <summary class="tool" title="Thông báo" aria-label="Thông báo{% if HEADER.unread %}, {{ HEADER.unread }} chưa đọc{% endif %}"><svg class="icon" aria-hidden="true"><use href="#i-alerts"/></svg><span class="tool-badge" data-notif-badge{% if not HEADER.unread %} hidden{% endif %}>{% if HEADER.unread > 99 %}99+{% else %}{{ HEADER.unread }}{% endif %}</span></summary>
+        <span class="visually-hidden" role="status" aria-live="polite" data-notif-live></span>
+        <div class="notif-panel" role="dialog" aria-label="Thông báo">
+          <div class="notif-head"><h2>Thông báo</h2><button type="button" data-notif-readall>Đánh dấu đã đọc hết</button></div>
+          <div class="notif-scroll" data-notif-body><p class="notif-empty">Đang tải…</p></div>
+          <a class="notif-foot" href="{% url 'core:notifications' %}">Xem tất cả thông báo</a>
+        </div>
+      </details>
       <details class="account">
         <summary aria-label="Tài khoản của tôi"><span class="account-btn"><span class="account-name">{{ user.given_name|default:user.username }}</span><svg class="icon account-caret" aria-hidden="true"><use href="#i-chevron"/></svg></span><span class="avatar" aria-hidden="true">{{ HEADER.initial }}</span></summary>
         <div class="account-menu">
@@ -94,6 +100,7 @@
   {% endblock %}
   <script src="{% static 'js/app.js' %}" defer></script>
   <script src="{% static 'js/charts.js' %}" defer></script>
+  {% if user.is_authenticated %}<script src="{% static 'js/notify.js' %}" defer></script>{% endif %}
   {% block scripts %}{% endblock %}
 </body>
 </html>

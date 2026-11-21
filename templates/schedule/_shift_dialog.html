@@ -17,6 +17,8 @@
             <button type="button" class="stepper-btn" data-step="1" aria-label="Thêm một {{ r.label|lower }}"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg></button>
           </div>
         </div>
+        {% if r.why %}<details class="need-why"><summary><span>Vì sao gợi ý {{ r.suggested }} {{ r.label|lower }}:</span> {{ r.why.short }}</summary>
+          <ul>{% for line in r.why.lines %}<li>{{ line }}</li>{% endfor %}</ul></details>{% endif %}
         {% endfor %}
         {% with first=card.details.0 %}
         <div class="field need-reason" data-reason{% if not first.reason and not card.details.1.reason and not card.details.2.reason %} hidden{% endif %}>

@@ -7,87 +7,53 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 
+# Trang chủ chỉ giữ việc đang chờ và vài lối vào chính; mọi chức năng khác nằm ở thanh trên và thanh trái.
+# Nhân viên: tối đa 3 việc chính của vai trò, nút lớn. Chủ quán: 6 màn hình dùng nhiều nhất.
+STAFF_ACTIONS = ["order", "bar", "cashier", "ready", "open", "shift", "stock"]
+ROLE_ACTIONS = {"thu_ngan": ["cashier", "shift", "order"], "pha_che": ["bar", "stock"], "phuc_vu": ["order", "ready", "open"]}
+OWNER_SHORTCUTS = ["dashboard", "overview", "schedule", "stock", "fc_plans", "revenue"]
+
+
 @login_required
 def home(request):
-    """Tóm tắt của tôi: việc đang chờ mình xử lý (có số và lối vào) và lối tắt theo quyền."""
+    """Việc đang chờ tôi (chỉ việc có số), lối vào chính theo vai trò, ca làm sắp tới."""
     from django.urls import reverse
 
     from apps.accounts.permissions import Cap, user_can
 
+    from .context_processors import navigation
+    from .notifications import pending_tasks
+
     user = request.user
     can = lambda cap: user_can(user, cap)  # noqa: E731
-    tasks = []
+    # Đơn đang mở là việc nền của cả ca, không phải việc chờ riêng mình; món pha xong thì cần mang ra ngay.
+    tasks = [t for t in pending_tasks(user) if t["count"] and t["url"] != reverse("orders:open_orders")]
+    tasks.sort(key=lambda t: not t["urgent"])
+    items = {i["key"]: i for i in navigation(request).get("NAV_ITEMS", [])}
+    context = {"tasks": tasks}
+    if user.is_owner:
+        context["shortcuts"] = [items[k] for k in OWNER_SHORTCUTS if k in items]
+        context["all_items"] = [i for i in items.values() if i["key"] != "home"]
+    else:
+        # Việc của vai trò chính đứng đầu (thu ngân: Thu ngân), sau đó tới việc của vai trò phụ.
+        order = ROLE_ACTIONS.get(user.role, []) + STAFF_ACTIONS
+        context["actions"] = [items[k] for k in dict.fromkeys(order) if k in items][:3]
+    if can(Cap.SHIFT_REGISTER):
+        from apps.schedule.services import my_schedule
 
-    def task(label, count, url, urgent=False):
-        tasks.append({"label": label, "count": count, "url": url, "urgent": urgent and count > 0})
+        from apps.accounts.models import Role
 
-    if can(Cap.ORDER_ADJUST_APPROVE):
-        from apps.orders.adjustments import pending_for
-
-        task("Yêu cầu điều chỉnh chờ tôi duyệt", len(pending_for(user)), reverse("orders:approvals"), urgent=True)
-    if can(Cap.HANDLE_ALERTS):
-        from apps.control.alerts import visible_to
-        from apps.control.models import Alert
-
-        task("Cảnh báo của tôi", visible_to(user).filter(status__in=Alert.OPEN).count(), reverse("control:alerts"),
-             urgent=True)
-    if can(Cap.EXCEPTION_REVIEW):
-        from apps.control.models import ExceptionCase
-
-        task("Ngoại lệ chờ xem xét", ExceptionCase.objects.filter(status=ExceptionCase.Status.OPEN).count(),
-             reverse("control:exceptions"))
-    if can(Cap.STOCK_CONFIRM_ORDERING):
-        from apps.inventory.models import StockCount
-
-        task("Kiểm kê chờ xác nhận", StockCount.objects.filter(status=StockCount.Status.PENDING).count(),
-             reverse("inventory:count"))
-    if can(Cap.BACKUP_TICKETS) and user.is_owner:
-        from apps.orders.models import BackupSlip
-
-        task("Phiếu dự phòng chờ xác nhận giá", BackupSlip.objects.filter(status=BackupSlip.Status.PENDING).count(),
-             reverse("orders:backup_slips"))
-    if can(Cap.VIEW_WORKLOAD):
-        from apps.inventory.models import QuickReport
-
-        task("Báo nhanh nguyên liệu chưa xử lý", QuickReport.objects.filter(acknowledged_at__isnull=True).count(),
-             reverse("inventory:stock"))
-    if can(Cap.PAYMENT):
-        from apps.shifts.models import Refund
-
-        task("Hoàn tiền chờ trả khách", Refund.objects.filter(status=Refund.Status.APPROVED).count(),
-             reverse("orders:cashier"), urgent=True)
-    if can(Cap.CASH_FUND):
-        from apps.shifts.models import CashEntry
-
-        handovers = CashEntry.objects.filter(kind=CashEntry.Kind.HANDOVER, receiver=user, confirmed_at__isnull=True).count()
-        if handovers:  # hiếm khi có, nên chỉ hiện ô khi đang có khoản chờ
-            task("Tiền nộp chờ tôi xác nhận", handovers, reverse("shifts:my_shift"), urgent=True)
         from django.utils import timezone
 
-        from apps.shifts import services as shift_services
-        from apps.shifts.models import Shift
-
-        # Cùng ca mà màn Ca của tôi mở: ca đang giữ quỹ, nếu không có thì ca đã kết nhưng chưa có báo cáo cuối ca.
-        shift = Shift.objects.operating() or Shift.objects.filter(status=Shift.Status.CLOSED, report__isnull=True).first()
-        status = shift_services.data_status(shift) if shift is not None else None
-        if status and status["issues"]:  # chưa kết ca khi đã quá giờ, thiếu báo cáo, phiếu dự phòng, kiểm kê
-            day = timezone.localtime(shift.starts_at)
-            word = "quá hạn" if status["past_deadline"] else "còn thiếu"
-            task(f"Việc {word} của {shift.name.lower()} {day:%d/%m}", len(status["issues"]),
-                 reverse("shifts:my_shift"), urgent=True)
-    if can(Cap.ORDER_CREATE):
-        from apps.orders.models import Order
-
-        task("Đơn đang mở", Order.objects.exclude(status__in=["da_thanh_toan", "da_huy"]).count(),
-             reverse("orders:open_orders"))
-
-    # Việc đang chờ lên trước; trên điện thoại ô số 0 được ẩn (app.css) để màn hình ngắn lại.
-    tasks.sort(key=lambda t: not t["count"])
-    context = {"tasks": tasks, "tasks_waiting": sum(1 for t in tasks if t["count"])}
+        now = timezone.localtime()
+        # Ca hôm nay đã qua giờ kết thúc thì không còn là "ca tới".
+        upcoming = [a for a in my_schedule(user) if a.shift.date > now.date() or a.shift.end > now.time()]
+        if upcoming:
+            upcoming[0].role_label = dict(Role.choices).get(upcoming[0].role, upcoming[0].role)
+            context["next_shift"] = upcoming[0]
     if can(Cap.MASTER_DATA):
         from apps.catalog.models import MenuItem, Table
-        from apps.inventory.models import Ingredient, RecipeVersion
-        from apps.shifts.models import Shift
+        from apps.inventory.models import Ingredient
         from apps.staff.models import Employee
 
         md = lambda key: reverse("masterdata:list", args=[key])  # noqa: E731
@@ -96,17 +62,15 @@ def home(request):
         selling = MenuItem.objects.sellable().count()
         tables = Table.objects.filter(is_active=True).count()
         ingredients = Ingredient.objects.filter(is_active=True).count()
-        open_shifts = Shift.objects.filter(status=Shift.Status.OPEN).count()
-        # Số 0 ở ca đang mở, nhân viên, món đang bán, bàn, nguyên vật liệu nghĩa là quán chưa bán được: tô màu để Chủ quán khai báo.
-        context["master_data"] = [
-            ("Ca làm việc", md("ca"), f"{open_shifts} ca đang mở", not open_shifts),  # không có ca thì không thu tiền được
+        # Chỉ hiện khi còn thiếu thứ phải khai báo thì mới bán được (quán mới cài, món còn đang soạn).
+        setup = [
             ("Nhân viên", md("nhan-vien"), f"{staff} đang làm", not staff),
             ("Món và giá", md("mon"), f"{selling} đang bán" + (f", {drafts} đang soạn" if drafts else ""),
              bool(drafts) or not selling),
             ("Bàn", md("ban"), f"{tables} bàn", not tables),
             ("Nguyên vật liệu", md("nguyen-lieu"), f"{ingredients} loại", not ingredients),
-            ("Định mức", md("dinh-muc"), f"{RecipeVersion.objects.filter(status='nhap').count()} bản nháp", False),
         ]
+        context["setup"] = [row for row in setup if row[3]]
     from .models import DATA_NOTICE_VERSION, DataNoticeAck
 
     context["notice_pending"] = not DataNoticeAck.objects.filter(user=user, version=DATA_NOTICE_VERSION).exists()
@@ -242,3 +206,80 @@ def data_notice(request):
                after={"phien_ban": DATA_NOTICE_VERSION})
         return redirect("core:home")
     return render(request, "core/data_notice.html", {"version": DATA_NOTICE_VERSION, "acknowledged": ack})
+
+
+# ---------------- thông báo trong ứng dụng (chuông) ----------------
+
+
+@login_required
+@require_GET
+@never_cache
+def notification_summary(request):
+    """Số chưa đọc, việc đang chờ và thông báo gần nhất cho bảng của chuông; trình duyệt hỏi lại mỗi 30 giây."""
+    from . import notifications
+
+    if request.GET.get("chi_so"):
+        return JsonResponse({"unread": notifications.unread(request.user).count()})
+    return JsonResponse(notifications.summary(request.user))
+
+
+@login_required
+@require_POST
+def notification_read(request):
+    """Đánh dấu đã đọc: `id` (lặp được) cho từng thông báo, không có `id` là tất cả."""
+    from django.shortcuts import redirect
+
+    from . import notifications
+
+    ids = request.POST.getlist("id") or None
+    try:
+        changed = notifications.mark_read(request.user, ids)
+    except ValueError:
+        return JsonResponse({"ok": False, "error": "Mã thông báo không hợp lệ."}, status=400)
+    if request.headers.get("Accept", "").startswith("application/json"):
+        return JsonResponse({"ok": True, "changed": changed, "unread": notifications.unread(request.user).count()})
+    return redirect(request.POST.get("next") if _safe_local(request.POST.get("next")) else "core:notifications")
+
+
+def _safe_local(url):
+    """Chỉ chấp nhận đường dẫn trong ứng dụng (bắt đầu bằng một dấu /), không mở sang trang khác."""
+    return bool(url) and url.startswith("/") and not url.startswith("//") and "\\" not in url
+
+
+@login_required
+@require_GET
+def notification_open(request, pk):
+    """Mở một thông báo: đánh dấu đã đọc rồi chuyển tới màn hình liên quan."""
+    from django.shortcuts import get_object_or_404, redirect
+    from django.utils import timezone
+
+    from .models import Notification
+
+    n = get_object_or_404(Notification, pk=pk, user=request.user)
+    if n.read_at is None:
+        n.read_at = timezone.now()
+        n.save(update_fields=["read_at"])
+    return redirect(n.url if _safe_local(n.url) else "core:notifications")
+
+
+@login_required
+@require_GET
+def notifications_page(request):
+    """Tất cả thông báo của tôi, lọc chưa đọc hoặc theo loại; kèm thẻ bật thông báo trên điện thoại."""
+    from . import notifications
+    from .models import Notification
+    from .paging import paginate
+
+    qs = request.user.notifications.all()
+    only_unread = request.GET.get("loc") == "chua-doc"
+    kind = request.GET.get("loai", "")
+    if only_unread:
+        qs = qs.filter(read_at__isnull=True)
+    if kind in Notification.Kind.values:
+        qs = qs.filter(kind=kind)
+    page, query = paginate(request, qs, 30)
+    for n in page.object_list:
+        n.ago = notifications.ago(n.created_at)
+    return render(request, "core/notifications.html", {
+        "page": page, "qs": query, "only_unread": only_unread, "kind": kind, "kinds": Notification.Kind.choices,
+        "unread_count": notifications.unread(request.user).count()})

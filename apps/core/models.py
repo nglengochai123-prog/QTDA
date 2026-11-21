@@ -150,6 +150,43 @@ class PushMessage(models.Model):
         ordering = ["-created_at"]
 
 
+class Notification(models.Model):
+    """Một thông báo trong ứng dụng cho một người: hiện ở chuông trên thanh trên, có trạng thái đã đọc.
+
+    Ghi cùng lúc với thông báo đẩy (core/push.py) nên vẫn thấy được khi máy chủ chưa bật Web Push hoặc người dùng
+    chưa cho phép thông báo trên điện thoại. `key` chống ghi trùng cùng một sự việc cho cùng một người."""
+
+    class Kind(models.TextChoices):
+        READY = "mon_san_sang", "Món sẵn sàng"
+        APPROVAL = "phe_duyet", "Yêu cầu duyệt"
+        STOCK = "kho", "Nguyên liệu"
+        ALERT = "canh_bao", "Cảnh báo"
+        SCHEDULE = "lich", "Lịch làm"
+        SHIFT = "ca", "Ca và tiền"
+        OTHER = "khac", "Khác"
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người nhận", on_delete=models.CASCADE,
+                             related_name="notifications")
+    kind = models.CharField("Loại", max_length=20, choices=Kind.choices, default=Kind.OTHER)
+    title = models.CharField("Tiêu đề", max_length=160)
+    body = models.CharField("Nội dung", max_length=300, blank=True)
+    url = models.CharField("Màn hình mở", max_length=200, blank=True)
+    key = models.CharField("Khóa sự việc", max_length=80, blank=True)
+    created_at = models.DateTimeField("Tạo lúc", auto_now_add=True, db_index=True)
+    read_at = models.DateTimeField("Đã đọc lúc", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "Thông báo"
+        verbose_name_plural = "Thông báo"
+        ordering = ["-created_at", "-pk"]
+        indexes = [models.Index(fields=["user", "read_at"], name="notif_user_unread")]
+        constraints = [models.UniqueConstraint(fields=["user", "key"], condition=~models.Q(key=""),
+                                               name="notif_unique_key")]
+
+    def __str__(self):
+        return self.title
+
+
 DATA_NOTICE_VERSION = "2026-10-12"
 
 

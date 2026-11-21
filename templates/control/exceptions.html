@@ -2,7 +2,7 @@
 {% load humanize loi_thuong %}
 {% block title %}Ngoại lệ · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><div><h1>Ngoại lệ</h1><p class="page-sub">Hệ thống tự mở ngoại lệ khi có việc bất thường: hủy hóa đơn đã thu tiền, điều chỉnh sau pha chế bị từ chối, tiêu hao hoặc kiểm kê lệch nhiều, thiếu tiền tích lũy. Chủ quán xem chứng cứ của từng mục rồi ghi kết quả.</p></div>
+<header class="page-head"><div><h1>Ngoại lệ</h1><p class="page-sub">Việc bất thường hệ thống tự phát hiện; xem chứng cứ rồi ghi kết quả.</p></div>
   {% if first_open %}<a class="btn btn-primary" href="{% url 'control:exception_detail' first_open %}">Xem lần lượt</a>{% endif %}</header>
 
 <div class="stats">

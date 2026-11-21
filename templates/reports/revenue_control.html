@@ -2,7 +2,7 @@
 {% load humanize loi_thuong %}
 {% block title %}Báo cáo kiểm soát doanh thu · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><div><h1>Báo cáo kiểm soát doanh thu</h1><p class="page-sub">{{ start|date:"d/m/Y" }} – {{ end|date:"d/m/Y" }}. Tiền thất thoát của tháng, chênh lệch tiền theo ca, yêu cầu điều chỉnh và ngoại lệ trong kỳ.</p></div></header>
+<header class="page-head"><div><h1>Báo cáo kiểm soát doanh thu</h1><p class="page-sub">{{ start|date:"d/m/Y" }} – {{ end|date:"d/m/Y" }}.</p></div></header>
 {% include "reports/_period.html" %}
 
 <p class="muted">Chỉ tiêu mục tiêu tính theo toàn bộ từng tháng dưới đây; danh sách giao dịch tính theo khoảng ngày đã chọn.</p>

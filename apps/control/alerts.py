@@ -306,6 +306,10 @@ def _close(alert, user, note, auto=False, now=None):
     alert.status, alert.closed_at, alert.closed_by = Alert.Status.CLOSED, now, user
     alert.close_note, alert.auto_closed = note[:255], auto
     alert.save(update_fields=["status", "closed_at", "closed_by", "close_note", "auto_closed", "updated_at"])
+    # Cảnh báo đã xong thì thông báo về nó trên chuông không còn việc gì để làm.
+    from apps.core.notifications import mark_key_read
+
+    mark_key_read(f"canh-bao-{alert.pk}-", now)
     record(Action.STATUS_CHANGE, actor=user, obj=alert, object_type="control.Alert",
            actor_label=None if user else "hệ thống",
            after={"trang_thai": "Đã đóng", "thoi_gian_xu_ly_phut": round(alert.handling_minutes or 0)}, reason=note)

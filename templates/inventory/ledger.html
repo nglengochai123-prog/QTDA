@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Sổ kho · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><div><h1>Sổ kho</h1><p class="page-sub">Mọi biến động tồn của từng nguyên liệu: nhập, tiêu hao, hao hụt, kiểm kê, kèm người làm và chứng từ.</p></div></header>
+<header class="page-head"><div><h1>Sổ kho</h1><p class="page-sub">Mọi lần nhập, tiêu hao, hao hụt, kiểm kê.</p></div></header>
 <form method="get" class="filter-bar" aria-label="Bộ lọc sổ kho">
   <div class="field"><label for="f-nvl">Nguyên vật liệu</label><select class="input" id="f-nvl" name="nvl"><option value="">Tất cả</option>{% for i in ingredients %}<option value="{{ i.pk }}"{% if f.nvl == i.pk|stringformat:"d" %} selected{% endif %}>{{ i.name }}</option>{% endfor %}</select></div>
   <div class="field"><label for="f-loai">Loại biến động</label><select class="input" id="f-loai" name="loai"><option value="">Tất cả</option>{% for v, l in kinds %}<option value="{{ v }}"{% if f.loai == v %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></div>

@@ -3,7 +3,7 @@
 {% block title %}Lô hàng · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <header class="page-head">
-  <div><h1>Lô hàng</h1><p class="page-sub">Mỗi dòng phiếu nhập là một lô có mã, ngày nhập và hạn sử dụng. Thứ tự lấy theo quy tắc xuất của từng nguyên liệu.</p></div>
+  <div><h1>Lô hàng</h1><p class="page-sub">Từng lô hàng, hạn dùng và thứ tự lấy.</p></div>
   <div class="page-tools"><a class="btn btn-quiet" href="{% url 'inventory:pick_list' %}">Phiếu lấy hàng</a><a class="btn btn-primary" href="{% url 'inventory:receipt' %}">Lập phiếu nhập</a></div>
 </header>
 

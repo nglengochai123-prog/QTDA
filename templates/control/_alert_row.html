@@ -1,6 +1,6 @@
 <li class="{% if a.is_overdue %}is-late{% endif %}{% if a.severity == 'khan' %} is-urgent{% endif %}">
   <span class="row-main">{% if a.severity == "khan" %}<span class="pill pill-danger">Khẩn</span> {% endif %}<strong>{{ a.short }}</strong>
-    <small>{% if a.status == "dang_xu_ly" %}{{ a.taken_by|default:"Đã có người" }} đang xử lý · {% endif %}{% if a.is_overdue %}<span class="alert-late">Quá hạn từ {{ a.due_at|date:"H:i d/m" }}</span>{% else %}Hạn {{ a.due_at|date:"H:i d/m" }}{% endif %}{% if a.reminded_count %} · đã nhắc {{ a.reminded_count }} lần{% endif %}{% if a.level %} · chuyển Chủ quán{% endif %}</small>
+    <small>{% if a.status == "dang_xu_ly" %}{{ a.taken_by|default:"Đã có người" }} đang xử lý · {% endif %}{% if a.is_overdue and a.reminded_count %}<span class="alert-late">Quá hạn, chưa xử lý từ {{ a.created_at|date:"d/m" }}</span>{% elif a.is_overdue %}<span class="alert-late">Quá hạn từ {{ a.due_at|date:"H:i d/m" }}</span>{% else %}Hạn {{ a.due_at|date:"H:i d/m" }}{% endif %}{% if a.reminded_count %} · đã nhắc {{ a.reminded_count }} lần{% endif %}{% if a.level %} · chuyển Chủ quán{% endif %}</small>
     {% if a.note %}<small class="alert-note">{{ a.note }}</small>{% endif %}</span>
   <span class="alert-actions">
     {% if a.link %}<a class="btn btn-quiet btn-sm" href="{{ a.link }}">Xử lý</a>{% endif %}

@@ -86,7 +86,7 @@ class FreshInstallTests(TestCase):
         c = Client()
         c.force_login(owner)
         body = c.get("/").content.decode()
-        self.assertIn("<h2>Quản trị</h2>", body)
+        self.assertIn("<h2>Cần khai báo trước khi bán</h2>", body)
         self.assertIn('<span class="status-warn">0 bàn</span>', body)
         self.assertIn("Quản trị, mục Bàn", c.get("/don/moi/").content.decode())
 

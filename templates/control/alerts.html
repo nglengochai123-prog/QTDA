@@ -2,7 +2,7 @@
 {% load static loi_thuong %}
 {% block title %}Cảnh báo · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><div><h1>Cảnh báo</h1><p class="page-sub">Việc cần bạn xử lý, xếp theo loại. Mỗi việc có hạn; quá hạn thì được chuyển Chủ quán hoặc nhắc lại mỗi ngày. Việc tự đóng khi đã xử lý xong ở màn hình tương ứng; chỉ đóng tay khi đã xử lý cách khác, kèm kết quả.</p></div></header>
+<header class="page-head"><div><h1>Cảnh báo</h1><p class="page-sub">Việc cần bạn xử lý. Xử lý xong ở màn hình tương ứng thì việc tự đóng.</p></div></header>
 
 <div class="stats">
   <div class="stat{% if overdue %} stat-warn{% elif not open_count %} stat-ok{% endif %}"><p class="stat-label">Đang chờ xử lý</p><p class="stat-value">{{ open_count }}</p><p class="stat-note">{% if overdue %}{{ overdue }} việc đã quá hạn{% elif open_count %}Chưa có việc quá hạn{% else %}Không còn việc nào{% endif %}</p></div>

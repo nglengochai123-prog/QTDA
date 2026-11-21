@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Thông báo · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head"><div><h1>Thông báo</h1><p class="page-sub">{% if unread_count %}{{ unread_count }} thông báo chưa đọc{% else %}Bạn đã đọc hết thông báo{% endif %}</p></div>
+  {% if unread_count %}<div class="page-actions"><form method="post" action="{% url 'core:notification_read' %}">{% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"><button class="btn btn-quiet" type="submit">Đánh dấu đã đọc hết</button></form></div>{% endif %}
+</header>
+
+<section class="card" aria-labelledby="nt-list">
+  <div class="card-head"><h2 id="nt-list">Thông báo của tôi</h2>
+    <nav class="notif-filters" aria-label="Lọc thông báo">
+      <a class="btn btn-xs {% if not only_unread and not kind %}btn-primary{% else %}btn-quiet{% endif %}" href="?">Tất cả</a>
+      <a class="btn btn-xs {% if only_unread %}btn-primary{% else %}btn-quiet{% endif %}" href="?loc=chua-doc">Chưa đọc</a>
+      {% for value, label in kinds %}<a class="btn btn-xs {% if kind == value %}btn-primary{% else %}btn-quiet{% endif %}" href="?loai={{ value }}">{{ label }}</a>{% endfor %}
+    </nav></div>
+  <div class="notif-page">
+  {% if page.object_list %}
+  <ul class="notif-list">{% for n in page.object_list %}
+    <li><a class="notif-item{% if not n.read_at %} is-unread{% endif %}" href="{% url 'core:notification_open' n.pk %}">
+      <span class="notif-ico k-{{ n.kind }}"><svg class="icon" aria-hidden="true"><use href="#i-{% if n.kind == 'mon_san_sang' %}ready{% elif n.kind == 'phe_duyet' %}approve{% elif n.kind == 'kho' %}stock{% elif n.kind == 'canh_bao' %}alert{% elif n.kind == 'lich' %}schedule{% elif n.kind == 'ca' %}shift{% else %}alerts{% endif %}"/></svg></span>
+      <span class="notif-text"><strong>{{ n.title }}</strong>{% if n.body %}<span>{{ n.body }}</span>{% endif %}<time datetime="{{ n.created_at|date:'c' }}">{{ n.get_kind_display }} · {{ n.ago }}</time></span>
+      <span class="notif-unread-dot" aria-label="{% if n.read_at %}Đã đọc{% else %}Chưa đọc{% endif %}"></span></a></li>
+  {% endfor %}</ul>
+  {% else %}<p class="notif-empty">{% if only_unread or kind %}Không có thông báo nào khớp bộ lọc.{% else %}Chưa có thông báo nào. Khi có món pha xong, yêu cầu duyệt, báo hết nguyên liệu hay lịch làm thay đổi, thông báo hiện ở đây.{% endif %}</p>{% endif %}
+  </div>
+  <div class="card-body">{% include "partials/pagination.html" %}</div>
+</section>
+
+{% include "pwa/_push_card.html" %}
+{% endblock %}
+{% block scripts %}{% load static %}<script src="{% static 'js/push.js' %}" defer></script>{% endblock %}

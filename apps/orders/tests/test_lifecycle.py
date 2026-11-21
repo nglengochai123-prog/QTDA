@@ -100,7 +100,8 @@ class FlowViewTests(TestCase):
         # AC-06: pha xong thì phục vụ thấy món kèm số bàn.
         services.complete_line(self.d["barista"], key(), self.line.pk, 1, 0)
         count = self.client.get(reverse("orders:ready_count")).json()
-        self.assertEqual(count, {"count": 1, "tables": ["5"]})
+        self.assertEqual((count["count"], count["tables"]), (1, ["5"]))
+        self.assertEqual(count["cups"], self.line.quantity - self.line.cancelled_quantity)
         self.assertContains(self.client.get(reverse("orders:ready")), "Bàn 5")
         body = {"operation_key": key(), "line": self.line.pk}
         for _ in range(2):

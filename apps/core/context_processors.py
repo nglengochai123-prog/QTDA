@@ -115,16 +115,12 @@ def navigation(request):
             ("my_schedule", "Lịch của tôi", reverse("schedule:mine"), Cap.SHIFT_REGISTER),
             ("workload", "Tải và thời gian chờ", reverse("staff:workload"), Cap.VIEW_WORKLOAD)]),
         ("Kho", [("stock", "Tồn kho", reverse("inventory:stock"), Cap.STOCK_OPERATIONS),
-                 ("lots", "Lô hàng", reverse("inventory:lots"), Cap.STOCK_OPERATIONS),
-                 ("pick", "Phiếu lấy hàng", reverse("inventory:pick_list"), Cap.STOCK_OPERATIONS),
                  ("receipt", "Phiếu nhập", reverse("inventory:receipt"), Cap.STOCK_OPERATIONS),
                  ("count", "Kiểm kê", reverse("inventory:count"), Cap.STOCK_OPERATIONS),
                  ("waste", "Hao hụt", reverse("inventory:waste"), Cap.STOCK_OPERATIONS),
                  ("semi", "Làm bán thành phẩm", reverse("inventory:semi"), Cap.STOCK_OPERATIONS),
                  ("po", "Đặt hàng", reverse("inventory:purchase_orders"), Cap.STOCK_CONFIRM_ORDERING),
-                 ("payables", "Phải trả", reverse("inventory:payables"), Cap.STOCK_CONFIRM_ORDERING),
-                 ("ledger", "Sổ kho", reverse("inventory:ledger"), Cap.VIEW_DASHBOARD),
-                 ("stock_report", "Báo cáo kho", reverse("reports:inventory"), Cap.VIEW_DASHBOARD)]),
+                 ("payables", "Phải trả", reverse("inventory:payables"), Cap.STOCK_CONFIRM_ORDERING)]),
         ("Dự báo", [
             ("fc_overview", "Dự báo nhu cầu", reverse("forecast:overview"), Cap.FORECASTS),
             ("fc_plans", "Kế hoạch mua", reverse("forecast:plans"), Cap.FORECASTS),
@@ -137,7 +133,9 @@ def navigation(request):
         ("Báo cáo", [
             ("revenue", "Doanh thu", reverse("reports:revenue"), Cap.VIEW_DASHBOARD),
             ("control_report", "Kiểm soát doanh thu", reverse("reports:revenue_control"), Cap.EXCEPTION_REVIEW),
-            ("materials", "Nguyên vật liệu", reverse("reports:materials"), Cap.VIEW_DASHBOARD)]),
+            ("materials", "Nhập xuất tồn", reverse("reports:materials"), Cap.VIEW_DASHBOARD),
+            ("stock_report", "Tồn và hạn dùng", reverse("reports:inventory"), Cap.VIEW_DASHBOARD),
+            ("ledger", "Sổ kho", reverse("inventory:ledger"), Cap.VIEW_DASHBOARD)]),
         ("Quản trị", [
             ("params", "Tham số", reverse("control:parameters"), Cap.MASTER_DATA),
             ("md_ca", "Ca làm việc", reverse("masterdata:list", args=["ca"]), Cap.MASTER_DATA),
@@ -193,10 +191,8 @@ def navigation(request):
     can_approve = user_can(user, Cap.ORDER_ADJUST_APPROVE)
     # Bảng điều khiển không nằm ở thanh dưới điện thoại; Trang chủ có lối vào (AC-100: Chủ quán mở trên điện thoại).
     header = {
-        "alerts": reverse("control:alerts") if user_can(user, Cap.HANDLE_ALERTS) else "",
-        "approvals": reverse("orders:approvals") if can_approve else "",
-        "settings": reverse("control:parameters") if user_can(user, Cap.MASTER_DATA) else "",
         "initial": user.initial,
+        "unread": user.notifications.filter(read_at__isnull=True).count(),
     }
     return {"NAV_ITEMS": nav, "HEADER": header, "NAV_GROUPS": nav_groups, "NAV_ACTIVE_GROUP": active_group,
             "NAV_SIDE_GROUP": active_group or (nav_groups[0] if nav_groups else None), "APPROVALS_COUNT_URL": reverse("orders:approvals_count") if can_approve else "",

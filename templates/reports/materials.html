@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% load loi_thuong %}
-{% block title %}Báo cáo nguyên vật liệu · {{ STORE_NAME }}{% endblock %}
+{% block title %}Nhập xuất tồn · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><div><h1>Báo cáo nguyên vật liệu theo kỳ</h1><p class="page-sub">{{ start|date:"d/m/Y" }} – {{ end|date:"d/m/Y" }}. Tồn đầu cộng nhập, trừ tiêu hao theo món và hao hụt, cộng trừ kiểm kê, ra tồn cuối. Bấm tên hoặc số để xem các dòng sổ kho tạo nên số đó.</p></div>
+<header class="page-head"><div><h1>Nhập xuất tồn</h1><p class="page-sub">{{ start|date:"d/m/Y" }} – {{ end|date:"d/m/Y" }}. Bấm tên hoặc số để xem dòng sổ kho.</p></div>
   <div class="page-tools"><p class="count-progress{% if shortages > bo02_target %} is-warn{% endif %}"><strong>{{ shortages }}</strong> trường hợp thiếu nguyên liệu · mục tiêu không quá {{ bo02_target }} mỗi tháng</p>
     <a class="btn btn-quiet" href="{% url 'reports:inventory' %}?tu={{ start|date:'Y-m-d' }}&amp;den={{ end|date:'Y-m-d' }}">Báo cáo kho</a></div></header>
 {% include "reports/_period.html" %}

@@ -2,7 +2,7 @@
 {% load static %}
 {% block title %}Kiểm kê · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><div><h1>Kiểm kê</h1><p class="page-sub">Đếm hàng thật rồi nhập số đếm được. Lệch quá {{ threshold }}% so với sổ thì ghi lý do để Chủ quán xác nhận; lệch ít thì tồn được điều chỉnh ngay.</p></div>
+<header class="page-head"><div><h1>Kiểm kê</h1><p class="page-sub">Đếm hàng thật rồi nhập số. Lệch quá {{ threshold }}% thì ghi lý do để Chủ quán xác nhận.</p></div>
   <p class="count-progress"><strong>{{ done }}/{{ total }}</strong> đã kiểm hôm nay{% if critical_left %} · <span class="text-warn">còn {{ critical_left }} trọng yếu</span>{% endif %}</p></header>
 {% include "partials/missing_setup.html" with ingredients=total can_setup=can_open %}
 

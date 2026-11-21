@@ -3,7 +3,7 @@
 {% block title %}Kế hoạch mua · {{ STORE_NAME }}{% endblock %}
 {% block content %}
 <header class="page-head">
-  <div><h1>Kế hoạch mua nguyên liệu</h1><p class="page-sub">Nguyên liệu cần đặt, số lượng và ngày đặt chậm nhất. Hệ thống không tự đặt hàng: đơn Nháp chỉ được tạo khi Chủ quán bấm Chấp nhận.{% if last_run %} Tính lúc {{ last_run.started_at|date:"H:i d/m" }}.{% endif %}</p></div>
+  <div><h1>Kế hoạch mua nguyên liệu</h1><p class="page-sub">Nguyên liệu cần đặt và ngày đặt chậm nhất.{% if last_run %} Tính lúc {{ last_run.started_at|date:"H:i d/m" }}.{% endif %}</p></div>
   <div class="page-tools">
     <a class="btn btn-quiet btn-sm" href="{% url 'forecast:accuracy' %}">Độ chính xác</a>
     <form method="post" data-once>{% csrf_token %}<input type="hidden" name="action" value="tinh_lai"><button class="btn btn-quiet btn-sm" type="submit">Tính lại</button></form>
