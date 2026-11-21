@@ -51,7 +51,8 @@ class Cap:
 # (mô tả, vai trò được phép) — chép đúng thứ tự dòng của Bảng 5.3.
 CAPABILITIES = {
     Cap.ORDER_CREATE: ("Tạo đơn, gửi yêu cầu điều chỉnh đơn", {OWNER, CASHIER, WAITER}),
-    Cap.BAR_PREPARE: ("Nhận món tại quầy, cập nhật Đã pha chế", {OWNER, BARISTA}),
+    # Thu ngân đứng cạnh quầy, giờ đông bấm "Xong" thay pha chế được (Hai, 21/11/2026; Bảng 5.3 gốc chỉ có Pha chế).
+    Cap.BAR_PREPARE: ("Nhận món tại quầy, cập nhật Đã pha chế", {OWNER, BARISTA, CASHIER}),
     Cap.ORDER_ADJUST_APPROVE: ("Phê duyệt điều chỉnh đơn", {OWNER}),
     Cap.PAID_INVOICE_CANCEL: ("Phê duyệt hủy hóa đơn đã thanh toán", {OWNER}),
     Cap.PAYMENT: ("Thanh toán", {OWNER, CASHIER}),

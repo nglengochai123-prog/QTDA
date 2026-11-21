@@ -19,7 +19,7 @@ O, M, C, W, B = Role.CHU_QUAN, Role.QUAN_LY_CA, Role.THU_NGAN, Role.PHUC_VU, Rol
 # Quản lý ca đã bỏ theo quyết định của Chủ quán ngày 12/10/2026: vai trò cũ không còn quyền nào.
 EXPECTED = {
     Cap.ORDER_CREATE: {O, C, W},
-    Cap.BAR_PREPARE: {O, B},
+    Cap.BAR_PREPARE: {O, B, C},  # thu ngân bấm Xong thay pha chế (Hai, 21/11/2026)
     Cap.ORDER_ADJUST_APPROVE: {O},
     Cap.PAID_INVOICE_CANCEL: {O},
     Cap.PAYMENT: {O, C},
