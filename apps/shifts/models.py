@@ -66,6 +66,12 @@ class Shift(StoreScopedModel):
         local = timezone.localtime(self.starts_at)
         return f"{self.name} {local:%d/%m/%Y}"
 
+    @property
+    def started(self):
+        """Ca đã thực sự mở: đã xác nhận tiền đầu ca hoặc đã có đơn. Ca quỹ tạo sẵn khi công bố lịch mang trạng thái
+        Đang mở từ trước giờ làm, nên không dùng trạng thái để nói "đang có ca"."""
+        return self.cash_entries.filter(kind=CashEntry.Kind.OPENING).exists() or self.orders.exists()
+
     def clean(self):
         if self.starts_at and self.ends_at and self.ends_at <= self.starts_at:
             raise ValidationError({"ends_at": "Giờ kết thúc phải sau giờ bắt đầu."})

@@ -228,6 +228,10 @@ def sales(start_day, end_day, prev=None, today=None, wide=False, lines=None, rol
             for k, d in enumerate(days)]
     trend_chart = charts.line([f"{d:%d/%m}" for d in days], series, value_fmt=charts.fmt, tip_labels=tips,
                               width=charts.WIDE if wide else charts.HALF, height=240) if cur.revenue else None
+    # Bảng điều khiển chỉ cần đường của kỳ này; so với kỳ trước xem ở Báo cáo doanh thu.
+    trend_plain = charts.line([f"{d:%d/%m}" for d in days], series[:1], value_fmt=charts.fmt,
+                              tip_labels=[f"{d:%d/%m}" for d in days], width=charts.WIDE if wide else charts.HALF,
+                              height=240) if cur.revenue else None
 
     heat_period = (start_day, end_day)
     heat_source = cur
@@ -313,7 +317,7 @@ def sales(start_day, end_day, prev=None, today=None, wide=False, lines=None, rol
                      + (f" (kỳ trước {old.cost / old.revenue * 100:.0f}%)." if old.cost and old.revenue else "."))
 
     return {
-        "has_sales": bool(cur.revenue), "kpis": kpis, "prev_period": prev, "trend_chart": trend_chart,
+        "has_sales": bool(cur.revenue), "kpis": kpis, "prev_period": prev, "trend_chart": trend_chart, "trend_plain": trend_plain,
         "trend_table": [(d, cur_rev[k], old_rev[k] if k < len(old_rev) else None) for k, d in enumerate(days)],
         "heat_chart": heat_chart, "heat_period": heat_period, "same_time": same_time, "top_chart": top_chart, "matrix_chart": matrix_chart, "matrix_rows": matrix_rows,
         "group_chart": group_chart, "method_chart": method_chart, "notes": notes, "has_cost": has_cost,

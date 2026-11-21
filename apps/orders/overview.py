@@ -175,7 +175,7 @@ def shift_overview(user, now=None):
     approvals = _approvals(user, now)
     can_money = user_can(user, Cap.PAYMENT)
     return {
-        "now": now, "shift": shift,
+        "now": now, "shift": shift, "shift_started": bool(shift and shift.started),
         "money": figures(shift) if shift and can_money else None,
         "sales": _shift_sales(shift, now),
         "tables": tables, "areas": _areas(tables),

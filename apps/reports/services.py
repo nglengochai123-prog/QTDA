@@ -222,18 +222,23 @@ def shift_panel(user):
     from apps.staff.timekeeping import WORK_ROLES, on_duty
     from apps.accounts.models import Role
 
-    shift = Shift.objects.operating()
+    shift = overrun = Shift.objects.operating()
+    # Ca quỹ tạo sẵn khi công bố lịch: chưa xác nhận tiền đầu ca và chưa có đơn thì chưa mở, không có ai "đang làm".
+    if shift is not None and not shift.started:
+        shift = None
     present = {Role(r).label: 0 for r in WORK_ROLES}
-    for att in on_duty():
-        present[att.get_role_display()] = present.get(att.get_role_display(), 0) + 1
+    if shift is not None:
+        for att in on_duty():
+            present[att.get_role_display()] = present.get(att.get_role_display(), 0) + 1
     fig = figures(shift) if shift else None
     return {
-        "staffing": staffing_now(present), "today": today_vs_last_week(),
-        "shift": shift, "figures": fig,
+        "staffing": staffing_now(present) if shift else [], "today": today_vs_last_week(),
+        "shift": shift, "figures": fig, "overrun_shift": overrun,
         "cash_out": fig["refunds_cash"] + fig["expenses"] + fig["handovers"] if fig else 0,
         "open_orders": Order.objects.exclude(status__in=["da_thanh_toan", "da_huy"]).count(),
         "approvals": len(pending_for(user)),
-        "my_alerts": visible_to(user).filter(status__in=["moi", "dang_xu_ly"]).count(),
+        # Ngoại lệ có dòng riêng ở Kiểm soát; không đếm chung để khớp số trên chuông.
+        "my_alerts": visible_to(user).filter(status__in=["moi", "dang_xu_ly"]).exclude(kind="ngoai_le").count(),
         "quick_reports": QuickReport.objects.filter(acknowledged_at__isnull=True).count(),
         "present": present, "today_date": timezone.localdate(),
     }
@@ -479,7 +484,7 @@ def dashboard(today=None, month=None):
     control = monthly_control(month.year, month.month)
     shortages = ShortageCase.objects.filter(day__gte=first, day__lte=last).count()
     by_day, days, sales = _sales_block(first, end, today)
-    revenue_chart = sales["trend_chart"]
+    revenue_chart = sales["trend_plain"]
     critical, stock_chart = _critical_stock(today)
     acc_rows = accumulated_report(month.year, month.month)
     limit = params.get("accumulated_manager_threshold")

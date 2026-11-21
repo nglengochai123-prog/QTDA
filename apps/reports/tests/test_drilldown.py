@@ -38,7 +38,6 @@ class DrillDownTests(Base):
         self.assertContains(r, "Nguyên liệu đang báo thiếu")
         self.assertContains(r, self.d["milk"].name)
         self.assertContains(r, reverse("orders:lookup") + "?da_thu=1&amp;theo=thanh_toan")
-        self.assertContains(r, reverse("control:exceptions") + "?muc=")
         today = timezone.localdate().isoformat()
         r = self.client.get(reverse("reports:materials"), {"tu": today, "den": today})
         self.assertContains(r, reverse("inventory:ledger") + f"?nvl={self.d['milk'].pk}&amp;loai=tieu_hao_va_lam")

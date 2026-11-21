@@ -1,7 +1,7 @@
 {% load humanize %}<div class="stats{% if kpis|length == 5 %} stats-5{% endif %}">{% for k in kpis %}
   <div class="stat"><p class="stat-label">{{ k.label }}</p>
     <p class="stat-value">{{ k.value|intcomma }}{% if k.unit %} <small>{{ k.unit }}</small>{% endif %}</p>
-    {% if k.note %}<p class="stat-note">{{ k.note }}</p>{% endif %}
-    <div class="stat-foot">{% if k.delta is not None and k.delta_abs < 0.5 %}<span class="stat-delta muted" title="Kỳ trước {{ k.prev|intcomma }}{% if k.unit %} {{ k.unit }}{% endif %}">Không đổi<span class="visually-hidden"> so với kỳ trước</span></span>{% elif k.delta is not None %}<span class="stat-delta {% if k.delta >= 0 %}up{% else %}down{% endif %}" title="Kỳ trước {{ k.prev|intcomma }}{% if k.unit %} {{ k.unit }}{% endif %}"><span aria-hidden="true">{% if k.delta >= 0 %}▲{% else %}▼{% endif %}</span> {{ k.delta_abs|floatformat:0 }}%<span class="visually-hidden"> {% if k.delta >= 0 %}tăng{% else %}giảm{% endif %} so với kỳ trước</span></span>{% else %}<span class="stat-delta muted">Kỳ trước chưa có số liệu</span>{% endif %}
-      {% include "reports/charts/sparkline.html" with c=k.spark %}</div></div>{% endfor %}
+    {% if k.note and not plain %}<p class="stat-note">{{ k.note }}</p>{% endif %}
+    {% if not plain %}<div class="stat-foot">{% if k.delta is not None and k.delta_abs < 0.5 %}<span class="stat-delta muted" title="Kỳ trước {{ k.prev|intcomma }}{% if k.unit %} {{ k.unit }}{% endif %}">Không đổi<span class="visually-hidden"> so với kỳ trước</span></span>{% elif k.delta is not None %}<span class="stat-delta {% if k.delta >= 0 %}up{% else %}down{% endif %}" title="Kỳ trước {{ k.prev|intcomma }}{% if k.unit %} {{ k.unit }}{% endif %}"><span aria-hidden="true">{% if k.delta >= 0 %}▲{% else %}▼{% endif %}</span> {{ k.delta_abs|floatformat:0 }}%<span class="visually-hidden"> {% if k.delta >= 0 %}tăng{% else %}giảm{% endif %} so với kỳ trước</span></span>{% else %}<span class="stat-delta muted">Kỳ trước chưa có số liệu</span>{% endif %}
+      {% include "reports/charts/sparkline.html" with c=k.spark %}</div>{% endif %}</div>{% endfor %}
 </div>

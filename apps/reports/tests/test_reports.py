@@ -113,8 +113,7 @@ class ReportTests(Base):
         self.assertContains(page, "Hôm nay")
         self.assertContains(page, "Tiền mặt dự kiến trong két")
         self.assertContains(page, "Sữa đặc")
-        self.assertContains(page, "Mục tiêu tháng")
-        self.assertContains(page, "Thất thoát tạm tính")
+        self.assertNotContains(page, "Mục tiêu tháng")  # mục tiêu và kiểm soát xem ở Báo cáo, không ở bảng điều khiển
         for name in ("reports:revenue", "reports:materials", "reports:revenue_control"):
             self.assertEqual(self.client.get(reverse(name)).status_code, 200)
         self.client.login(username=self.cashier.username, password=PASSWORD)

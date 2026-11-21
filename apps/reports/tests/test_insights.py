@@ -100,8 +100,11 @@ class InsightTests(Base):
         ops.record_waste(self.d["barista"], key(), self.d["coffee"].pk, "50", "do_vo")
         self.client.login(username=self.d["owner"].username, password=PASSWORD)
         page = self.client.get(reverse("reports:dashboard"))
-        for text in ("Giờ đông khách", "Món mang lại doanh thu", "Kho cần chú ý", "Nhận định", 'class="chart-svg"'):
+        for text in ("Giờ đông khách", "Món bán chạy", 'id="crit-title">Kho<', 'class="chart-svg"'):
             self.assertContains(page, text)
+        # Bảng điều khiển gọn (Hai, 21/11/2026): không nhận định, mục tiêu, so với kỳ trước, ma trận thực đơn.
+        for text in ('id="notes-', "Mục tiêu tháng", "so với cùng kỳ", "Ma trận thực đơn", "Kỳ trước"):
+            self.assertNotContains(page, text)
         today = timezone.localdate().isoformat()
         for dim in services.DIMENSIONS:
             r = self.client.get(reverse("reports:revenue"), {"tu": today, "den": today, "theo": dim})

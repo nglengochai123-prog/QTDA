@@ -1,0 +1,19 @@
+{% load humanize %}  <section class="card" aria-labelledby="crit-title">
+    <div class="card-head"><div><h2 id="crit-title">Kho</h2></div><a class="btn btn-ghost btn-sm" href="{% url 'inventory:stock' %}">Tồn kho</a></div>
+    <div class="mini-stats">
+      <a class="mini-stat{% if stock_summary.expired_lots %} is-danger{% endif %}" href="{% url 'inventory:lots' %}?trang-thai=qua_han"><span>Lô quá hạn</span><strong>{{ stock_summary.expired_lots }}</strong>{% if stock_summary.expired_value %}<small>{{ stock_summary.expired_value|intcomma }} đ</small>{% endif %}</a>
+      <a class="mini-stat{% if stock_summary.near_lots %} is-warn{% endif %}" href="{% url 'inventory:lots' %}?trang-thai=sap_het_han"><span>Lô sắp hết hạn</span><strong>{{ stock_summary.near_lots }}</strong></a>
+      <a class="mini-stat{% if stock_summary.at_risk_value %} is-warn{% endif %}" href="{% url 'inventory:lots' %}?trang-thai=nguy_co"><span>Có thể phải bỏ</span><strong>{{ stock_summary.at_risk_value|intcomma }} <small>đ</small></strong></a>
+      <a class="mini-stat{% if stock_summary.below %} is-warn{% endif %}" href="{% url 'inventory:stock' %}?loc=low"><span>Dưới tồn an toàn</span><strong>{{ stock_summary.below|length }}</strong></a>
+    </div>
+    <div class="card-body">
+      <h3 class="card-h3">Nguyên liệu trọng yếu còn đủ dùng</h3>
+      {% if critical %}{% if stock_chart %}{% include "reports/charts/hbars.html" with c=stock_chart warn_label="Dưới tồn an toàn" label="Số ngày còn đủ dùng của nguyên liệu trọng yếu" %}
+      <ul class="chart-legend"><li><span class="key key-1"></span>Số ngày còn đủ dùng</li><li><span class="key key-target"></span>Tồn an toàn</li></ul>{% endif %}
+      {% else %}<p class="chart-empty">Chưa có nguyên liệu nào được đánh dấu trọng yếu.</p>{% endif %}
+      <h3 class="card-h3">Nguyên liệu đang báo thiếu</h3>
+      {% if running_low %}<ul class="list-rows">{% for r in running_low %}<li><span><span class="pill {% if r.level == 'da_het' %}pill-danger{% else %}pill-warn{% endif %}">{{ r.get_level_display }}</span> <strong>{{ r.ingredient.name }}</strong>{% with left=r.last_estimated_left|default_if_none:r.estimated_left %}{% if left is not None %} · còn khoảng {{ left|floatformat:"-2g" }} {{ r.ingredient.get_unit_display }}{% endif %}{% endwith %}<span class="cell-sub">{{ r.reporter }} · {{ r.created_at|date:"H:i d/m" }}{% if r.earlier_shift %} · ca trước{% endif %}{% if r.confirm_count %} · {{ r.confirm_count }} lần xác nhận{% endif %}</span></span></li>{% endfor %}</ul>
+{% else %}<p class="muted">Không có nguyên liệu đang báo thiếu.</p>{% endif %}
+    </div>
+  </section>
+
