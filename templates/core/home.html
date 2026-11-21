@@ -1,20 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
-<header class="page-head"><div><h1>Xin chào, {{ user.given_name|default:user.username }}</h1><p class="page-sub">{% now "l, d/m/Y" %} · {{ user.roles_display }}</p></div></header>
+<header class="page-head"><div><h1>Việc chờ tôi xử lý</h1><p class="page-sub">{% now "l, d/m/Y" %} · {{ user.roles_display }}</p></div></header>
 
 {% if notice_pending %}
 <div class="notice notice-info" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
   <div>Vui lòng đọc <a href="{% url 'core:data_notice' %}">thông báo xử lý dữ liệu cá nhân</a> và bấm xác nhận.</div></div>
 {% endif %}
 
-{% if actions %}
-<nav class="home-actions" aria-label="Việc chính">
-  {% for a in actions %}<a class="home-action{% if forloop.first %} is-primary{% endif %}" href="{{ a.url }}"><svg class="icon" aria-hidden="true"><use href="#i-{{ a.icon }}"/></svg><span>{{ a.label }}</span></a>{% endfor %}
-</nav>
-{% endif %}
-
-<section class="home-section" aria-labelledby="h-tasks">
-  <h2 class="section-title" id="h-tasks">Việc chờ tôi xử lý</h2>
+<section class="home-section" aria-label="Việc chờ tôi xử lý">
   {% if tasks %}
   <ul class="todo-list">{% for t in tasks %}
     <li><a class="todo{% if t.urgent %} is-urgent{% endif %}" href="{{ t.url }}"><span class="todo-label">{% if t.urgent %}<span class="dot dot-short" aria-hidden="true"></span>{% endif %}{{ t.label }}</span>{% if t.badge %}<span class="todo-count">{{ t.count }}</span>{% else %}<span></span>{% endif %}<svg class="icon todo-go" aria-hidden="true"><use href="#i-chevron"/></svg></a></li>
@@ -35,17 +28,4 @@
 </section>
 {% endif %}
 
-{% if shortcuts %}
-<section class="home-section" aria-labelledby="h-go">
-  <div class="home-go-head"><h2 class="section-title" id="h-go">Mở nhanh</h2>
-    <label class="search-field"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><span class="visually-hidden">Tìm chức năng</span><input type="search" placeholder="Tìm chức năng" autocomplete="off" data-app-search></label></div>
-  <div class="go-list" data-shortcuts>{% for item in shortcuts %}
-    <a class="go-item" href="{{ item.url }}"><span class="app-icon tone-{{ item.tone }}" aria-hidden="true"><svg class="icon"><use href="#i-{{ item.icon }}"/></svg></span><span>{{ item.label }}</span></a>
-  {% endfor %}</div>
-  <div class="go-list" data-app-results hidden>{% for item in all_items %}
-    <a class="go-item" href="{{ item.url }}" data-search="{{ item.label|lower }} {{ item.description|lower }} {{ item.group|default:''|lower }}" hidden><span class="app-icon tone-{{ item.tone }}" aria-hidden="true"><svg class="icon"><use href="#i-{{ item.icon }}"/></svg></span><span>{{ item.label }}<small>{{ item.group|default:"Tổng quan" }}</small></span></a>
-  {% endfor %}</div>
-  <p class="app-empty muted" data-app-empty hidden>Không có chức năng nào khớp.</p>
-</section>
-{% endif %}
 {% endblock %}

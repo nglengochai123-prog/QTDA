@@ -7,21 +7,15 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 
-# Trang chủ chỉ giữ việc đang chờ và vài lối vào chính; mọi chức năng khác nằm ở thanh trên và thanh trái.
-# Nhân viên: tối đa 3 việc chính của vai trò, nút lớn. Chủ quán: 6 màn hình dùng nhiều nhất.
-STAFF_ACTIONS = ["order", "bar", "cashier", "ready", "open", "shift", "stock"]
-ROLE_ACTIONS = {"thu_ngan": ["cashier", "shift", "order"], "pha_che": ["bar", "stock"], "phuc_vu": ["order", "ready", "open"]}
-OWNER_SHORTCUTS = ["dashboard", "overview", "schedule", "stock", "fc_plans", "revenue"]
-
-
+# Trang chủ chỉ là danh sách việc đang chờ mình; mọi chức năng đã có ở thanh trên, thanh trái và thanh dưới điện thoại,
+# nên không lặp lại lối tắt hay nút chức năng ở đây (Hai, 21/11/2026).
 @login_required
 def home(request):
-    """Việc đang chờ tôi (chỉ việc có số), lối vào chính theo vai trò, ca làm sắp tới."""
+    """Việc đang chờ tôi (chỉ việc có số) và ca làm sắp tới."""
     from django.urls import reverse
 
     from apps.accounts.permissions import Cap, user_can
 
-    from .context_processors import navigation
     from .notifications import pending_tasks
 
     user = request.user
@@ -29,15 +23,7 @@ def home(request):
     # Đơn đang mở là việc nền của cả ca, không phải việc chờ riêng mình; món pha xong thì cần mang ra ngay.
     tasks = [t for t in pending_tasks(user) if t["count"] and t["url"] != reverse("orders:open_orders")]
     tasks.sort(key=lambda t: not t["urgent"])
-    items = {i["key"]: i for i in navigation(request).get("NAV_ITEMS", [])}
     context = {"tasks": tasks}
-    if user.is_owner:
-        context["shortcuts"] = [items[k] for k in OWNER_SHORTCUTS if k in items]
-        context["all_items"] = [i for i in items.values() if i["key"] != "home"]
-    else:
-        # Việc của vai trò chính đứng đầu (thu ngân: Thu ngân), sau đó tới việc của vai trò phụ.
-        order = ROLE_ACTIONS.get(user.role, []) + STAFF_ACTIONS
-        context["actions"] = [items[k] for k in dict.fromkeys(order) if k in items][:3]
     if can(Cap.SHIFT_REGISTER):
         from apps.schedule.services import my_schedule
 

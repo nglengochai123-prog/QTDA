@@ -207,20 +207,20 @@ class BellTests(TestCase):
 
 
 class HomeTests(TestCase):
-    """Trang chủ chỉ còn việc đang chờ có số và vài lối vào chính, không lặp lại cả menu."""
+    """Trang chủ chỉ là việc đang chờ; không lặp lại chức năng đã có ở menu."""
 
     def setUp(self):
         self.d = build_menu()
 
-    def test_waiter_home_has_role_actions_and_no_function_grid(self):
+    def test_waiter_home_is_only_waiting_work(self):
         self.client.login(username="phucvu", password=PASSWORD)
         html = self.client.get(reverse("core:home")).content.decode()
-        self.assertIn('class="home-action is-primary" href="/don/moi/"', html)
+        self.assertIn("<h1>Việc chờ tôi xử lý</h1>", html)
         self.assertIn("Không có việc nào đang chờ.", html)
-        self.assertNotIn("app-card", html)
-        self.assertNotIn("data-app-search", html)
+        for gone in ("home-action", "app-card", "data-app-search", "go-item"):
+            self.assertNotIn(gone, html)
 
-    def test_owner_home_lists_only_waiting_work_and_shortcuts(self):
+    def test_owner_home_lists_only_non_zero_work(self):
         result, _ = services.submit_order(self.d["waiter"], key(), cart(self.d))
         line = Order.objects.get(pk=result["order_id"]).lines.get()
         with self.captureOnCommitCallbacks(execute=True):
@@ -230,8 +230,7 @@ class HomeTests(TestCase):
         self.assertIn("Ly pha xong chờ mang ra", html)
         self.assertNotIn("Kiểm kê chờ xác nhận", html)  # số 0 thì không hiện
         self.assertNotIn("Đơn đang mở</span>", html)
-        self.assertIn("Mở nhanh", html)
-        self.assertEqual(html.count('class="go-item" href'), 6 + html.count('data-search='))
+        self.assertNotIn("Mở nhanh", html)
         # Thanh trên chỉ còn chuông và tài khoản; Duyệt, Tham số đã ở trong menu.
         self.assertNotIn('title="Duyệt điều chỉnh"', html)
         self.assertNotIn('title="Tham số"', html)

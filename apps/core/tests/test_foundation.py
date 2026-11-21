@@ -19,9 +19,9 @@ class FoundationTests(TestCase):
         self.client.login(username="phucvu1", password="matkhau-thu-123")
         response = self.client.get(reverse("core:home"))
         self.assertContains(response, "Phục vụ")
-        # Phục vụ vào thẳng việc chính: nút Tạo đơn lớn trên trang chủ, không có lưới mọi chức năng.
-        self.assertContains(response, 'class="home-action is-primary" href="/don/moi/"')
-        self.assertNotContains(response, "data-app-search")
+        # Trang chủ chỉ có việc đang chờ; chức năng nằm ở menu.
+        self.assertContains(response, "Việc chờ tôi xử lý")
+        self.assertNotContains(response, "home-action")
 
     def test_pwa_files(self):
         self.assertEqual(self.client.get("/manifest.webmanifest").status_code, 200)

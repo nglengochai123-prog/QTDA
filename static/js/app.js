@@ -91,27 +91,6 @@
     topTabs.scrollLeft = currentGroup.offsetLeft - (topTabs.clientWidth - currentGroup.offsetWidth) / 2;
   }
 
-  // --- Trang chủ Chủ quán: gõ để tìm chức năng; ô trống thì chỉ hiện các lối tắt ---
-  var appSearch = document.querySelector("[data-app-search]");
-  if (appSearch) {
-    var results = document.querySelector("[data-app-results]");
-    var cards = results ? Array.prototype.slice.call(results.querySelectorAll("a[data-search]")) : [];
-    var shortcuts = document.querySelector("[data-shortcuts]");
-    var appEmpty = document.querySelector("[data-app-empty]");
-    var applyFilter = function () {
-      var words = appSearch.value.trim().toLowerCase();
-      var shown = 0;
-      cards.forEach(function (card) {
-        var ok = !!words && card.dataset.search.indexOf(words) !== -1;
-        card.hidden = !ok;
-        if (ok) shown += 1;
-      });
-      if (results) results.hidden = !words;
-      if (shortcuts) shortcuts.hidden = !!words;
-      if (appEmpty) appEmpty.hidden = !words || shown > 0;
-    };
-    appSearch.addEventListener("input", applyFilter);
-  }
 
   // --- Cảnh báo mất kết nối trong vòng 10 giây (NFR-16) ---
   var banner = document.getElementById("offline-banner");
