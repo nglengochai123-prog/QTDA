@@ -19,7 +19,7 @@
     <p class="card-sub">{% if ops.shift %}{{ ops.shift.name|default:"Ca đang mở" }} {{ ops.shift.starts_at|date:"H:i" }}–{{ ops.shift.ends_at|date:"H:i" }}{% now "Ymd" as today_ymd %}{% if ops.shift.starts_at|date:"Ymd" != today_ymd %} {{ ops.shift.starts_at|date:"d/m" }}{% endif %}{% else %}Chưa mở ca{% endif %}</p></div>
     <a class="btn btn-ghost btn-sm" href="{% url 'orders:overview' %}">Tổng quan ca</a></div>
   <div class="mini-stats">
-    <a class="mini-stat" href="{% url 'reports:revenue' %}?tu={{ ops.today_date|date:'Y-m-d' }}&amp;den={{ ops.today_date|date:'Y-m-d' }}"><span>Doanh thu</span><strong>{{ ops.today.net|intcomma }} <small>đ</small></strong></a>
+    <a class="mini-stat" href="{% url 'reports:revenue' %}?tu={{ ops.today_date|date:'Y-m-d' }}&amp;den={{ ops.today_date|date:'Y-m-d' }}"><span>Doanh thu</span><strong>{{ ops.today.net|intcomma }} <small>đ</small></strong>{% if ops.today.delta is not None %}<small><span class="stat-delta {% if ops.today.delta >= 0 %}up{% else %}down{% endif %}"><span aria-hidden="true">{% if ops.today.delta >= 0 %}▲{% else %}▼{% endif %}</span> {{ ops.today.delta|stringformat:"d"|cut:"-" }}%</span> so với {{ ops.today.weekday }} tuần trước</small>{% endif %}</a>
     {% if ops.figures %}<a class="mini-stat" href="{% url 'shifts:status' %}"><span>Tiền mặt dự kiến trong két</span><strong>{{ ops.figures.expected_cash|intcomma }} <small>đ</small></strong></a>{% else %}<div class="mini-stat"><span>Tiền mặt dự kiến trong két</span><strong class="muted">–</strong><small>Chưa mở ca</small></div>{% endif %}
     <a class="mini-stat" href="{% url 'orders:open_orders' %}"><span>Đơn đang mở</span><strong>{{ ops.open_orders }}</strong></a>
     <a class="mini-stat{% if ops.approvals %} is-warn{% endif %}" href="{% url 'orders:approvals' %}"><span>Chờ duyệt</span><strong>{{ ops.approvals }}</strong></a>
@@ -34,6 +34,18 @@
 </section>
 
 
+
+<section class="card attention" aria-labelledby="att-title">
+  <div class="card-head"><h2 id="att-title">Cần chú ý</h2></div>
+  {% if attention %}<ul class="att-list">{% for a in attention %}
+    <li><a class="att-item lvl-{{ a.level }}" href="{{ a.url }}">
+      <span class="att-level"><span class="dot{% if a.level == 'khan' %} dot-short{% elif a.level == 'chu_y' %} dot-over{% endif %}" aria-hidden="true"></span>{{ a.level_label }}</span>
+      <span class="att-text"><strong>{{ a.title }}</strong>{% if a.note or a.when %}<small>{{ a.note }}{% if a.when %} {{ a.when|date:"H:i d/m" }}{% endif %}</small>{% endif %}</span>
+      <span class="att-value">{{ a.value }}</span>
+      <svg class="icon att-go" aria-hidden="true"><use href="#i-chevron"/></svg></a></li>
+  {% endfor %}</ul>
+  {% else %}<p class="card-body muted">Không có việc nào cần chú ý.</p>{% endif %}
+</section>
 
 {% if sales.has_sales %}
 {% include "reports/parts/kpis.html" with kpis=sales.kpis plain=True %}

@@ -49,6 +49,7 @@ def dashboard(request):
     context = services.dashboard(month=month)
     context["fallback_month"] = fallback
     context["ops"] = services.shift_panel(request.user)
+    context["attention"] = services.attention(context)
     context["is_owner"] = request.user.is_owner
     context["can_review"] = user_can(request.user, Cap.EXCEPTION_REVIEW)
     return render(request, "reports/dashboard.html", context)

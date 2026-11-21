@@ -513,6 +513,7 @@ def dashboard(today=None, month=None):
         "by_day": by_day, "days": days, "revenue_chart": revenue_chart, "sales": sales,
         "stock_summary": _stock_summary(today),
         "accumulated": sum(r["total"] for r in acc_rows), "acc_chart": acc_chart, "acc_limit": limit,
+        "accumulated_over": sorted(((m, v) for m, v in by_manager.items() if v > limit), key=lambda x: -x[1]),
         "critical": critical, "stock_chart": stock_chart,
         "alerts": {"khan": open_alerts.filter(severity="khan").count(),
                    "quan_trong": open_alerts.filter(severity="quan_trong").count(),
@@ -520,3 +521,77 @@ def dashboard(today=None, month=None):
         "exceptions": [(value, label, ExceptionCase.objects.filter(status=ExceptionCase.Status.OPEN, severity=value).count())
                        for value, label in ExceptionCase.Severity.choices],
     }
+
+
+# ---------------- Việc Chủ quán cần chú ý (bảng điều khiển) ----------------
+
+LEVELS = {"khan": (0, "Khẩn"), "chu_y": (1, "Cần chú ý"), "theo_doi": (2, "Theo dõi")}
+
+
+def attention(dash, now=None):
+    """Danh sách việc Chủ quán cần chú ý, gom từ các số bảng điều khiển đã tính (`dash` = kết quả dashboard()) và
+    từ chính các màn nghiệp vụ, không tạo cảnh báo mới. Chỉ có mục khi thực sự có việc; mỗi mục dẫn tới màn xử lý.
+
+    Mức: khẩn (quá hạn, khẩn, nguyên liệu đã hết), cần chú ý (việc chờ quyết định, vượt mục tiêu), theo dõi (chưa đạt
+    mục tiêu nhưng chưa phải xử lý ngay). Cảnh báo loại Ngoại lệ không đếm thêm vì ngoại lệ có mục riêng."""
+    from django.db.models import Min, Sum
+    from django.urls import reverse
+
+    from apps.control.models import Alert, ExceptionCase
+    from apps.core import params
+    from apps.core.notifications import forecast_stale
+    from apps.shifts.models import Discrepancy
+
+    now = now or timezone.now()
+    items = []
+
+    def add(level, title, value, url, when=None, note=""):
+        items.append({"level": level, "level_label": LEVELS[level][1], "title": title, "value": value, "url": url,
+                      "when": when, "note": note})
+
+    alerts = Alert.objects.filter(status__in=Alert.OPEN).exclude(kind=Alert.Kind.EXCEPTION)
+    overdue = alerts.filter(due_at__lt=now)
+    if overdue.exists():
+        add("khan", "Cảnh báo đã quá hạn xử lý", overdue.count(), reverse("control:alerts"),
+            when=overdue.aggregate(t=Min("created_at"))["t"], note="mở từ")
+    urgent = alerts.filter(severity=Alert.Severity.URGENT, due_at__gte=now)
+    if urgent.exists():
+        add("khan", "Cảnh báo khẩn đang chờ xử lý", urgent.count(), reverse("control:alerts"))
+    important = alerts.filter(severity=Alert.Severity.IMPORTANT, due_at__gte=now)
+    if important.exists():
+        add("chu_y", "Cảnh báo quan trọng đang chờ xử lý", important.count(), reverse("control:alerts"))
+    open_exc = ExceptionCase.objects.filter(status=ExceptionCase.Status.OPEN)
+    for value, label in ExceptionCase.Severity.choices:
+        rows = open_exc.filter(severity=value)
+        if rows.exists():
+            add("khan" if value == ExceptionCase.Severity.URGENT else "chu_y", f"Ngoại lệ {label.lower()} chưa xem xét",
+                rows.count(), f"{reverse('control:exceptions')}?muc={value}",
+                when=rows.aggregate(t=Min("created_at"))["t"], note="cũ nhất từ")
+    pending = Discrepancy.objects.current().filter(decision="")
+    if pending.exists():
+        total = pending.aggregate(s=Sum("difference"))["s"] or 0
+        add("chu_y", "Chênh lệch tiền ca chờ bạn quyết định", f"{pending.count()} khoản · {numbers.fmt(abs(total), 0)} đ",
+            reverse("shifts:status"), when=pending.aggregate(t=Min("created_at"))["t"], note="cũ nhất từ")
+    if dash.get("accumulated_over"):
+        for manager, total in dash["accumulated_over"]:
+            add("chu_y", f"Thiếu tiền tích lũy của {manager} vượt ngưỡng", f"{numbers.fmt(total, 0)} đ",
+                reverse("shifts:status"), note=f"ngưỡng {numbers.fmt(params.get('accumulated_manager_threshold'), 0)} đ")
+    out = [r for r in dash.get("running_low", []) if r.level == "da_het"]
+    low = [r for r in dash.get("running_low", []) if r.level != "da_het"]
+    if out:
+        add("khan", "Nguyên liệu đã hết", ", ".join(r.ingredient.name for r in out[:3]) + ("…" if len(out) > 3 else ""),
+            reverse("inventory:stock"), when=min(r.created_at for r in out), note="báo lúc")
+    if low:
+        add("chu_y", "Nguyên liệu nhân viên báo sắp hết", ", ".join(r.ingredient.name for r in low[:3])
+            + ("…" if len(low) > 3 else ""), reverse("inventory:stock"))
+    stale = forecast_stale(now)
+    if stale:
+        add("chu_y", "Dự báo và kế hoạch mua đã cũ", "", reverse("forecast:plans"), note=stale.split(": ")[0])
+    # Mục tiêu tháng chỉ hiện khi chưa đạt (Hai, 21/11/2026: mục tiêu không đưa lên thành thẻ riêng).
+    for g in dash.get("goals", []):
+        if g["met"] or g["value"] == "–":
+            continue
+        level = "chu_y" if g["key"] in ("bo01", "bo02") else "theo_doi"
+        add(level, f"{g['label']}: chưa đạt mục tiêu tháng", g["value"], reverse(g["url"]), note=g["target"])
+    items.sort(key=lambda i: LEVELS[i["level"]][0])
+    return items

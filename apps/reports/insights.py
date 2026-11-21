@@ -209,6 +209,10 @@ def sales(start_day, end_day, prev=None, today=None, wide=False, lines=None, rol
                      "note": f"Giá vốn nguyên liệu {cur.cost / cur.revenue * 100:.0f}% doanh thu".replace(".", ",")
                      if cur.revenue else ""})
 
+    if not has_cost and cur.revenue:
+        # Thiếu giá vốn (định mức chưa có giá nhập, đơn cũ chưa phân bổ món) thì không đưa ra con số lãi gộp.
+        kpis.append({"label": "Lãi gộp ước tính", "value": None, "unit": "", "delta": None, "spark": None,
+                     "prev": None, "missing": "Chưa đủ dữ liệu giá vốn"})
     for k in kpis:
         k["delta_abs"] = abs(k["delta"]) if k["delta"] is not None else None
 

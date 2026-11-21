@@ -990,6 +990,24 @@ form.narrow, .narrow > form { background: var(--surface); border: 1px solid var(
   .todo { min-height: 56px; }
 }
 
+/* Bảng điều khiển: việc Chủ quán cần chú ý, xếp Khẩn trước; màu chỉ ở chấm, có chữ mức độ đi kèm. */
+.att-list { list-style: none; margin: 0; padding: 0; }
+.att-list li + li { border-top: 1px solid var(--border-row); }
+.att-item { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) auto 16px; align-items: center; gap: 0.75rem; min-height: 52px; padding: 0.55rem 1.25rem; color: var(--fg); text-decoration: none; }
+.att-item:hover { background: var(--surface-2); color: var(--fg); text-decoration: none; }
+.att-level { display: inline-flex; align-items: center; gap: 0.45rem; font-size: 12.5px; font-weight: 600; color: var(--fg-2); }
+.att-item.lvl-khan .att-level { color: var(--danger); }
+.att-item.lvl-chu_y .att-level { color: var(--warn-ink); }
+.att-text { display: grid; gap: 0.1rem; min-width: 0; }
+.att-text strong { font-size: 14.5px; font-weight: 600; }
+.att-text small { font-size: 12.5px; font-weight: 400; color: var(--fg-3); }
+.att-value { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.att-go { width: 16px; height: 16px; color: var(--fg-3); }
+@media (max-width: 599px) {
+  .att-item { grid-template-columns: minmax(0, 1fr) auto 16px; gap: 0.25rem 0.6rem; padding: 0.6rem 1rem; }
+  .att-level { grid-column: 1 / -1; }
+}
+
 /* ---------- Tạo đơn ---------- */
 
 .page-order .app-main { max-width: 780px; padding-bottom: 7rem; }
