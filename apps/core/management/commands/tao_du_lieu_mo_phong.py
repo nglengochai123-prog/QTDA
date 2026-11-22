@@ -69,10 +69,14 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--ngay", type=int, default=56, help="Số ngày lùi về trước (mặc định 56, tức 8 tuần).")
         parser.add_argument("--hat-giong", type=int, default=2026, help="Đổi số này để có bộ số liệu khác.")
+        parser.add_argument("--noi-them", action="store_true",
+                            help="Nối thêm các ngày còn thiếu tới hôm nay vào bộ mô phỏng đã có (chạy mỗi sáng).")
 
     def handle(self, *args, **options):
         from apps.catalog.models import MenuItem
 
+        if options["noi_them"]:
+            return self.extend(options)
         if MenuItem.objects.exists():
             raise CommandError("Chỉ chạy trên cơ sở dữ liệu trống (đặt SQLITE_NAME sang tệp mới rồi migrate).")
         days = max(14, options["ngay"])
@@ -90,6 +94,42 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             f"Đã tạo {days} ngày vận hành mô phỏng đến hôm nay: {sim.stats['orders']} đơn, {sim.stats['cups']} ly. "
             f"Đăng nhập bằng tài khoản demo_* (mật khẩu {PASSWORD})."))
+
+
+    def extend(self, options):
+        """Nối tiếp bộ mô phỏng: kết thúc ngày dở của lần chạy trước (kết ca, báo cáo, tác vụ đêm), chạy đủ các ngày
+        còn thiếu, rồi hôm nay tới giờ hiện tại. Dữ liệu Hai tự nhập khi thử vẫn giữ nguyên."""
+        from apps.shifts.models import Shift
+
+        days_run = Shift.objects.filter(name="Ca ngày").order_by("starts_at")
+        if not days_run.exists() or not Command._is_simulation():
+            raise CommandError("Không thấy bộ mô phỏng (tài khoản demo_*, ca \"Ca ngày\"). Hãy tạo bằng lệnh không có --noi-them.")
+        first_day = timezone.localdate(days_run.first().starts_at)
+        last_day = timezone.localdate(days_run.last().starts_at)
+        today = timezone.localdate()
+        if last_day >= today:
+            self.stdout.write("Bộ mô phỏng đã có tới hôm nay; không nối thêm.")
+            return
+        real_now = timezone.now()
+        days = (today - first_day).days
+        clock = Clock(real_now)
+        rnd = random.Random(options["hat_giong"] * 1000 + today.toordinal())
+        with mock.patch("django.utils.timezone.now", clock), override_settings(MEDIA_ROOT=tempfile.mkdtemp()):
+            sim = Simulation(clock, first_day, days, real_now, rnd, self.stdout)
+            sim.load(last_day)
+            sim.close_unfinished(last_day)
+            for offset in range((last_day - first_day).days + 1, days + 1):
+                sim.run_day(offset)
+            sim.finish()
+        self.stdout.write(self.style.SUCCESS(
+            f"Đã nối thêm {(today - last_day).days} ngày mô phỏng ({last_day + timedelta(days=1):%d/%m}–{today:%d/%m}): "
+            f"{sim.stats['orders']} đơn, {sim.stats['cups']} ly."))
+
+    @staticmethod
+    def _is_simulation():
+        from apps.accounts.models import User
+
+        return User.objects.filter(username__in=["demo_phache2", "demo_phucvu2"]).count() == 2
 
 
 def compact_history():
@@ -198,6 +238,55 @@ class Simulation:
                     low=Decimal(str(round(typical * 0.6, 1))), high=Decimal(str(round(typical * 1.5, 1))),
                     basis="Ước lượng của Chủ quán từ sổ bán tay (dữ liệu mô phỏng)", provided_by=self.u["chuquan"])
 
+    def load(self, last_day):
+        """Dựng lại phần chuẩn bị từ cơ sở dữ liệu đã có (không tạo tài khoản, nhà cung cấp mới) để nối thêm ngày."""
+        from apps.accounts.models import User
+        from apps.catalog.models import ItemSize, MenuItem, Option, Table
+        from apps.core.models import Store
+        from apps.inventory.models import Ingredient, PurchaseOrder, Supplier
+        from apps.orders.models import AdjustmentReason
+
+        self.store = Store.get_default()
+        self.u = {u.username.removeprefix("demo_"): u for u in User.objects.filter(username__startswith="demo_")}
+        self.suppliers = {s.name: s for s in Supplier.objects.all()}
+        self.ing = {i.name: i for i in Ingredient.objects.all()}
+        self.sizes = list(ItemSize.objects.select_related("item").filter(item__status=MenuItem.Status.ON_SALE))
+        self.toppings = list(Option.objects.filter(group__name="Topping"))
+        self.tables = list(Table.objects.all())
+        self.reasons = {r.name: r for r in AdjustmentReason.objects.all()}
+        self.usage = self._expected_usage()
+        last_offset = (last_day - self.first_day).days
+        self.next_delivery = {}
+        for name, (_sup, cycle, lead, *_rest) in SUPPLY.items():
+            n = lead
+            while n <= last_offset:
+                n += cycle
+            self.next_delivery[name] = n
+        open_states = [PurchaseOrder.Status.ORDERED, PurchaseOrder.Status.PARTIAL, PurchaseOrder.Status.LATE]
+        self.open_pos = {}
+        for po in PurchaseOrder.objects.filter(status__in=open_states).select_related("ingredient"):
+            self.open_pos.setdefault(po.ingredient.name, []).append(po)
+        self.backorders = {}
+
+    def close_unfinished(self, day):
+        """Ngày dở của lần chạy trước: ra ca những ai còn trong ca, thu nốt, kết ca, báo cáo cuối ca, tác vụ đêm."""
+        from apps.shifts.models import Shift
+        from apps.staff.models import Attendance
+
+        self.offset, self.day, self.today = (day - self.first_day).days, day, False
+        self.weekend = day.weekday() >= 5
+        self.shift = Shift.objects.filter(name="Ca ngày", starts_at__date=day).order_by("starts_at").last()
+        self.on_duty = []
+        self.clock.at(day, 22, 5)
+        for att in Attendance.objects.filter(clock_out__isnull=True, clock_in__date__lte=day):
+            att.clock_out = self.clock.now
+            att.save(update_fields=["clock_out"])
+        if self.shift is not None and self.shift.status == Shift.Status.OPEN:
+            self.clock.at(day, 22, 0)
+            self._close_day()
+        self.clock.at(day, 22, 30)
+        self._nightly()
+
     # ---------------- một ngày ----------------
 
     def run_day(self, offset):
@@ -207,6 +296,7 @@ class Simulation:
         self.today = offset == self.days
         self.weekend = self.day.weekday() >= 5
         self.clock.at(self.day, 6, 0)
+        self._drop_schedule_shifts(self.day)
         shift = Shift.objects.filter(starts_at__date=self.day).first()
         if shift is None:
             shift = Shift.objects.create(store=self.store, name="Ca ngày", starts_at=self.clock.now,
@@ -240,6 +330,18 @@ class Simulation:
                 continue  # hôm nay chỉ tới giờ hiện tại, không tạo giao dịch tương lai
             self.clock.now = when
             fn(*args)
+
+    @staticmethod
+    def _drop_schedule_shifts(day):
+        """Ca quỹ sinh từ lịch mà chưa dùng (chưa đơn, chưa tiền): mô phỏng gộp cả ngày vào một "Ca ngày"."""
+        from apps.shifts.models import Shift
+
+        for extra in Shift.objects.filter(starts_at__date=day, work_shift__isnull=False, orders__isnull=True,
+                                          cash_entries__isnull=True).distinct():
+            try:
+                extra.delete()
+            except Exception:  # noqa: BLE001 - có gì gắn vào thì giữ
+                pass
 
     def _at(self, hour, minute=0):
         return timezone.make_aware(timezone.datetime.combine(self.day, time(hour, minute)))
@@ -665,6 +767,7 @@ class Simulation:
 
         self.clock.now = self.real_now
         self._schedule()
+        self._drop_schedule_shifts(timezone.localdate(self.real_now))
         self._live_now()
         periodic.run_all(self.real_now)
         compact_history()
