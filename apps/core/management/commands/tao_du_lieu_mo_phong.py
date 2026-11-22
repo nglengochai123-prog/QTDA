@@ -151,6 +151,32 @@ def compact_history():
             cursor.execute("VACUUM")
 
 
+# Nhân viên thêm sau (Hai, 22/11/2026): thu ngân ca chiều, pha chế cuối tuần buổi tối, phục vụ giờ đông.
+EXTRA_STAFF = {"thungan2": ("thu_ngan", ["thu_ngan", "phuc_vu"], 24000, "Lê Thị", "Mai", "0905123411"),
+               "phache3": ("pha_che", ["pha_che"], 25000, "Ngô Văn", "Khoa", "0905123412"),
+               "phucvu3": ("phuc_vu", ["phuc_vu"], 21000, "Trần Minh", "An", "0905123413"),
+               "phucvu4": ("phuc_vu", ["phuc_vu", "thu_ngan"], 21000, "Bùi Thị", "Lan", "0905123414")}
+
+
+def ensure_extra_staff(store):
+    """Tạo tài khoản và hồ sơ cho nhân viên thêm nếu chưa có. Trả số người vừa tạo."""
+    from apps.accounts.models import User
+    from apps.staff.models import Employee
+
+    made = 0
+    for name, (role, roles, wage, first, last, phone) in EXTRA_STAFF.items():
+        user, created = User.objects.get_or_create(username=f"demo_{name}",
+                                                   defaults={"role": role, "first_name": first, "last_name": last})
+        if created:
+            user.set_password(PASSWORD)
+            user.save()
+            made += 1
+        if not Employee.objects.filter(user=user).exists():
+            Employee.objects.create(store=store, user=user, full_name=f"{first} {last}", phone=phone, roles=roles,
+                                    hourly_wage=wage)
+    return made
+
+
 class Simulation:
     def __init__(self, clock, first_day, days, real_now, rnd, out):
         self.clock, self.first_day, self.days, self.real_now, self.rnd, self.out = clock, first_day, days, real_now, rnd, out
@@ -247,6 +273,7 @@ class Simulation:
         from apps.orders.models import AdjustmentReason
 
         self.store = Store.get_default()
+        ensure_extra_staff(self.store)
         self.u = {u.username.removeprefix("demo_"): u for u in User.objects.filter(username__startswith="demo_")}
         self.suppliers = {s.name: s for s in Supplier.objects.all()}
         self.ing = {i.name: i for i in Ingredient.objects.all()}
@@ -361,6 +388,15 @@ class Simulation:
             plan += [("phache2", Role.PHA_CHE, (7, 0), (11, 0)), ("phucvu2", Role.PHUC_VU, (7, 0), (11, 0))]
         if self.day.weekday() == 2:  # thứ Tư phục vụ ca sáng nghỉ, thu ngân phục vụ thay
             plan = [p for p in plan if not (p[0] == "phucvu" and p[2] == morning)]
+        if "thungan2" in self.u:  # có thu ngân ca chiều: thu ngân chính làm tới 14:30
+            plan = [("thungan", Role.THU_NGAN, (6, 20), (14, 30)) if p[0] == "thungan" else p for p in plan]
+            plan.append(("thungan2", Role.THU_NGAN, (14, 0), (22, 5)))
+            if self.day.weekday() >= 4 and "phache3" in self.u:
+                plan.append(("phache3", Role.PHA_CHE, (16, 0), (22, 5)))
+            if self.day.weekday() < 5 and "phucvu3" in self.u:
+                plan.append(("phucvu3", Role.PHUC_VU, (17, 0), (21, 0)))
+            if self.weekend and "phucvu4" in self.u:
+                plan.append(("phucvu4", Role.PHUC_VU, morning, (14, 30)))
         self.on_duty = []
         for name, role, start, end in plan:
             jitter = self.rnd.randint(-6, 6)
@@ -810,8 +846,12 @@ class Simulation:
             sched.apply_suggested_needs(week, self.u["chuquan"])
             before_deadline = sched.deadline_for(week) - timedelta(days=1)
             usual = {"phache": ("Ca sáng", "pha_che"), "phache2": ("Ca chiều", "pha_che"),
-                     "phucvu": ("Ca sáng", "phuc_vu"), "phucvu2": ("Ca chiều", "phuc_vu"), "thungan": ("Ca sáng", "thu_ngan")}
+                     "phucvu": ("Ca sáng", "phuc_vu"), "phucvu2": ("Ca chiều", "phuc_vu"), "thungan": ("Ca sáng", "thu_ngan"),
+                     "thungan2": ("Ca chiều", "thu_ngan"), "phache3": ("Ca chiều", "pha_che"),
+                     "phucvu3": ("Ca chiều", "phuc_vu"), "phucvu4": ("Ca sáng", "phuc_vu")}
             for name, (shift_name, role) in usual.items():
+                if name not in self.u:
+                    continue
                 choices = {}
                 for ws in WorkShift.objects.filter(date__gte=week, date__lt=week + timedelta(days=7)):
                     if ws.name == shift_name and self.rnd.random() < 0.9:
