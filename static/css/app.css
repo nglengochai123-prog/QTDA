@@ -2015,3 +2015,145 @@ a.goal-card:hover { background: var(--surface-2); color: var(--fg); text-decorat
 .file-pick.has-file .file-pick-name { color: var(--fg); }
 .transfer-hint { margin: 0.25rem 0 0; color: var(--danger); font-size: var(--text-sm); font-weight: 500; }
 .file-pick.is-invalid .file-pick-name { color: var(--danger); font-weight: 500; }
+
+/* =====================================================================================================================
+   Giao diện chuẩn ERP (23/11/2026, Hai yêu cầu tham khảo các ERP nổi bật). Học theo Shopify Polaris (khung quản trị),
+   SAP Fiori Horizon và Microsoft Dynamics 365: thanh trên tối mang thương hiệu, menu trái có biểu tượng trên nền xám,
+   vùng làm việc nền xám nhạt, thẻ trắng nổi nhẹ bằng bóng thay vì viền, bảng có đầu cột nền xám, nhãn trạng thái tô
+   nhạt chữ đậm, nút chính màu mực gần đen, liên kết xanh. Lớp này đè lên các luật ở trên; các luật ở trên giữ bố cục.
+   ===================================================================================================================== */
+:root {
+  --bg: #f1f1f1;
+  --surface: #ffffff;
+  --surface-2: #f7f7f7;
+  --surface-3: #ebebeb;
+  --surface-hover: #f7f7f7;
+  --sidebar: #ebebeb;
+  --fg: #303030;
+  --fg-2: #4a4a4a;
+  --fg-3: #616161;
+  --border: #e3e3e3;
+  --border-row: #ebebeb;
+  --border-strong: #cccccc;
+  --border-input: #8a8a8a;
+  --primary: #303030;
+  --primary-press: #1a1a1a;
+  --on-primary: #ffffff;
+  --accent: #005bd3;
+  --accent-press: #004299;
+  --accent-soft: #eaf4ff;
+  --shell: #1a1a1a;
+  --shell-2: #303030;
+  --shell-fg: #e3e3e3;
+  --brand-tint: #c8873a;
+  --danger: #c70a24;
+  --danger-ink: #8e0b21;
+  --danger-soft: #fee9e8;
+  --ok: #29845a;
+  --ok-ink: #0c5132;
+  --ok-soft: #cdfee1;
+  --warn: #8a6116;
+  --warn-ink: #5e4200;
+  --warn-soft: #fff1c2;
+  --info-soft: #e0f0ff;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --shadow-card: 0 1px 0 rgba(26, 26, 26, 0.07), 0 0 0 1px rgba(26, 26, 26, 0.07);
+  --shadow-pop: 0 8px 24px rgba(26, 26, 26, 0.16), 0 0 0 1px rgba(26, 26, 26, 0.08);
+  --sidebar-w: 240px;
+  --text-2xl: 24px;
+}
+@media (max-width: 899px) { :root { --text-2xl: 22px; } }
+
+body { background: var(--bg); color: var(--fg); letter-spacing: 0; }
+::selection { background: #cce4ff; }
+h1 { font-weight: 650; letter-spacing: -0.02em; }
+
+/* Khung: thanh trên tối */
+.app-header { background: var(--shell); border-bottom: 0; backdrop-filter: none; -webkit-backdrop-filter: none; color: var(--shell-fg); }
+.brand, .brand:hover { color: #ffffff; }
+.brand-icon { color: var(--brand-tint); }
+.top-tabs a { color: #cfcfcf; height: 34px; }
+.top-tabs a:hover { background: var(--shell-2); color: #ffffff; }
+.top-tabs a[aria-current="true"] { background: #4a4a4a; color: #ffffff; font-weight: 600; }
+.header-tools .tool { color: #e3e3e3; }
+.header-tools .tool:hover, .notif[open] > summary { background: var(--shell-2); color: #ffffff; }
+.tool-badge { box-shadow: 0 0 0 2px var(--shell); }
+.account-btn { border-color: #4a4a4a; color: #ffffff; background: transparent; }
+.account summary:hover .account-btn { background: var(--shell-2); }
+.account-caret { color: #b5b5b5; }
+.avatar { background: var(--brand-tint); color: #1a1a1a; font-weight: 700; }
+
+/* Menu trái: nền xám, mục có biểu tượng, mục đang mở là thẻ trắng */
+.sidebar { background: var(--sidebar); border-right: 0; padding: 1rem 0.6rem 1.5rem; }
+.side-title { margin: 0.25rem 0.65rem 0.75rem; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--fg-3); text-transform: uppercase; }
+.side-nav { gap: 1px; }
+.side-item { gap: 0.6rem; min-height: 32px; padding: 0.3rem 0.65rem; border-radius: 8px; font-size: 13.5px; font-weight: 500; color: var(--fg); }
+.side-item .icon { width: 18px; height: 18px; color: var(--fg-3); stroke-width: 1.8; }
+.side-item:hover { background: #e3e3e3; }
+.side-item[aria-current="page"] { background: #ffffff; font-weight: 650; box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.04); }
+.side-item[aria-current="page"] .icon { color: var(--fg); }
+
+/* Vùng làm việc */
+.app-main { padding: 1.5rem 2rem 4rem; max-width: 1400px; }
+.page-head { align-items: center; margin-bottom: 1rem; }
+.page-sub { color: var(--fg-3); font-size: 13px; }
+
+/* Thẻ, ô số: nền trắng nổi bằng bóng */
+.card, .panel, .stat, .table-wrap, .empty, .todo-list, .todo-none, .ruled-list, .label-card { border: 0; box-shadow: var(--shadow-card); border-radius: var(--radius-lg); }
+.card > .table-wrap, .panel .table-wrap, .card-more > .table-wrap { box-shadow: none; }
+.card-head { padding: 0.85rem 1.1rem; border-bottom-color: var(--border-row); }
+.card-head h2, .panel > h2 { font-size: 14px; font-weight: 650; }
+.card-body { padding: 0.9rem 1.1rem 1rem; }
+.stat { padding: 0.85rem 1rem 0.9rem; }
+.stat-label { font-size: 12.5px; color: var(--fg-3); font-weight: 500; }
+.stat-value { font-size: 24px; font-weight: 650; letter-spacing: -0.02em; }
+a.stat:hover { box-shadow: var(--shadow-card), 0 4px 12px rgba(0, 0, 0, 0.06); }
+.figure-grid > div, .kpi { border: 0; background: var(--surface-2); border-radius: var(--radius); }
+
+/* Bảng: đầu cột nền xám, dòng thấp hơn */
+.data-table thead th { background: var(--surface-2); color: var(--fg-3); font-size: 12px; font-weight: 600; border-bottom: 1px solid var(--border); height: 36px; }
+.data-table th, .data-table td { height: 42px; padding: 0.4rem 0.85rem; }
+.data-table tbody tr:hover { background: #fafafa; }
+.data-table tbody th a { color: var(--fg); font-weight: 600; }
+
+/* Nút: nút chính màu mực, nút phụ trắng có viền bóng */
+.btn { border-radius: 8px; font-weight: 600; font-size: 13px; }
+.btn-primary { background: linear-gradient(180deg, #4a4a4a 0%, #303030 100%); color: #fff; box-shadow: 0 -1px 0 1px rgba(0, 0, 0, 0.8) inset, 0 1px 0 rgba(255, 255, 255, 0.25) inset; }
+.btn-primary:hover { background: linear-gradient(180deg, #303030 0%, #1a1a1a 100%); color: #fff; }
+.btn-quiet { background: #fff; border: 0; color: var(--fg); box-shadow: 0 -1px 0 0 #b5b5b5 inset, 0 0 0 1px rgba(0, 0, 0, 0.12) inset; }
+.btn-quiet:hover { background: #fafafa; border: 0; }
+.btn-ghost:hover { background: var(--surface-3); }
+.btn-danger, .btn-out { background: var(--danger); }
+
+/* Ô nhập */
+.input { border-color: var(--border-input); border-radius: 8px; }
+.input:hover { border-color: #616161; }
+.input:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+/* Nhãn trạng thái: nền nhạt, chữ đậm (như Polaris Badge) */
+.pill, .badge, .chip, .flag-low { border-radius: 8px; font-weight: 550; min-height: 22px; padding: 0 0.5rem; background: #e3e3e3; color: #303030; }
+.pill::before, .badge-danger::before, .badge-warn::before, .badge-ok::before, .chip-danger::before, .chip-ok::before, .chip-warn::before, .flag-low::before { display: none; }
+.pill-ok, .badge-ok, .chip-ok { background: var(--ok-soft); color: var(--ok-ink); }
+.pill-warn, .badge-warn, .chip-warn, .flag-low { background: #ffd6a4; color: var(--warn-ink); }
+.pill-danger, .badge-danger, .chip-danger { background: #fedad9; color: var(--danger-ink); }
+.pill-info { background: var(--info-soft); color: #00527c; }
+
+/* Dải báo đầu trang: thẻ báo gọn */
+.ready-banner { margin: 0.75rem 2rem 0; min-height: 40px; padding: 0.45rem 0.9rem; border: 0; border-radius: 10px; background: #fff; box-shadow: var(--shadow-card); font-size: 13.5px; }
+.notice { border: 0; box-shadow: var(--shadow-card); border-radius: 10px; }
+.notice-warn { background: #fff8db; }
+.notice-error { background: #fff4f4; }
+
+/* Điện thoại: thanh trên tối, thanh dưới trắng */
+@media (max-width: 1199px) { .app-main { padding: 1.25rem 1.5rem 4rem; } }
+@media (max-width: 899px) {
+  .sub-tabs { background: #fff; }
+  .sub-tabs a[aria-current="page"] { border-bottom-color: var(--fg); }
+  .app-nav > ul > li > a[aria-current="page"] { color: var(--fg); }
+  .app-main { padding: 1rem 0.75rem 2rem; }
+  .ready-banner { margin: 0.6rem 0.75rem 0; }
+}
+
+/* Cột menu trái kéo dài hết trang dù trang dài hơn màn hình. */
+@media (min-width: 900px) { .shell-body:not(.no-side) { background: linear-gradient(to right, var(--sidebar) var(--sidebar-w), transparent var(--sidebar-w)); } }

@@ -804,9 +804,19 @@ class Simulation:
         self.clock.now = self.real_now
         self._schedule()
         self._drop_schedule_shifts(timezone.localdate(self.real_now))
+        self._read_old_notifications()
         self._live_now()
         periodic.run_all(self.real_now)
         compact_history()
+
+    def _read_old_notifications(self):
+        """Thông báo của các ngày trước coi như mọi người đã đọc (người thật mở chuông mỗi ngày); chỉ để lại hôm nay."""
+        from datetime import datetime
+
+        from apps.core.models import Notification
+
+        start = timezone.make_aware(datetime.combine(timezone.localdate(self.real_now), time.min))
+        Notification.objects.filter(created_at__lt=start, read_at__isnull=True).update(read_at=self.real_now)
 
     def _live_now(self):
         """Việc đang chờ lúc chạy lệnh để thử ngay: một yêu cầu đổi món chờ duyệt, một kiểm kê lệch chờ xác nhận."""
