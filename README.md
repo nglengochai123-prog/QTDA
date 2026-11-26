@@ -4,12 +4,18 @@ Hệ thống vận hành quán LAM Coffee (cách từng chức năng hoạt đ�
 
 ## Chạy trên máy cá nhân
 
+Tải về bằng PyCharm: File > Project from Version Control, dán `https://github.com/nglengochai123-prog/QTDA.git` (nhánh `main` là bản mới nhất). Sau đó mở Terminal của PyCharm trong thư mục dự án:
+
 ```powershell
+python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 .venv\Scripts\python.exe manage.py migrate
-.venv\Scripts\python.exe manage.py createsuperuser
+.venv\Scripts\python.exe manage.py tao_du_lieu_mo_phong --ngay 56
 .venv\Scripts\python.exe manage.py runserver
 ```
+
+`tao_du_lieu_mo_phong` tạo 8 tuần bán hàng mô phỏng tới hôm nay (khoảng 20 phút) với 10 tài khoản `demo_*`, mật khẩu chung `demo-lam-2026` (Chủ quán: `demo_chuquan`). CSDL (`db.sqlite3`) không nằm trên GitHub nên máy mới phải tạo dữ liệu bằng lệnh này. Sang ngày mới, `manage.py tao_du_lieu_mo_phong --noi-them` nối thêm các ngày còn thiếu (tệp `scripts
+oi_mo_phong.cmd` để đặt lịch trong Task Scheduler). Muốn CSDL trống để nhập dữ liệu thật thì bỏ lệnh mô phỏng và chạy `manage.py createsuperuser`.
 
 Mở http://127.0.0.1:8000. Trang quản trị dữ liệu nền: http://127.0.0.1:8000/quan-tri/
 
