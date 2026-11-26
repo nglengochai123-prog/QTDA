@@ -76,7 +76,26 @@ class Command(BaseCommand):
         from apps.catalog.models import MenuItem
 
         if options["noi_them"]:
-            return self.extend(options)
+            # Task Scheduler có thể gọi hai lần cùng lúc (lúc đăng nhập và 6 giờ sáng): chỉ một lần được chạy.
+            import os
+
+            from django.conf import settings
+
+            lock = os.path.join(settings.BASE_DIR, "logs", "noi_mo_phong.lock")
+            os.makedirs(os.path.dirname(lock), exist_ok=True)
+            try:
+                fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                if timezone.now().timestamp() - os.path.getmtime(lock) < 3 * 3600:
+                    self.stdout.write("Đang có một lần nối thêm khác chạy; bỏ qua lần này.")
+                    return
+                os.remove(lock)  # khóa cũ do lần chạy bị ngắt giữa chừng
+                fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+            try:
+                return self.extend(options)
+            finally:
+                os.remove(lock)
         if MenuItem.objects.exists():
             raise CommandError("Chỉ chạy trên cơ sở dữ liệu trống (đặt SQLITE_NAME sang tệp mới rồi migrate).")
         days = max(14, options["ngay"])
@@ -198,6 +217,7 @@ class Simulation:
             user = User.objects.create(username=username, role=role, first_name=first, last_name=last)
             user.set_password(PASSWORD)
             user.save()
+        ensure_extra_staff(self.store)
         self.u = {u.username.removeprefix("demo_"): u for u in User.objects.filter(username__startswith="demo_")}
         staff = {"thungan": ([Role.THU_NGAN, Role.PHUC_VU], 26000), "phache": ([Role.PHA_CHE], 27000),
                  "phache2": ([Role.PHA_CHE, Role.PHUC_VU], 25000), "phucvu": ([Role.PHUC_VU], 22000),
