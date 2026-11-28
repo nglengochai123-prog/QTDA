@@ -529,6 +529,16 @@ def produce_semi(user, operation_key, product_id, batches, actual_output=None, n
                after={"ban_thanh_pham": product.name, "so_me": str(n), "thu_duoc": str(actual),
                       "theo_dinh_muc": str(expected),
                       "nguyen_lieu": {rows[i].ingredient.name: str(q) for i, q in need.items()}})
+        # Chủ quán biết mẻ hôm nay đã làm (Hai, 28/11/2026): báo trên chuông, không đẩy lên điện thoại.
+        from apps.accounts.models import User
+        from apps.core.push import notify_later
+
+        owners = [u.pk for u in User.objects.filter(is_active=True) if u.is_owner and u.pk != user.pk]
+        if owners:
+            notify_later(owners, f"{user} đã làm {stock.fmt_vn(n)} mẻ {product.name}",
+                         f"Thu {stock.fmt_vn(actual)} {product.get_unit_display()}"
+                         + (f", lô {batch.lot.code}" if batch.lot else "") + f" lúc {timezone.localtime():%H:%M}.",
+                         "/kho/ban-thanh-pham/", kind="kho", push=False)
         return {"batch": batch.pk, "lot": batch.lot.code if batch.lot else ""}
 
     return run_once(operation_key, "semi_batch", payload, action, actor=user)

@@ -209,3 +209,29 @@ class ImportTests(TestCase):
         lines = {l.ingredient.name: l.quantity for l in RecipeLine.objects.filter(version__item__name="Cà phê đen")}
         self.assertEqual(lines["Cà phê cốt"], Decimal(40))
         self.assertNotIn("Cà phê bột", lines)
+
+
+class SemiTodayTests(SemiBase):
+    def test_barista_marks_batch_done_and_owner_sees_it(self):
+        """Hai 28/11: pha chế bấm Đã làm xong mẻ hôm nay; quầy nhắc khi còn chưa làm; Chủ quán thấy trên bảng điều
+        khiển và nhận thông báo trên chuông."""
+        from apps.core.models import Notification
+        from apps.inventory.semi_today import missing_today, today_status
+        from apps.reports import services as reports
+
+        self.assertEqual(missing_today(), ["Cà phê cốt"])
+        self.client.login(username=self.d["barista"].username, password=PASSWORD)
+        self.assertContains(self.client.get(reverse("orders:bar")), "Làm mẻ hôm nay (còn 1)")
+        page = self.client.get(reverse("inventory:semi"))
+        self.assertContains(page, "Chưa làm")
+        op = page.context["today_rows"][0]["operation_key"]
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(reverse("inventory:semi"), {"operation_key": op, "product": self.cf.pk, "batches": "1"})
+        row = today_status()[0]
+        self.assertEqual((row["done"], row["batches"], row["last"].actor), (True, 1, self.d["barista"]))
+        self.assertEqual(missing_today(), [])
+        self.assertContains(self.client.get(reverse("inventory:semi")), "Đã làm")
+        self.assertTrue(Notification.objects.filter(user=self.owner, title__contains="mẻ Cà phê cốt").exists())
+        with mock.patch("django.utils.timezone.now", return_value=at(timezone.localdate(), 23)):
+            items = reports.attention({})
+        self.assertFalse([i for i in items if "Bán thành phẩm" in i["title"]])

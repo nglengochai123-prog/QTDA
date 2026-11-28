@@ -149,7 +149,9 @@ def _bar_context():
 @capability_required(Cap.BAR_PREPARE)
 @require_GET
 def bar(request):
-    return render(request, "orders/bar.html", _bar_context())
+    from apps.inventory.semi_today import missing_today
+
+    return render(request, "orders/bar.html", {**_bar_context(), "semi_missing": missing_today()})
 
 
 @capability_required(Cap.BAR_PREPARE)

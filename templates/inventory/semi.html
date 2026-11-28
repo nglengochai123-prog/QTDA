@@ -1,7 +1,25 @@
 {% extends "base.html" %}
 {% block title %}Làm bán thành phẩm · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><div><h1>Làm bán thành phẩm</h1><p class="page-sub">Ghi mỗi mẻ cà phê cốt, nước đường, foam vừa làm.</p></div></header>
+<header class="page-head"><div><h1>Làm bán thành phẩm</h1><p class="page-sub">Mỗi ngày làm mẻ mới. Làm xong mẻ nào thì bấm Đã làm xong; Chủ quán thấy ngay.</p></div></header>
+{% if today_rows %}
+<section class="card" aria-labelledby="btp-today">
+  <div class="card-head"><h2 id="btp-today">Mẻ hôm nay {{ today|date:"d/m" }}</h2><span class="muted">{{ today_rows|length }} bán thành phẩm</span></div>
+  <div class="table-wrap"><table class="data-table semi-today">
+    <thead><tr><th scope="col">Bán thành phẩm</th><th scope="col">Tình trạng</th><th scope="col"></th></tr></thead>
+    <tbody>{% for t in today_rows %}<tr>
+      <th scope="row">{{ t.ingredient.name }}</th>
+      <td>{% if t.done %}<span class="pill pill-ok">Đã làm</span> {{ t.batches|floatformat:"-2g" }} mẻ · {{ t.output|floatformat:"-2g" }} {{ t.ingredient.get_unit_display }}<br><small class="muted">{{ t.last.actor }} lúc {{ t.last.created_at|date:"H:i" }}{% if t.count > 1 %} (lần thứ {{ t.count }}){% endif %}</small>{% else %}<span class="pill pill-warn">Chưa làm</span>{% endif %}</td>
+      <td><form method="post" data-once>{% csrf_token %}
+        <input type="hidden" name="operation_key" value="{{ t.operation_key }}"><input type="hidden" name="product" value="{{ t.ingredient.pk }}">
+        <input type="hidden" name="batches" value="{{ t.suggested }}">
+        <button class="btn {% if t.done %}btn-quiet{% else %}btn-primary{% endif %} btn-sm" type="submit">{% if t.done %}Làm thêm {{ t.suggested }} mẻ{% else %}Đã làm xong {{ t.suggested }} mẻ{% endif %}</button>
+      </form></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="hint card-body">Bấm khi đã làm xong: nguyên liệu gốc trừ theo định mức mẻ, bán thành phẩm vào kho thành một lô. Lượng thu khác định mức hoặc số mẻ khác thì ghi ở phần chi tiết bên dưới.</p>
+</section>
+{% endif %}
 {% if not rows %}<div class="empty"><p><strong>Chưa có bán thành phẩm.</strong></p><p>Khai nguyên liệu loại Bán thành phẩm và định mức mẻ của nó ở mục Quản trị{% if can_setup %}: <a href="{% url 'masterdata:list' 'ban-thanh-pham' %}">Định mức bán thành phẩm</a>{% endif %}.</p></div>{% endif %}
 {% for r in rows %}{% with i=r.ingredient rc=r.recipe %}
 <section class="panel semi-card" aria-labelledby="btp-{{ i.pk }}">

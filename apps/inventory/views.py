@@ -239,11 +239,18 @@ def semi(request):
             messages.success(request, "Đã ghi mẻ: nguyên liệu gốc đã trừ, bán thành phẩm đã vào kho"
                              + (f" (lô {data['lot']})." if data.get("lot") else "."))
         return redirect("inventory:semi")
+    from .semi_today import today_status
+
     rows = production_suggestions()
     for r in rows:
         r["operation_key"] = uuid.uuid4().hex
+    suggested = {r["ingredient"].pk: r.get("batches") for r in rows}
+    today = today_status()
+    for t in today:
+        t["operation_key"] = uuid.uuid4().hex
+        t["suggested"] = suggested.get(t["ingredient"].pk) or 1
     return render(request, "inventory/semi.html", {
-        "rows": rows, "recent": SemiBatch.objects.select_related("product", "actor", "lot")[:12],
+        "rows": rows, "today_rows": today, "today": timezone.localdate(), "recent": SemiBatch.objects.select_related("product", "actor", "lot")[:12],
         "can_setup": user_can(request.user, Cap.MASTER_INVENTORY),
     })
 

@@ -584,6 +584,13 @@ def attention(dash, now=None):
     if low:
         add("chu_y", "Nguyên liệu nhân viên báo sắp hết", ", ".join(r.ingredient.name for r in low[:3])
             + ("…" if len(low) > 3 else ""), reverse("inventory:stock"))
+    if timezone.localtime(now).hour >= params.get("open_hour") + 1:
+        from apps.inventory.semi_today import missing_today
+
+        missing = missing_today(timezone.localdate(now))
+        if missing:
+            add("chu_y", "Bán thành phẩm chưa làm mẻ hôm nay", ", ".join(missing[:3]) + ("…" if len(missing) > 3 else ""),
+                reverse("inventory:semi"))
     stale = forecast_stale(now)
     if stale:
         add("chu_y", "Dự báo và kế hoạch mua đã cũ", "", reverse("forecast:plans"), note=stale.split(": ")[0])
