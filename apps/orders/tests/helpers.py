@@ -78,3 +78,14 @@ def clock_in(*users, role=None):
     for user in users:
         Attendance.objects.create(store=Store.get_default(), user=user, role=role or user.role,
                                   clock_in=timezone.now() - timezone.timedelta(minutes=5))
+
+
+def open_shift(owner, hours_before=1, hours_after=6):
+    """Một ca đang mở quanh lúc này: màn Tạo đơn chỉ nhận đơn khi có ca (Hai, 28/11/2026)."""
+    from django.utils import timezone
+
+    from apps.shifts.models import Shift
+
+    now = timezone.now()
+    return Shift.objects.create(store=Store.get_default(), name="Ca thử", starts_at=now - timezone.timedelta(hours=hours_before),
+                                ends_at=now + timezone.timedelta(hours=hours_after), approver=owner)

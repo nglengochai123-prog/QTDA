@@ -179,6 +179,12 @@ def submit_order(user, operation_key, payload, check_attendance=False):
                 raise prepaid.PrepayDenied(problem)  # kiểm tra ở máy chủ, không chỉ ẩn nút trên màn hình
             prepaid.check_spec(spec)
         if check_attendance:
+            from apps.shifts.models import Shift as _Shift
+
+            # Không có ca giữ quỹ thì không nhận đơn (Hai, 28/11/2026): đơn phải thuộc một ca để thu tiền và đối soát.
+            if _Shift.objects.operating() is None:
+                raise ValidationError("Chưa có ca đang mở nên chưa nhận đơn. Thu ngân hoặc Chủ quán mở ca ở Ca của "
+                                      "tôi (theo lịch hoặc theo giờ hiện tại) rồi gửi lại.")
             problem = attendance_problem(user)
             if problem:
                 raise ValidationError(problem)

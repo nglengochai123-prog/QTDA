@@ -6,13 +6,14 @@ from django.urls import reverse
 
 from apps.orders.models import Order, OrderLine
 
-from .helpers import D, build_menu, cart, clock_in, levels
+from .helpers import D, build_menu, cart, clock_in, levels, open_shift
 
 
 class OrderViewTests(TestCase):
     def setUp(self):
         self.d = build_menu()
         clock_in(self.d["waiter"], self.d["barista"])  # màn Tạo đơn chặn người chưa vào ca
+        open_shift(self.d["owner"])  # và chỉ nhận đơn khi có ca đang mở
 
     def post(self, url, body):
         return self.client.post(url, json.dumps(body), content_type="application/json")

@@ -126,7 +126,10 @@ class ForecastChoiceTests(PlanBase):
         page = self.client.get(reverse("forecast:plans"))
         self.assertContains(page, "Có đề xuất phương pháp dự báo cần xem xét")
         self.assertContains(page, "sai số thấp hơn 12%")
-        self.assertNotContains(page, other)  # không hiện tên cách tính
+        # Không hiện tên cách tính (so theo tên đầy đủ: mã ngắn như "LN" có thể trùng chuỗi ngẫu nhiên của mã CSRF).
+        from apps.forecast.methods import METHOD_LABELS
+
+        self.assertNotContains(page, METHOD_LABELS[other])
         self.client.post(reverse("forecast:plans"), {"action": "giu_cach", "key": key})
         kept = ForecastChoice.objects.get(series_key=key, superseded_at__isnull=True)
         self.assertEqual((kept.source, kept.method, kept.evidence["tu_choi"]),

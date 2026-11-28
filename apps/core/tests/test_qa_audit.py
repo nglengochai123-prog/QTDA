@@ -725,3 +725,25 @@ class QueryCountTests(Base):
             self.submit(table=t)
         many = {k: self._count(u, url) for k, (u, url) in screens.items()}
         self.assertTrue(all(many[k] - one[k] <= 3 for k in screens), {"1 đơn": one, "9 đơn": many})
+
+
+class NoShiftOrderTests(Base):
+    def test_qa_sale_h_no_open_shift_no_order_from_screen(self):
+        """QA-SALE-H (Hai 28/11): không có ca đang mở thì màn Tạo đơn không nhận đơn; mở ca rồi thì nhận."""
+        import json
+
+        from apps.staff import timekeeping
+
+        Shift.objects.filter(pk=self.shift.pk).update(status=Shift.Status.CLOSED)
+        timekeeping.clock_in(self.waiter, key(), Role.PHUC_VU)
+        c = Client()
+        c.force_login(self.waiter)
+        body = {"operation_key": key(), "order": cart(self.d)}
+        r = c.post(reverse("orders:submit"), json.dumps(body), content_type="application/json")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Chưa có ca đang mở", r.json()["error"])
+        self.assertFalse(Order.objects.exists())
+        self.assertContains(c.get(reverse("orders:create")), "chưa gửi được đơn")
+        Shift.objects.filter(pk=self.shift.pk).update(status=Shift.Status.OPEN)
+        r = c.post(reverse("orders:submit"), json.dumps(body), content_type="application/json")
+        self.assertEqual(r.status_code, 200)
