@@ -1,0 +1,5 @@
+{% if can_setup %}<nav class="seg semi-tabs" aria-label="Bán thành phẩm">
+  <a href="{% url 'inventory:semi' %}"{% if tab == "today" %} aria-current="true"{% endif %}>Mẻ hôm nay</a>
+  <a href="{% url 'inventory:semi_plan' %}"{% if tab == "plan" %} aria-current="true"{% endif %}>Kế hoạch các ngày</a>
+  <a href="{% url 'inventory:semi_types' %}"{% if tab == "types" %} aria-current="true"{% endif %}>Loại và định mức mẻ</a>
+</nav>{% endif %}

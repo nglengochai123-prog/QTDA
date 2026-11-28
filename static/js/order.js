@@ -528,7 +528,7 @@
           // Bán thành phẩm (cốt, nước đường...) hết mẻ: làm thêm mẻ là đủ, không cần đổi món.
           var semi = data.shortages.filter(function (s) { return s.semi; }).map(function (s) { return s.ingredient; });
           setFeedback("error", data.error, rows, semi.length
-            ? "Báo pha chế làm thêm mẻ " + semi.join(", ") + " (Quầy pha chế › Làm mẻ, hoặc Tồn kho › Làm mẻ bán thành phẩm) rồi gửi lại, hoặc giảm số ly, chọn món khác."
+            ? "Báo pha chế làm thêm mẻ " + semi.join(", ") + " (Kho › Bán thành phẩm) rồi gửi lại, hoặc giảm số ly, chọn món khác."
             : "Giảm số ly, chọn món khác, hoặc báo pha chế kiểm kê nhanh.");
           addSwitchButton(data.shortages.map(function (s) { return s.ingredient_id; }));
           refreshAvailability();

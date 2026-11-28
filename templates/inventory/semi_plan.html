@@ -1,10 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Kế hoạch mẻ · {{ STORE_NAME }}{% endblock %}
+{% block title %}Kế hoạch mẻ {{ day|date:"d/m" }} · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head">
-  <div><h1>Kế hoạch mẻ {{ day|date:"d/m/Y" }}</h1><p class="page-sub">Ngày đó pha chế phải làm bán thành phẩm nào, bao nhiêu mẻ. Pha chế thấy ở Mẻ hôm nay và Quầy pha chế.</p></div>
-  <div class="page-tools"><a class="btn btn-quiet" href="{% url 'inventory:semi_types' %}">Loại bán thành phẩm</a></div>
-</header>
+<header class="page-head"><div><h1>Bán thành phẩm</h1><p class="page-sub">Ngày nào pha chế phải làm loại nào, bao nhiêu mẻ. Pha chế thấy ở tab Mẻ hôm nay và trên Quầy pha chế.</p></div></header>
+{% include "inventory/_semi_tabs.html" with tab="plan" can_setup=True %}
 
 <nav class="seg" aria-label="Chọn ngày">{% for d in days %}<a href="?ngay={{ d|date:'Y-m-d' }}"{% if d == day %} aria-current="true"{% endif %}>{% if d == today %}Hôm nay{% else %}{{ d|date:"D d/m" }}{% endif %}</a>{% endfor %}</nav>
 
@@ -18,7 +16,7 @@
       {% if editable %}<td><form method="post" data-once>{% csrf_token %}<input type="hidden" name="ngay" value="{{ day|date:'Y-m-d' }}"><input type="hidden" name="action" value="delete"><input type="hidden" name="task" value="{{ t.pk }}"><button class="btn btn-ghost btn-sm" type="submit">Bỏ</button></form></td>{% endif %}
     </tr>{% endfor %}</tbody>
   </table></div>
-  {% else %}<div class="card-body"><p class="muted">Chưa có kế hoạch cho ngày này. Khi không có kế hoạch, pha chế thấy mỗi bán thành phẩm cần một mẻ.</p></div>{% endif %}
+  {% else %}<div class="card-body"><p class="muted">Chưa có kế hoạch cho ngày này. Khi không có kế hoạch, pha chế thấy số mẻ gợi ý theo dự báo bán.</p></div>{% endif %}
   {% if editable %}<div class="card-body">
     {% if products %}<form method="post" class="form-grid pl-add" data-once>{% csrf_token %}
       <input type="hidden" name="ngay" value="{{ day|date:'Y-m-d' }}"><input type="hidden" name="action" value="add">

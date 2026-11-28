@@ -2176,3 +2176,8 @@ a.stat:hover { box-shadow: var(--shadow-card), 0 4px 12px rgba(0, 0, 0, 0.06); }
 .pl-table .pl-total th, .pl-table .pl-total td { font-weight: 700; font-size: 15px; border-top: 2px solid var(--border-strong); }
 .stat-value.is-negative { color: var(--danger); }
 .pl-add { align-items: end; margin-bottom: 0.75rem; }
+.semi-tabs { margin: 0 0 1rem; }
+details.semi-more > summary { cursor: pointer; list-style: none; }
+details.semi-more > summary::-webkit-details-marker { display: none; }
+details.semi-more > summary h2::before { content: "▸ "; color: var(--fg-3); }
+details.semi-more[open] > summary h2::before { content: "▾ "; }

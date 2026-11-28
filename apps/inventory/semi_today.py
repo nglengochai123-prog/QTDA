@@ -2,7 +2,7 @@
 
 Chủ quán đặt kế hoạch mẻ cho từng ngày (SemiTask): bán thành phẩm nào, bao nhiêu mẻ. Pha chế bấm Đã làm xong ở màn
 Mẻ hôm nay; Chủ quán thấy trên bảng điều khiển và được báo trên chuông khi mẻ được ghi. Ngày chưa có kế hoạch thì mọi
-bán thành phẩm đang dùng đều coi là cần làm một mẻ (như trước khi có kế hoạch).
+bán thành phẩm đang dùng lấy số mẻ dự báo gợi ý (chưa có dự báo thì một mẻ); gợi ý 0 mẻ nghĩa là tồn còn đủ.
 
 "Đã làm" suy ra từ các mẻ đã ghi trong ngày (ghi mẻ là trừ nguyên liệu gốc và cộng bán thành phẩm vào kho), không có
 bước đánh dấu riêng, để số kho luôn khớp với việc đã làm.
@@ -26,7 +26,16 @@ def today_status(day=None):
     else:
         products = (Ingredient.objects.filter(is_active=True, kind=IngredientKind.SEMI, semi_recipe__isnull=False)
                     .select_related("semi_recipe"))
-        wanted = {p.pk: (p, Decimal(1), "") for p in products}
+        # Chưa đặt kế hoạch: theo số mẻ dự báo gợi ý (nhu cầu còn lại trừ tồn), chưa có dự báo thì một mẻ.
+        suggest = {}
+        if day == timezone.localdate():
+            from apps.forecast.planning import production_suggestions
+
+            suggest = {r["ingredient"].pk: r.get("batches") for r in production_suggestions()}
+        wanted = {}
+        for p in products:
+            n = suggest.get(p.pk)
+            wanted[p.pk] = (p, Decimal(1) if n is None else Decimal(n), "" if n is None else "Gợi ý theo dự báo bán")
     made = {}
     for b in (SemiBatch.objects.filter(created_at__date=day).select_related("actor", "lot", "product__semi_recipe")
               .order_by("created_at")):

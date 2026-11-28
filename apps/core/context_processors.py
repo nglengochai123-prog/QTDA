@@ -10,12 +10,10 @@ def site(request):
 
 # Biểu tượng, nhãn ngắn trên thanh trên và màu ô biểu tượng (trang chủ) của từng phân hệ.
 GROUP_ICONS = {"Tổng quan": "home", "Bán hàng": "order", "Ca và nhân sự": "shift", "Kho": "stock", "Dự báo": "forecast",
-               "Kiểm soát": "control_report", "Báo cáo": "revenue", "Quản trị": "params",
-               "Bán thành phẩm": "beaker"}
-GROUP_SHORT = {"Ca và nhân sự": "Ca, nhân sự", "Bán thành phẩm": "Làm mẻ"}
+               "Kiểm soát": "control_report", "Báo cáo": "revenue", "Quản trị": "params"}
+GROUP_SHORT = {"Ca và nhân sự": "Ca, nhân sự"}
 GROUP_TONES = {"Tổng quan": "blue", "Bán hàng": "orange", "Ca và nhân sự": "green", "Kho": "teal", "Dự báo": "indigo",
-               "Kiểm soát": "red", "Báo cáo": "pink", "Quản trị": "gray",
-               "Bán thành phẩm": "teal"}
+               "Kiểm soát": "red", "Báo cáo": "pink", "Quản trị": "gray"}
 
 # Mục không có biểu tượng cùng tên dùng biểu tượng ở đây (templates/partials/icons.html).
 ICONS = {"fc_overview": "forecast", "fc_plans": "po", "fc_prior": "bulb", "fc_season": "sun", "fc_history": "upload",
@@ -50,7 +48,7 @@ DESCRIPTIONS = {
     "receipt": "Ghi hàng nhận từ nhà cung cấp",
     "count": "Đếm tồn thực tế và ghi chênh lệch",
     "waste": "Ghi hàng hư, hết hạn, đổ vỡ",
-    "semi": "Ghi mẻ cà phê cốt, nước đường, foam đã làm",
+    "semi": "Mẻ hôm nay, kế hoạch mẻ và loại bán thành phẩm",
     "po": "Đơn đặt nhà cung cấp và hàng đang về",
     "payables": "Công nợ nhà cung cấp và thanh toán",
     "ledger": "Mọi lần nhập, xuất, điều chỉnh kho",
@@ -123,13 +121,9 @@ def navigation(request):
                  ("count", "Kiểm kê", reverse("inventory:count"), Cap.STOCK_OPERATIONS),
                  ("waste", "Hao hụt", reverse("inventory:waste"), Cap.STOCK_OPERATIONS),
                  ("lots", "Lô hàng", reverse("inventory:lots"), Cap.STOCK_OPERATIONS),
+                 ("semi", "Bán thành phẩm", reverse("inventory:semi"), Cap.STOCK_OPERATIONS),
                  ("po", "Đặt hàng", reverse("inventory:purchase_orders"), Cap.STOCK_CONFIRM_ORDERING),
                  ("payables", "Phải trả", reverse("inventory:payables"), Cap.STOCK_CONFIRM_ORDERING)]),
-        # Mục riêng cho việc làm mẻ hằng ngày (Hai, 28/11/2026).
-        ("Bán thành phẩm", [("semi", "Mẻ hôm nay", reverse("inventory:semi"), Cap.STOCK_OPERATIONS),
-                            ("semi_plan", "Kế hoạch mẻ", reverse("inventory:semi_plan"), Cap.MASTER_INVENTORY),
-                            ("semi_types", "Loại bán thành phẩm", reverse("inventory:semi_types"),
-                             Cap.MASTER_INVENTORY)]),
         ("Dự báo", [
             ("fc_overview", "Dự báo nhu cầu", reverse("forecast:overview"), Cap.FORECASTS),
             ("fc_plans", "Kế hoạch mua", reverse("forecast:plans"), Cap.FORECASTS),

@@ -190,7 +190,7 @@ class SemiDemandTests(SemiBase):
         self.client.login(username=self.owner.username, password=PASSWORD)
         page = self.client.get(reverse("inventory:semi"))
         self.assertContains(page, "Cà phê cốt")
-        self.assertContains(page, "Nên làm")
+        self.assertContains(page, "theo gợi ý từ dự báo bán")
         self.client.post(reverse("inventory:semi"), {"operation_key": key(), "product": self.cf.pk, "batches": "1"})
         self.assertEqual(SemiBatch.objects.count(), 1)
         self.assertNotContains(self.client.get(reverse("inventory:receipt")), "Cà phê cốt")
@@ -230,7 +230,7 @@ class SemiTodayTests(SemiBase):
         row = today_status()[0]
         self.assertEqual((row["done"], row["batches"], row["last"].actor), (True, 1, self.d["barista"]))
         self.assertEqual(missing_today(), [])
-        self.assertContains(self.client.get(reverse("inventory:semi")), "Đã làm")
+        self.assertContains(self.client.get(reverse("inventory:semi")), ">Xong<")
         self.assertTrue(Notification.objects.filter(user=self.owner, title__contains="mẻ Cà phê cốt").exists())
         with mock.patch("django.utils.timezone.now", return_value=at(timezone.localdate(), 23)):
             items = reports.attention({})

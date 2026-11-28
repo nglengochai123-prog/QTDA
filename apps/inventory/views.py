@@ -224,9 +224,7 @@ def waste(request):
 @capability_required(Cap.STOCK_OPERATIONS)
 @require_http_methods(["GET", "POST"])
 def semi(request):
-    """Làm bán thành phẩm: ghi mẻ đã làm, xem tồn và số mẻ nên làm."""
-    from apps.forecast.planning import production_suggestions
-
+    """Bán thành phẩm, tab Mẻ hôm nay: việc làm mẻ theo kế hoạch, bấm Đã làm xong là ghi mẻ."""
     from .models import SemiBatch
 
     if request.method == "POST":
@@ -239,17 +237,21 @@ def semi(request):
             messages.success(request, "Đã ghi mẻ: nguyên liệu gốc đã trừ, bán thành phẩm đã vào kho"
                              + (f" (lô {data['lot']})." if data.get("lot") else "."))
         return redirect("inventory:semi")
+    from .models import Ingredient, IngredientKind, IngredientStock
     from .semi_today import today_status
 
-    rows = production_suggestions()
-    for r in rows:
-        r["operation_key"] = uuid.uuid4().hex
     today = today_status()
+    stock_rows = {s.ingredient_id: s for s in IngredientStock.objects.filter(ingredient_id__in=[t["ingredient"].pk for t in today])}
     for t in today:
         t["operation_key"] = uuid.uuid4().hex
         t["suggested"] = t["left"] if t["left"] else 1
+        row = stock_rows.get(t["ingredient"].pk)
+        t["available"] = row.available if row is not None else None
+    products = (Ingredient.objects.filter(is_active=True, kind=IngredientKind.SEMI, semi_recipe__isnull=False)
+                .select_related("semi_recipe").order_by("name"))
     return render(request, "inventory/semi.html", {
-        "rows": rows, "today_rows": today, "today": timezone.localdate(), "recent": SemiBatch.objects.select_related("product", "actor", "lot")[:12],
+        "today_rows": today, "today": timezone.localdate(), "products": products, "detail_key": uuid.uuid4().hex,
+        "recent": SemiBatch.objects.select_related("product", "actor", "lot")[:12],
         "can_setup": user_can(request.user, Cap.MASTER_INVENTORY),
     })
 

@@ -1,53 +1,55 @@
 {% extends "base.html" %}
-{% block title %}Mẻ hôm nay · {{ STORE_NAME }}{% endblock %}
+{% block title %}Bán thành phẩm · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><div><h1>Mẻ hôm nay</h1><p class="page-sub">Mỗi ngày làm mẻ mới. Làm xong mẻ nào thì bấm Đã làm xong; Chủ quán thấy ngay.</p></div></header>
+<header class="page-head"><div><h1>Bán thành phẩm</h1><p class="page-sub">Làm xong mẻ nào thì bấm Đã làm xong: nguyên liệu gốc tự trừ, bán thành phẩm vào kho, Chủ quán được báo.</p></div></header>
+{% include "inventory/_semi_tabs.html" with tab="today" %}
+
 {% if today_rows %}
 <section class="card" aria-labelledby="btp-today">
-  <div class="card-head"><div><h2 id="btp-today">Mẻ hôm nay {{ today|date:"d/m" }}</h2><p class="card-sub">{% if today_rows.0.has_plan %}Theo kế hoạch Chủ quán đặt.{% else %}Chưa có kế hoạch cho hôm nay: mỗi bán thành phẩm một mẻ.{% endif %}{% if can_setup %} <a href="{% url 'inventory:semi_plan' %}">Sửa kế hoạch</a>{% endif %}</p></div></div>
+  <div class="card-head"><h2 id="btp-today">Hôm nay {{ today|date:"d/m" }}</h2><span class="muted">{% if today_rows.0.has_plan %}Theo kế hoạch{% else %}Chưa đặt kế hoạch: theo gợi ý từ dự báo bán{% endif %}</span></div>
   <div class="table-wrap"><table class="data-table semi-today">
-    <thead><tr><th scope="col">Bán thành phẩm</th><th scope="col">Cần làm</th><th scope="col">Tình trạng</th><th scope="col"></th></tr></thead>
+    <thead><tr><th scope="col">Bán thành phẩm</th><th scope="col" class="num stack-hide">Trong kho</th><th scope="col" class="num">Cần làm</th><th scope="col">Tình trạng</th><th scope="col"></th></tr></thead>
     <tbody>{% for t in today_rows %}<tr>
       <th scope="row">{{ t.ingredient.name }}{% if t.note %}<br><small class="muted">{{ t.note }}</small>{% endif %}</th>
-      <td class="num">{% if t.planned %}{{ t.planned|floatformat:"-2g" }} mẻ{% else %}<span class="muted">Ngoài kế hoạch</span>{% endif %}</td>
-      <td>{% if t.done %}<span class="pill pill-ok">Đã làm</span>{% elif t.count %}<span class="pill pill-warn">Còn {{ t.left|floatformat:"-2g" }} mẻ</span>{% else %}<span class="pill pill-warn">Chưa làm</span>{% endif %}
-        {% if t.count %}<br><small class="muted">{{ t.batches|floatformat:"-2g" }} mẻ · {{ t.output|floatformat:"-2g" }} {{ t.ingredient.get_unit_display }} · {{ t.last.actor }} lúc {{ t.last.created_at|date:"H:i" }}</small>{% endif %}</td>
+      <td class="num stack-hide">{% if t.available is not None %}{{ t.available|floatformat:"-1g" }} {{ t.ingredient.get_unit_display }}{% endif %}</td>
+      <td class="num">{% if t.planned %}{{ t.planned|floatformat:"-2g" }} mẻ{% elif t.has_plan %}<span class="muted">Ngoài kế hoạch</span>{% else %}<span class="muted">Đủ, chưa cần</span>{% endif %}</td>
+      <td>{% if t.done or not t.planned and not t.count %}<span class="pill pill-ok">{% if t.count %}Xong{% else %}Không cần{% endif %}</span>{% elif t.count %}<span class="pill pill-warn">Còn {{ t.left|floatformat:"-2g" }} mẻ</span>{% else %}<span class="pill pill-warn">Chưa làm</span>{% endif %}
+        {% if t.count %}<br><small class="muted">{{ t.last.actor }} {{ t.last.created_at|date:"H:i" }}</small>{% endif %}</td>
       <td>{% if t.recipe %}<form method="post" data-once>{% csrf_token %}
         <input type="hidden" name="operation_key" value="{{ t.operation_key }}"><input type="hidden" name="product" value="{{ t.ingredient.pk }}">
         <input type="hidden" name="batches" value="{{ t.suggested }}">
-        <button class="btn {% if t.done %}btn-quiet{% else %}btn-primary{% endif %} btn-sm" type="submit">{% if t.done %}Làm thêm 1 mẻ{% else %}Đã làm xong {{ t.suggested|floatformat:"-2g" }} mẻ{% endif %}</button>
-      </form>{% else %}<span class="muted">Chưa có định mức mẻ</span>{% endif %}</td>
+        <button class="btn {% if t.done %}btn-quiet{% else %}btn-primary{% endif %} btn-sm" type="submit">{% if t.done %}+1 mẻ{% else %}Đã làm xong{% if t.suggested != 1 %} {{ t.suggested|floatformat:"-2g" }} mẻ{% endif %}{% endif %}</button>
+      </form>{% else %}<span class="muted">Chưa có định mức</span>{% endif %}</td>
     </tr>{% endfor %}</tbody>
   </table></div>
-  <p class="hint card-body">Bấm khi đã làm xong: nguyên liệu gốc trừ theo định mức mẻ, bán thành phẩm vào kho thành một lô. Lượng thu khác định mức hoặc số mẻ khác thì ghi ở phần chi tiết bên dưới.</p>
 </section>
+{% else %}
+<div class="empty"><p><strong>Chưa có bán thành phẩm.</strong></p>{% if can_setup %}<p><a href="{% url 'inventory:semi_types' %}">Thêm loại bán thành phẩm</a>.</p>{% else %}<p>Báo Chủ quán khai loại bán thành phẩm.</p>{% endif %}</div>
 {% endif %}
-{% if not rows %}<div class="empty"><p><strong>Chưa có bán thành phẩm.</strong></p><p>Khai nguyên liệu loại Bán thành phẩm và định mức mẻ của nó ở mục Quản trị{% if can_setup %}: <a href="{% url 'masterdata:list' 'ban-thanh-pham' %}">Định mức bán thành phẩm</a>{% endif %}.</p></div>{% endif %}
-{% for r in rows %}{% with i=r.ingredient rc=r.recipe %}
-<section class="panel semi-card" aria-labelledby="btp-{{ i.pk }}">
-  <h2 id="btp-{{ i.pk }}">{{ i.name }}{% if r.provisional %} <span class="chip">Tạm thời</span>{% endif %}</h2>
-  <dl class="figure-grid">
-    <div><dt>Tồn có thể dùng</dt><dd>{{ r.available|floatformat:"-1g" }} {{ i.get_unit_display }}</dd></div>
-    <div><dt>{% if r.for_today %}Cần đến hết hôm nay{% else %}Cần cho ngày mai{% endif %}</dt><dd>{% if r.need is not None %}{{ r.need|floatformat:"0g" }} {{ i.get_unit_display }}{% else %}<span class="muted">Chưa có dự báo</span>{% endif %}</dd></div>
-    <div class="figure-key"><dt>Nên làm</dt><dd>{% if r.batches is None %}–{% elif r.batches %}<strong>{{ r.batches }} mẻ</strong>{% else %}Đủ, chưa cần làm{% endif %}</dd></div>
-  </dl>
-  {% if rc %}<p class="muted">Một mẻ: {% for l in rc.lines.all %}{{ l.quantity|floatformat:"-2g" }} {{ l.ingredient.get_unit_display }} {{ l.ingredient.name }}{% if not forloop.last %}, {% endif %}{% endfor %} → {{ rc.batch_output|floatformat:"-2g" }} {{ i.get_unit_display }}{% if not rc.yield_measured %} (lượng thu được chưa cân đo){% endif %}.</p>
-  <form method="post" class="semi-form" data-once>{% csrf_token %}
-    <input type="hidden" name="operation_key" value="{{ r.operation_key }}"><input type="hidden" name="product" value="{{ i.pk }}">
-    <label class="field"><span>Số mẻ</span><input class="input" name="batches" inputmode="decimal" autocomplete="off" required value="{% if r.batches %}{{ r.batches }}{% else %}1{% endif %}"></label>
-    <label class="field"><span>Lượng thu thực tế ({{ i.get_unit_display }})</span><input class="input" name="actual" inputmode="decimal" autocomplete="off" placeholder="Để trống: theo định mức"></label>
+
+{% if products %}
+<details class="card semi-more">
+  <summary class="card-head"><h2>Ghi mẻ khác định mức</h2><span class="muted">Số mẻ lẻ, lượng thu thực tế khác, ghi chú</span></summary>
+  <form method="post" class="card-body form-grid pl-add" data-once>{% csrf_token %}
+    <input type="hidden" name="operation_key" value="{{ detail_key }}">
+    <label class="field"><span>Bán thành phẩm</span><select class="input" name="product" required>{% for p in products %}<option value="{{ p.pk }}">{{ p.name }} (1 mẻ {{ p.semi_recipe.batch_output|floatformat:"-2g" }} {{ p.get_unit_display }})</option>{% endfor %}</select></label>
+    <label class="field"><span>Số mẻ</span><input class="input" name="batches" inputmode="decimal" value="1" required></label>
+    <label class="field"><span>Lượng thu thực tế</span><input class="input" name="actual" inputmode="decimal" placeholder="Để trống: theo định mức"></label>
     <label class="field"><span>Ghi chú</span><input class="input" name="note" maxlength="255"></label>
     <button class="btn btn-primary" type="submit">Ghi mẻ</button>
   </form>
-  {% else %}<p class="muted">Chưa có định mức mẻ nên chưa ghi mẻ được.{% if can_setup %} <a href="{% url 'masterdata:list' 'ban-thanh-pham' %}">Khai định mức mẻ</a>.{% endif %}</p>{% endif %}
-</section>{% endwith %}{% endfor %}
+</details>
+{% endif %}
+
 {% if recent %}
-<section class="panel" aria-labelledby="btp-recent">
-  <h2 id="btp-recent">Mẻ gần đây</h2>
-  <ul class="row-list">{% for b in recent %}
-    <li><span class="row-day">{{ b.created_at|date:"d/m" }}<small>{{ b.created_at|date:"H:i" }}</small></span>
-      <span class="row-main"><strong>{{ b.product.name }}</strong><small>{{ b.batches|floatformat:"-2g" }} mẻ{% if b.lot %} · lô {{ b.lot.code }}{% if b.lot.expiry_date %} · HSD {{ b.lot.expiry_date|date:"d/m" }}{% endif %}{% endif %} · {{ b.actor }}{% if b.note %} · {{ b.note }}{% endif %}</small></span>
-      <span class="num-cell">{{ b.actual_output|floatformat:"-2g" }} {{ b.product.get_unit_display }}</span></li>{% endfor %}
-  </ul>
-</section>{% endif %}
+<details class="card semi-more">
+  <summary class="card-head"><h2>Mẻ gần đây</h2><span class="muted">{{ recent|length }} mẻ</span></summary>
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr><th scope="col">Lúc</th><th scope="col">Bán thành phẩm</th><th scope="col" class="num">Thu được</th><th scope="col" class="stack-hide">Lô, người làm</th></tr></thead>
+    <tbody>{% for b in recent %}<tr><td>{{ b.created_at|date:"d/m H:i" }}</td><th scope="row">{{ b.product.name }} <small class="muted">{{ b.batches|floatformat:"-2g" }} mẻ</small></th>
+      <td class="num">{{ b.actual_output|floatformat:"-2g" }} {{ b.product.get_unit_display }}</td>
+      <td class="stack-hide">{% if b.lot %}{{ b.lot.code }}{% if b.lot.expiry_date %} · HSD {{ b.lot.expiry_date|date:"d/m" }}{% endif %} · {% endif %}{{ b.actor }}{% if b.note %} · {{ b.note }}{% endif %}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</details>
+{% endif %}
 {% endblock %}

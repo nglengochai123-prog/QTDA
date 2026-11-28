@@ -1,10 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Loại bán thành phẩm · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head">
-  <div><h1>Loại bán thành phẩm</h1><p class="page-sub">Thứ quán tự làm từ nguyên liệu gốc (cà phê cốt, nước đường, foam...): một mẻ dùng gì, ra bao nhiêu.</p></div>
-  <div class="page-tools"><a class="btn btn-quiet" href="{% url 'inventory:semi_plan' %}">Kế hoạch mẻ</a></div>
-</header>
+<header class="page-head"><div><h1>Bán thành phẩm</h1><p class="page-sub">Thứ quán tự làm từ nguyên liệu gốc (cà phê cốt, nước đường, foam...): một mẻ dùng gì, ra bao nhiêu.</p></div></header>
+{% include "inventory/_semi_tabs.html" with tab="types" can_setup=True %}
 
 <section class="card" aria-labelledby="types-title">
   <div class="card-head"><h2 id="types-title">Đang có</h2><span class="muted">{{ products|length }} loại</span></div>
@@ -19,8 +17,8 @@
   </table></div>{% else %}<div class="card-body"><p class="muted">Chưa có loại nào.</p></div>{% endif %}
 </section>
 
-<section class="card" aria-labelledby="new-title">
-  <div class="card-head"><h2 id="new-title">Thêm loại mới</h2></div>
+<details class="card semi-more" aria-labelledby="new-title"{% if not products %} open{% endif %}>
+  <summary class="card-head"><h2 id="new-title">Thêm loại mới</h2></summary>
   <form method="post" class="card-body" data-once>{% csrf_token %}
     <div class="form-grid">
       <label class="field"><span>Tên</span><input class="input" name="name" required maxlength="100" placeholder="Ví dụ: Nước đường"></label>
@@ -37,5 +35,5 @@
     <label class="check"><input type="checkbox" name="measured" value="1"> Đã cân đo lượng thu được thực tế</label>
     <button class="btn btn-primary" type="submit">Thêm bán thành phẩm</button>
   </form>
-</section>
+</details>
 {% endblock %}
