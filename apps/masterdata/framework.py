@@ -76,6 +76,9 @@ class Resource:
     prepare_form: Callable = None  # (form, obj, request) -> None
     save: Callable = None  # (request, form, created) -> obj
     note: str = ""  # một dòng ngắn dưới tiêu đề khi thật cần
+    # obj -> None, gọi sau khi đã lưu cả dòng con, trong cùng giao dịch: ném ValidationError thì không lưu gì.
+    # Dùng cho điều kiện phụ thuộc dòng con (món Đang bán phải có giá cho mọi cỡ đang dùng).
+    validate_saved: Callable = None
 
     def get_queryset(self):
         return self.queryset() if self.queryset else self.model._default_manager.all()
@@ -294,6 +297,8 @@ def _save(request, resource, form, obj, formsets):
         record(Action.CREATE if created else Action.UPDATE, request=request, obj=saved, before=before, after=after)
     for item in formsets:
         _save_formset(request, item["fs"], saved)
+    if resource.validate_saved:
+        resource.validate_saved(saved)
     return saved
 
 

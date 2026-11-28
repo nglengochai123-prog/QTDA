@@ -284,7 +284,7 @@ def confirm_slip(user, operation_key, slip_id, prices=None, versions=None, note=
                "note": str(note or "")[:255]}
 
     def action():
-        slip = BackupSlip.objects.select_for_update().select_related("range__shift").get(pk=payload["slip"])
+        slip = BackupSlip.objects.select_for_update(of=("self",)).select_related("range__shift").get(pk=payload["slip"])
         if slip.status != BackupSlip.Status.PENDING:
             return {"slip": slip.pk, "order_id": slip.order_id, "message": f"{slip} đã được xử lý trước đó."}
         shift = slip.range.shift

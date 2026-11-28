@@ -308,9 +308,14 @@ def get(key, at=None):
     default = DEFAULTS[key][0]
     if key in MODEL_KEYS:
         return default
-    value = (_rows(key).filter(effective_from__lte=at or timezone.now())
-             .order_by("-effective_from", "-id").values_list("value", flat=True).first())
-    return default if value is None else type(default)(value)
+    from .reqcache import get_or_set
+
+    def read():
+        value = (_rows(key).filter(effective_from__lte=at or timezone.now())
+                 .order_by("-effective_from", "-id").values_list("value", flat=True).first())
+        return default if value is None else type(default)(value)
+
+    return get_or_set(("param", key, at), read)
 
 
 def history(key):

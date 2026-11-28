@@ -3,6 +3,7 @@
 {% block title %}Tạo đơn · {{ STORE_NAME }}{% endblock %}
 {% block body_class %}page-order{% endblock %}
 {% block content %}
+{% if attendance_problem %}<div class="notice notice-error" role="alert"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><div>{{ attendance_problem }} <a href="{% url 'staff:attendance' %}">Mở Chấm công</a></div></div>{% endif %}
 {% if no_shift %}<div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><div>Chưa có ca đang mở. Đơn vẫn gửi pha chế được, nhưng chỉ thu tiền được khi đã có ca.</div></div>{% endif %}
 <div class="order-screen" id="order-screen"
      data-submit-url="{% url 'orders:submit' %}" data-switch-url="{% url 'orders:customer_switched' %}" data-recount-url="{% url 'orders:recount' %}" data-availability-url="{% url 'orders:availability' %}"

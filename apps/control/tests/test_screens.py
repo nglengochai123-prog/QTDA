@@ -8,6 +8,8 @@ from apps.shifts import services as shift_services
 
 
 class ScreenTests(Base):
+    auto_opening = False  # các ca trong lớp này tự ghi tiền đầu ca
+
     def test_manager_shift_flow_screens(self):
         self.client.force_login(self.manager)
         page = self.client.get(reverse("shifts:my_shift"))

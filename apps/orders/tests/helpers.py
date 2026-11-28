@@ -57,3 +57,24 @@ def levels(ingredient):
 
 def D(value):
     return Decimal(str(value))
+
+
+def confirm_opening(shift, amount=0):
+    """Ghi tiền đầu ca cho ca thử: từ 28/11/2026 thu tiền mặt cần ca đã xác nhận tiền đầu ca (QA BUG-08).
+    Ghi thẳng bút toán như thu ngân đã làm ở màn Ca của tôi; test riêng về tiền đầu ca thì không gọi hàm này."""
+    from apps.shifts.models import CashEntry
+
+    return CashEntry.objects.create(store=shift.store, shift=shift, kind=CashEntry.Kind.OPENING, amount=amount,
+                                    actor=shift.approver or shift.payment_authorizer or User.objects.order_by("pk").first(),
+                                    operation_key=f"dau-ca-thu-{shift.pk}")
+
+
+def clock_in(*users, role=None):
+    """Cho nhân viên vào ca (màn Tạo đơn chặn người chưa vào ca, quyết định 28/11/2026 – QA BUG-09)."""
+    from django.utils import timezone
+
+    from apps.staff.models import Attendance
+
+    for user in users:
+        Attendance.objects.create(store=Store.get_default(), user=user, role=role or user.role,
+                                  clock_in=timezone.now() - timezone.timedelta(minutes=5))

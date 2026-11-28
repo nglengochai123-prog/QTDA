@@ -75,6 +75,8 @@ class ExceptionRuleTests(Base):
 
 
 class ReviewAndLossTests(Base):
+    auto_opening = False  # các ca trong lớp này tự ghi tiền đầu ca
+
     def make_exception(self, amount=120000, order=None):
         return control.open_exception(ExceptionCase.Kind.PAID_CANCELLED, rule="thử", employee=self.cashier,
                                       shift=self.shift, amount=amount, order=order, one_per_scope=False)

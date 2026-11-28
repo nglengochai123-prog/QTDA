@@ -93,6 +93,7 @@ MIDDLEWARE = [
     "apps.core.middleware.FormErrorMiddleware",
     "apps.core.middleware.SessionExpiryMiddleware",
     "apps.core.middleware.SchemaOutdatedMiddleware",
+    "apps.core.reqcache.RequestCacheMiddleware",
 ]
 CSRF_FAILURE_VIEW = "apps.core.middleware.csrf_failure"
 
@@ -245,6 +246,10 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_SSL_REDIRECT = env_bool("DJANGO_SECURE_SSL_REDIRECT", True)
+    # HSTS: trình duyệt chỉ dùng HTTPS cho quán trong thời gian này. Mặc định 1 năm; đặt 0 nếu chưa chắc tên miền
+    # luôn có HTTPS (bật rồi thì trình duyệt nhớ, tắt không có tác dụng ngay).
+    SECURE_HSTS_SECONDS = int(env("DJANGO_HSTS_SECONDS", "31536000"))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("DJANGO_HSTS_SUBDOMAINS", False)
 
 
 LOGGING = {

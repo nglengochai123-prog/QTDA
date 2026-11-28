@@ -20,7 +20,7 @@ from apps.core.idempotency import OperationKeyError
 from apps.inventory import stock
 from apps.orders import adjustments, payments, services
 from apps.orders.models import AdjustmentReason, AdjustmentRequest, Order, Payment
-from apps.orders.tests.helpers import PASSWORD, D, build_menu, cart, levels
+from apps.orders.tests.helpers import PASSWORD, D, build_menu, cart, confirm_opening, levels
 from apps.shifts.models import Shift
 
 THREADS = 6
@@ -126,6 +126,7 @@ class ConcurrencyTests(TransactionTestCase):
         line = Order.objects.get(pk=result["order_id"]).lines.get()
         services.complete_line(self.d["barista"], key(), line.pk, 1, 0)
         services.serve_line(self.d["waiter"], key(), line.pk)
+        confirm_opening(self.shift)  # thu tiền mặt cần tiền đầu ca (28/11/2026)
         results = run_parallel(lambda i: payments.pay_table(self.cashier, key(), self.d["table"].pk, "tien_mat"))
         self.assertEqual(Payment.objects.count(), 1, results)
         self.assertEqual(Payment.objects.get().amount, 25000)

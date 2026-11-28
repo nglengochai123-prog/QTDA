@@ -394,7 +394,7 @@ def pay_supplier(user, payable_id, amount, source, paid_on=None, *, operation_ke
     def action():
         from apps.shifts.models import CashEntry, ExpenseCategory, Shift
 
-        payable = Payable.objects.select_for_update().select_related("receipt").get(pk=payload["payable"])
+        payable = Payable.objects.select_for_update(of=("self",)).select_related("receipt").get(pk=payload["payable"])
         value = _vnd(amount, "Số tiền")
         if value > payable.remaining():
             raise ValidationError(f"Số tiền vượt phần còn phải trả ({payable.remaining():,} đ).".replace(",", "."))

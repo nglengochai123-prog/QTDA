@@ -34,7 +34,7 @@ def _lock(ingredient_ids):
     ids = sorted(set(ingredient_ids))
     for ingredient_id in ids:
         IngredientStock.objects.get_or_create(ingredient_id=ingredient_id)
-    rows = IngredientStock.objects.select_for_update().select_related("ingredient").filter(ingredient_id__in=ids)
+    rows = IngredientStock.objects.select_for_update(of=("self",)).select_related("ingredient").filter(ingredient_id__in=ids)
     return {row.ingredient_id: row for row in rows.order_by("ingredient_id")}
 
 

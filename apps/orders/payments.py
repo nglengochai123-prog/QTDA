@@ -8,7 +8,7 @@ from apps.audit.services import record
 from apps.catalog.models import Table
 from apps.core import numbers
 from apps.core.idempotency import run_once
-from apps.shifts.models import Shift
+from apps.shifts.models import Shift, require_opening_cash
 
 from . import adjustments
 from .models import AdjustmentRequest, Order, Payment
@@ -20,13 +20,25 @@ def open_orders(table):
             .prefetch_related("lines__options").order_by("created_at"))
 
 
-def bill(table):
-    """Tình trạng thanh toán của một bàn: số tiền, lý do chưa thanh toán được, yêu cầu quá hạn mọi cấp."""
-    orders = list(open_orders(table))
+def _pending_by_order(order_ids):
+    """Yêu cầu chờ duyệt đầu tiên của từng đơn, đọc một lần cho cả danh sách (màn Thu ngân không hỏi từng đơn)."""
+    pending = {}
+    for req in (AdjustmentRequest.objects.filter(order_id__in=order_ids, status=AdjustmentRequest.Status.PENDING)
+                .select_related("line", "order__table", "order__shift", "target_table").order_by("pk")):
+        pending.setdefault(req.order_id, req)
+    return pending
+
+
+def bill(table, orders=None, pending=None):
+    """Tình trạng thanh toán của một bàn: số tiền, lý do chưa thanh toán được, yêu cầu quá hạn mọi cấp.
+
+    `orders` và `pending` do `tables_with_bills` đọc sẵn cho mọi bàn; gọi lẻ thì tự đọc."""
+    orders = list(open_orders(table)) if orders is None else orders
+    pending = _pending_by_order([o.pk for o in orders]) if pending is None else pending
     blockers, exhausted, requests = [], [], []
     for order in orders:
         order.refresh_status()
-        req = order.pending_request()
+        req = pending.get(order.pk)
         if req is not None:
             requests.append(req)
             if req.current_level == AdjustmentRequest.Level.EXHAUSTED:
@@ -50,9 +62,15 @@ def bill(table):
 
 
 def tables_with_bills():
-    table_ids = (Order.objects.filter(payment__isnull=True)
-                 .exclude(status__in=[Order.Status.PAID, Order.Status.CANCELLED]).values("table_id"))
-    return [bill(t) for t in Table.objects.filter(pk__in=table_ids).order_by("sort_order", "code")]
+    orders = list(Order.objects.filter(payment__isnull=True)
+                  .exclude(status__in=[Order.Status.PAID, Order.Status.CANCELLED])
+                  .select_related("table", "shift").prefetch_related("lines__options").order_by("created_at"))
+    pending = _pending_by_order([o.pk for o in orders])
+    by_table = {}
+    for order in orders:
+        by_table.setdefault(order.table_id, []).append(order)
+    tables = sorted({o.table_id: o.table for o in orders}.values(), key=lambda t: (t.sort_order, t.code))
+    return [bill(t, by_table[t.pk], pending) for t in tables]
 
 
 def cashier_signature(bills=None):
@@ -83,10 +101,12 @@ def _record_payment(user, operation_key, table, method, kind):
     orders = list(open_orders(table).select_for_update())
     if not orders:
         raise ValidationError("Bàn này không còn đơn chờ thanh toán.")
-    shift = Shift.objects.operating()
+    shift = Shift.objects.operating_locked()
     if shift is None:
         # Tiền thu phải vào quỹ một ca để đối soát (BRU-01, BRU-10); không có ca mở thì không ghi được.
         raise ValidationError("Chưa có ca đang mở; Chủ quán khai báo ca rồi mới thu tiền.")
+    if method == Payment.Method.CASH:
+        require_opening_cash(shift)
     payment = Payment.objects.create(
         store=table.store, table=table, method=method, kind=kind, amount=sum(o.total for o in orders),
         cashier=user, shift=shift, operation_key=operation_key)

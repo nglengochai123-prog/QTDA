@@ -14,6 +14,8 @@ from apps.shifts import services as shift_services
 
 
 class AlertTests(Base):
+    auto_opening = False  # các ca trong lớp này tự ghi tiền đầu ca
+
     def out_of_stock(self):
         with mock.patch("apps.inventory.operations.in_opening_hours", return_value=True), \
                 mock.patch("apps.control.alerts.timezone.now", wraps=timezone.now):

@@ -134,7 +134,7 @@ def cancel_handover(user, entry_id, reason=""):
 
     Khoản chưa xác nhận chưa làm đổi số tiền phải có trong két, nên bỏ đi không làm sai số liệu ca; nội dung khoản
     được giữ trong nhật ký. Người nhận, người ghi và Chủ quán làm được, khi ca còn mở."""
-    entry = (CashEntry.objects.select_for_update().select_related("shift", "receiver", "actor")
+    entry = (CashEntry.objects.select_for_update(of=("self",)).select_related("shift", "receiver", "actor")
              .get(pk=entry_id, kind=CashEntry.Kind.HANDOVER))
     if entry.confirmed_at is not None:
         raise ValidationError("Khoản nộp đã được người nhận xác nhận; không bỏ được.")
@@ -187,7 +187,7 @@ def confirm_refund(user, operation_key, refund_id, note=""):
         if refund.status == Refund.Status.PAID:
             return {"refund": refund.pk, "shift": refund.shift_id, "applied": False,
                     "message": "Khoản này đã được ghi hoàn trước đó; không ghi thêm."}
-        shift = Shift.objects.operating()
+        shift = Shift.objects.operating_locked()
         if shift is None:
             raise ValidationError("Không có ca đang mở; mở ca rồi mới ghi đã hoàn tiền.")
         warning = _refund_cash_short(shift, refund)
@@ -309,7 +309,7 @@ def carry_over(user, order_id, to_shift_id, reason):
 
     if not reason.strip():
         raise ValidationError("Ghi lý do chuyển đơn sang ca sau.")
-    order = Order.objects.select_for_update().select_related("shift").get(pk=order_id)
+    order = Order.objects.select_for_update(of=("self",)).select_related("shift").get(pk=order_id)
     target = Shift.objects.get(pk=to_shift_id, status=Shift.Status.OPEN)
     if order.shift_id == target.pk:
         raise ValidationError("Chọn ca kế tiếp khác ca hiện tại.")
@@ -437,7 +437,7 @@ def request_correction(user, operation_key, shift_id, counted_cash, transfer_rec
                "out": str(transfer_refunded or 0), "reason": str(reason or "").strip()}
 
     def action():
-        report = ShiftReport.objects.select_for_update().select_related("shift").get(shift_id=payload["shift"])
+        report = ShiftReport.objects.select_for_update(of=("self",)).select_related("shift").get(shift_id=payload["shift"])
         if not payload["reason"]:
             raise ValidationError("Ghi lý do đính chính báo cáo cuối ca.")
         if report.corrections.filter(status=ShiftReportCorrection.Status.PENDING).exists():
@@ -475,7 +475,7 @@ def _approve_correction(c, user, note):
 def decide_correction(user, correction_id, approve, note=""):
     if not user.is_owner:
         raise ValidationError("Chỉ Chủ quán duyệt đính chính báo cáo cuối ca.")
-    c = ShiftReportCorrection.objects.select_for_update().select_related("report__shift").get(pk=correction_id)
+    c = ShiftReportCorrection.objects.select_for_update(of=("self",)).select_related("report__shift").get(pk=correction_id)
     wanted = ShiftReportCorrection.Status.APPROVED if approve else ShiftReportCorrection.Status.REJECTED
     if c.status == wanted:
         return c

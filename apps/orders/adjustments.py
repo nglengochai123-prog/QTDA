@@ -330,7 +330,7 @@ def decide(user, operation_key, request_id, approve, note=""):
     payload = {"request": int(request_id), "approve": bool(approve), "note": str(note or "")[:255]}
 
     def action():
-        req = AdjustmentRequest.objects.select_for_update().select_related("order", "reason").get(pk=payload["request"])
+        req = AdjustmentRequest.objects.select_for_update(of=("self",)).select_related("order", "reason").get(pk=payload["request"])
         if req.status != Status.PENDING:
             return {"request": req.pk, "status": req.get_status_display(), "message": "Yêu cầu đã được xử lý trước đó."}
         if not can_decide(user, req):

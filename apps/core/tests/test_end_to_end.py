@@ -29,6 +29,8 @@ from apps.shifts.models import CashEntry, Discrepancy, Refund
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class EndToEndTests(Base):
+    auto_opening = False  # các ca trong lớp này tự ghi tiền đầu ca
+
     def once(self, fn, *args, **kwargs):
         """Gọi một thao tác hai lần với cùng mã nghiệp vụ, như khi mạng mất phản hồi rồi gửi lại."""
         op = key()

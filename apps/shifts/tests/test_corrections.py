@@ -15,6 +15,8 @@ from apps.shifts.models import Discrepancy, Shift, ShiftReportCorrection
 
 
 class CorrectionTests(Base):
+    auto_opening = False  # các ca trong lớp này tự ghi tiền đầu ca
+
     def closed_with_report(self, counted):
         shift_services.add_cash_entry(self.cashier, key(), self.shift.pk, "dau_ca", 500000)
         shift_services.close_shift(self.cashier, self.shift.pk)
@@ -90,6 +92,8 @@ class TargetSeparationTests(Base):
 
 
 class ScreenTests(Base):
+    auto_opening = False  # các ca trong lớp này tự ghi tiền đầu ca
+
     def test_screens_render_refund_and_correction(self):
         from django.urls import reverse
 

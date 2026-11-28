@@ -24,7 +24,7 @@ from apps.audit.models import Action
 from apps.audit.services import record
 from apps.core import numbers
 from apps.core.idempotency import run_once
-from apps.shifts.models import Refund, Shift
+from apps.shifts.models import Refund, Shift, require_opening_cash
 
 from .models import AdjustmentRequest, Order, OrderLine, Payment, PrepaidCharge
 
@@ -102,9 +102,11 @@ def check_spec(spec):
 
 def record_prepayment(user, operation_key, order, spec):
     """Ghi tiền thu trước cho đơn vừa tạo, trong cùng giao dịch với việc tạo đơn và giữ kho."""
-    shift = Shift.objects.operating()
+    shift = Shift.objects.operating_locked()
     if shift is None:
         raise ValidationError("Chưa có ca đang mở; Chủ quán khai báo ca rồi mới thu tiền.")
+    if spec["method"] == Payment.Method.CASH:
+        require_opening_cash(shift)
     if spec["cash_received"] is not None and spec["cash_received"] < order.total:
         raise ValidationError(f"Tiền khách đưa {numbers.fmt(spec['cash_received'], 0)} đ ít hơn số phải thu "
                               f"{numbers.fmt(order.total, 0)} đ.")
@@ -190,15 +192,17 @@ def collect_charge(user, operation_key, charge_id, method, transfer_confirmed=Fa
         problem = duty_problem(user)
         if problem:
             raise PrepayDenied(problem)
-        charge = PrepaidCharge.objects.select_for_update().select_related("order", "order__table").get(
+        charge = PrepaidCharge.objects.select_for_update(of=("self",)).select_related("order", "order__table").get(
             pk=payload["charge"])
         if charge.status == PrepaidCharge.Status.COLLECTED:
             return {"charge": charge.pk, "applied": False, "amount": charge.amount,
                     "message": "Khoản này đã được thu trước đó; không thu thêm."}
         _check_method(method, transfer_confirmed)
-        shift = Shift.objects.operating()
+        shift = Shift.objects.operating_locked()
         if shift is None:
             raise ValidationError("Chưa có ca đang mở; Chủ quán khai báo ca rồi mới thu tiền.")
+        if method == Payment.Method.CASH:
+            require_opening_cash(shift)
         received = cash_received if method == Payment.Method.CASH else None
         if received is not None and received < charge.amount:
             raise ValidationError(f"Tiền khách đưa ít hơn khoản thu thêm {numbers.fmt(charge.amount, 0)} đ.")
@@ -270,7 +274,7 @@ def complete_order(user, operation_key, order_id):
         problem = duty_problem(user)
         if problem:
             raise PrepayDenied(problem)
-        order = Order.objects.select_for_update().select_related("table", "payment").get(pk=payload["order"])
+        order = Order.objects.select_for_update(of=("self",)).select_related("table", "payment").get(pk=payload["order"])
         if order.status == Order.Status.PAID and order.is_prepaid:
             return {"order": order.pk, "code": order.code, "applied": False, "delivered": 0,
                     "message": f"Đơn {order.code} đã hoàn tất trước đó."}

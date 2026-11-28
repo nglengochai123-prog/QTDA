@@ -15,7 +15,7 @@ from apps.orders.models import (AdjustmentReason, AdjustmentRequest, Order, Orde
                                 Payment, PostPrepCancellation)
 from apps.shifts.models import Shift
 
-from .helpers import PASSWORD, D, build_menu, cart, levels
+from .helpers import PASSWORD, D, build_menu, cart, confirm_opening, levels
 
 
 def key():
@@ -23,6 +23,9 @@ def key():
 
 
 class Base(TestCase):
+    # Ca thử đã xác nhận tiền đầu ca 0 đ; lớp nào tự ghi tiền đầu ca (kiểm quỹ) thì đặt False.
+    auto_opening = True
+
     def setUp(self):
         self.d = build_menu()
         mk = lambda name, role: User.objects.create_user(name, password=PASSWORD, role=role)  # noqa: E731
@@ -34,8 +37,15 @@ class Base(TestCase):
         self.shift = Shift.objects.create(store=self.d["store"], name="Ca chiều", starts_at=now - timedelta(hours=1),
                                           ends_at=now + timedelta(hours=4), approver=self.manager,
                                           backup_approver=self.backup, payment_authorizer=self.authorizer)
+        if self.auto_opening:
+            confirm_opening(self.shift)  # thu tiền mặt cần ca đã xác nhận tiền đầu ca (28/11/2026)
         self.reason = AdjustmentReason.objects.get(name="Khách đổi ý")
         self.other_table = Table.objects.create(store=self.d["store"], code="7")
+
+    def ensure_opening(self):
+        """Ghi tiền đầu ca 0 đ nếu ca chưa có (lớp tắt auto_opening mà vẫn cần thu tiền mặt)."""
+        if not self.shift.cash_entries.filter(kind="dau_ca").exists():
+            confirm_opening(self.shift)
 
     def order(self, quantity=1, **kw):
         result, _ = services.submit_order(self.d["waiter"], key(), cart(self.d, quantity=quantity, **kw))

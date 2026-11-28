@@ -20,7 +20,7 @@ from apps.inventory.models import (Ingredient, IngredientKind, RecipeLine, Recip
                                    SemiRecipeLine, ShortageCase, StockLot, StockMovement, Waste)
 from apps.orders import services
 from apps.orders.models import OrderLine
-from apps.orders.tests.helpers import PASSWORD, cart, levels
+from apps.orders.tests.helpers import PASSWORD, cart, clock_in, levels
 
 from .test_planning import PlanBase, at
 
@@ -105,6 +105,7 @@ class ProduceTests(SemiBase):
             services.submit_order(self.d["waiter"], key(), cart(self.d))  # chưa làm mẻ cốt nào
         short = {s["ingredient"]: s for s in ctx.exception.shortages}
         self.assertTrue(short["Cà phê cốt"]["semi"])
+        clock_in(self.d["waiter"])
         self.client.login(username=self.d["waiter"].username, password=PASSWORD)
         r = self.client.post(reverse("orders:submit"), {"operation_key": key(), "order": cart(self.d)},
                              content_type="application/json")

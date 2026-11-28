@@ -2151,7 +2151,7 @@ a.stat:hover { box-shadow: var(--shadow-card), 0 4px 12px rgba(0, 0, 0, 0.06); }
   .sub-tabs { background: #fff; }
   .sub-tabs a[aria-current="page"] { border-bottom-color: var(--fg); }
   .app-nav > ul > li > a[aria-current="page"] { color: var(--fg); }
-  .app-main { padding: 1rem 0.75rem 2rem; }
+  .app-main { padding: 1rem 0.875rem 2rem; } /* khớp lề âm -0.875rem của các thanh tràn mép (form-actions, steps) */
   .ready-banner { margin: 0.6rem 0.75rem 0; }
 }
 

@@ -19,7 +19,7 @@ from apps.shifts import services as shift_services
 from apps.shifts.models import Refund, Shift
 from apps.staff.models import Attendance
 
-from .helpers import PASSWORD, D, build_menu, cart, levels
+from .helpers import PASSWORD, D, build_menu, cart, clock_in, confirm_opening, levels
 
 
 def key():
@@ -35,6 +35,9 @@ def transfer(confirmed):
 
 
 class Base(TestCase):
+    # Ca thử đã xác nhận tiền đầu ca 0 đ; lớp nào tự ghi tiền đầu ca (kiểm quỹ) thì đặt False.
+    auto_opening = True
+
     def setUp(self):
         self.d = build_menu()
         self.owner = self.d["owner"]
@@ -42,6 +45,9 @@ class Base(TestCase):
         now = timezone.now()
         self.shift = Shift.objects.create(store=self.d["store"], name="Ca chiều", starts_at=now - timedelta(hours=1),
                                           ends_at=now + timedelta(hours=4), approver=self.owner)
+        if self.auto_opening:
+            confirm_opening(self.shift)  # thu tiền mặt cần ca đã xác nhận tiền đầu ca (28/11/2026)
+        clock_in(self.d["waiter"])  # màn Tạo đơn chặn người chưa vào ca
         # Thu ngân đang trong ca với vai trò Thu ngân: phân công hợp lệ để thu trước.
         Attendance.objects.create(store=self.d["store"], user=self.cashier, role=Role.THU_NGAN,
                                   clock_in=now - timedelta(minutes=30))

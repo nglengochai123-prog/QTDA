@@ -119,11 +119,12 @@ class CashFundTests(ShiftBase):
         self.assertEqual(shift_services.cash_on_hand(self.shift), 0)
 
     def test_mistyped_opening_cash_can_be_corrected_with_a_reason(self):
-        self.sell("tien_mat")  # bán trước khi kịp xác nhận tiền đầu ca
-        self.entry("chi", 20000, category="sua_chua", note="Mua bóng đèn")
         self.client.force_login(self.manager)
-        self.assertContains(self.client.get(f"/ca/{self.shift.pk}/"), "Xác nhận tiền đầu ca")  # vẫn xác nhận được
+        self.assertContains(self.client.get(f"/ca/{self.shift.pk}/"), "Xác nhận tiền đầu ca")
         self.entry("dau_ca", 50000)  # đúng ra là 500.000
+        # Từ 28/11/2026 thu tiền mặt cần tiền đầu ca trước, nên bán và chi sau khi đã (gõ nhầm) xác nhận.
+        self.sell("tien_mat")
+        self.entry("chi", 20000, category="sua_chua", note="Mua bóng đèn")
         with self.assertRaisesMessage(ValidationError, "chỉ còn 55.000 đ"):
             self.entry("chi", 100000, category="sua_chua", note="Sửa vòi nước")
         self.assertContains(self.client.get(f"/ca/{self.shift.pk}/"), "Sửa tiền đầu ca")

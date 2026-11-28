@@ -77,6 +77,7 @@ class NotifyOnEventsTests(TestCase):
         from apps.orders.tests.test_adjust_pay import Base
 
         base = Base(methodName="setUp")
+        base.auto_opening = False  # test này tự ghi tiền đầu ca trước khi kết ca
         base.setUp()
         with mock.patch("apps.core.push.send_to_user", return_value=(1, "")) as send:
             with self.captureOnCommitCallbacks(execute=True):

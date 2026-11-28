@@ -37,6 +37,8 @@ class BackupBase(Base):
 
 
 class BackupSlipTests(BackupBase):
+    auto_opening = False  # các ca trong lớp này tự ghi tiền đầu ca
+
     def test_ac12_link_existing_and_create_new_orders_once(self):
         self.issue()
         online_key = key()
@@ -133,6 +135,8 @@ class BackupScreenTests(Base):
 
 class HistoricalSlipTests(BackupBase):
     """Kích cỡ, tùy chọn, giá và định mức theo thời điểm bán; thiếu lịch sử thì chờ xác nhận."""
+    auto_opening = False  # các ca trong lớp này tự ghi tiền đầu ca
+
 
     def slip(self, number, sold_at, lines, code="", op=None):
         payload = {"number": number, "operation_code": code, "sold_at": sold_at.isoformat(),

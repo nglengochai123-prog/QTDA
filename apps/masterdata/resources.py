@@ -251,6 +251,18 @@ def _item_status(item):
     return "Đủ điều kiện"
 
 
+def _check_selling_prices(item):
+    """Món Đang bán không được có cỡ đang dùng giá 0 (QA BUG-01): kiểm theo giá vừa lưu ở dòng kích cỡ, vì kiểm tra
+    của form món chạy trước khi dòng kích cỡ được lưu nên chỉ thấy giá cũ. Thêm cỡ mới cho món đang bán thì vẫn được
+    (định mức của cỡ mới khai ở màn Định mức sau)."""
+    if item.status != MenuItem.Status.ON_SALE:
+        return
+    zero = [s.name for s in item.active_sizes() if not s.price]
+    if zero:
+        raise ValidationError(f"Món đang bán không được để giá 0 đ: cỡ {', '.join(zero)}. Nhập giá, hoặc tắt cỡ đó, "
+                              "hoặc chuyển món sang Tạm ngừng.")
+
+
 register(Resource(
     key="mon", title="Món và giá", singular="Món", model=MenuItem,
     fields=["name", "group", "status", "no_ingredients", "option_groups", "sort_order"],
@@ -261,6 +273,7 @@ register(Resource(
     queryset=lambda: MenuItem.objects.select_related("group").prefetch_related("sizes"),
     inlines=[Inline(ItemSize, ["name", "price", "sort_order", "is_active"], "Kích cỡ và giá bán", extra=2)],
     note="Đổi giá được ghi vào lịch sử giá; đơn và phiếu dự phòng cũ vẫn tính theo giá lúc bán.",
+    validate_saved=lambda item: _check_selling_prices(item),
 ))
 
 register(Resource(

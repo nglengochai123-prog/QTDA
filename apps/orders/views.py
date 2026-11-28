@@ -84,6 +84,7 @@ def create(request):
         # Chỉ người có quyền thu tiền thấy lựa chọn Thanh toán ngay; máy chủ vẫn kiểm tra lại khi gửi.
         "can_prepay": can_pay, "prepay_problem": duty_problem(request.user) if can_pay else "",
         "no_shift": Shift.objects.operating() is None,
+        "attendance_problem": services.attendance_problem(request.user),
     })
 
 
@@ -104,7 +105,8 @@ def submit(request):
     from .prepaid import PrepayDenied, log_denied
 
     try:
-        result, repeated = services.submit_order(request.user, body.get("operation_key", ""), body.get("order") or {})
+        result, repeated = services.submit_order(request.user, body.get("operation_key", ""), body.get("order") or {},
+                                                check_attendance=True)
     except PrepayDenied as error:
         log_denied(request, error)
         return JsonResponse({"ok": False, "error": str(error) or "Bạn không được thu tiền trước.",

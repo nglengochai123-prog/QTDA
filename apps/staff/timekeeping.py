@@ -134,16 +134,22 @@ def valid_hours(att):
     return (Decimal(seconds) / 3600).quantize(Decimal("0.01"))
 
 
-def presence(start, end, now=None):
+def presence(start, end, now=None, rows=None, forgotten=None):
     """Số người có mặt theo vai trò trong khung [start, end): làm ít nhất nửa khung (GD-20).
 
     Người đang trong ca (chưa ra ca) tính tới lúc này, để khung đang diễn ra của hôm nay không ghi 0 người. Lượt quên
-    ra ca (Thiếu giờ ra, AC-77) không được tính vì không biết lúc nào người đó thật sự về."""
+    ra ca (Thiếu giờ ra, AC-77) không được tính vì không biết lúc nào người đó thật sự về.
+
+    `rows` (lượt chấm công phủ cả khoảng cần xét) và `forgotten` cho phép tính nhiều khung một lần đọc CSDL."""
     now = now or timezone.now()
     half = (min(end, max(now, start)) - start) / 2 if start < now < end else (end - start) / 2
-    forgotten = _forgotten_before(now)
+    forgotten = _forgotten_before(now) if forgotten is None else forgotten
     counts = {r: 0 for r in WORK_ROLES}
-    for att in Attendance.objects.filter(clock_in__lt=end).exclude(clock_out__lte=start):
+    if rows is None:
+        rows = Attendance.objects.filter(clock_in__lt=end).exclude(clock_out__lte=start)
+    for att in rows:
+        if att.clock_in >= end or (att.clock_out is not None and att.clock_out <= start):
+            continue
         if att.clock_out is None:
             if att.clock_in < forgotten:
                 continue

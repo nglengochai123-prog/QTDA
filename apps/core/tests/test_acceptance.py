@@ -25,7 +25,7 @@ from apps.core import integrity
 from apps.inventory import stock
 from apps.inventory.models import Receipt, StockCount, Supplier
 from apps.orders.models import AdjustmentReason, AdjustmentRequest, BackupSlip, Order, Payment
-from apps.orders.tests.helpers import PASSWORD, D, build_menu, cart, levels
+from apps.orders.tests.helpers import PASSWORD, D, build_menu, cart, clock_in, levels
 from apps.reports import services as reports
 from apps.shifts import services as shift_services
 from apps.shifts.models import CashEntry, Refund, Shift, ShiftReport
@@ -43,6 +43,7 @@ class FiveRoleAcceptanceTests(TestCase):
         self.owner, self.waiter, self.barista = self.d["owner"], self.d["waiter"], self.d["barista"]
         self.cashier = mk("thungan", Role.THU_NGAN)  # Không còn Quản lý ca (12/10/2026): Thu ngân và Chủ quán lo ca.
         self.table7 = Table.objects.create(store=self.d["store"], code="7")
+        clock_in(self.waiter)  # màn Tạo đơn chặn người chưa vào ca (28/11/2026)
         self.reason = AdjustmentReason.objects.get(name="Khách đổi ý")
 
     # ---------- tiện ích gửi yêu cầu như trình duyệt ----------
@@ -201,6 +202,9 @@ class FiveRoleAcceptanceTests(TestCase):
         self.as_(self.waiter)
         self.post_json("orders:serve", {"operation_key": key(), "line": late_line.pk})
         self.as_(self.cashier)
+        # Ca B nhận két: xác nhận tiền đầu ca trước khi thu tiền mặt (quy tắc 28/11/2026).
+        self.client.post(reverse("shifts:cash_entry", args=[shift_b.pk]),
+                         {"operation_key": key(), "kind": "dau_ca", "amount": "0"})
         self.client.post(reverse("orders:pay", args=[self.table7.pk]), {"operation_key": key(), "method": "tien_mat"})
         self.assertEqual(Payment.objects.get(orders=late).shift, shift_b)
 
@@ -232,7 +236,7 @@ class FiveRoleAcceptanceTests(TestCase):
         self.assertEqual(received, 75000)  # bàn 5 (sau đó hủy và hoàn), phiếu 0151, đơn chuyển ca
         self.assertEqual((revenue["refunds"], revenue["net"]), (25000, 50000))  # hoàn trừ đúng một lần
         self.assertEqual(Order.objects.get(pk=order_a.pk).status, "da_huy")
-        self.assertEqual(CashEntry.objects.filter(kind="dau_ca").count(), 1)
+        self.assertEqual(CashEntry.objects.filter(kind="dau_ca", shift=shift_a).count(), 1)  # gửi lại không ghi hai lần
         self.assertTrue(ExceptionCase.objects.filter(kind="huy_sau_tt").exists())  # hủy sau thanh toán
         self.assertEqual(stock.ledger_problems(), [])
         self.assertEqual(integrity.problems(), [])

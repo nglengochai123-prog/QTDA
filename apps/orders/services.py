@@ -48,6 +48,9 @@ def build_lines(payload, at=None, allow_unsellable=False, missing=None, override
         size = item.active_sizes().filter(pk=_int(raw.get("size"), "Kích cỡ")).first()
         if size is None:
             raise ValidationError(f"Dòng {index}: kích cỡ không hợp lệ cho {item.name}.")
+        if not allow_unsellable and not size.price:
+            # Chốt ở lúc bán: giá 0 lọt vào bằng đường khác (trang quản trị, nhập tệp) cũng không ra đơn 0 đ.
+            raise ValidationError(f"Dòng {index}: {item.name} cỡ {size.name} chưa có giá bán; báo Chủ quán nhập giá.")
         quantity = _int(raw.get("quantity", 1), "Số ly")
         if not 1 <= quantity <= MAX_CUPS_PER_LINE:
             raise ValidationError(f"Dòng {index}: số ly phải từ 1 đến {MAX_CUPS_PER_LINE}.")
@@ -123,8 +126,24 @@ def _next_code(store):
             return code
 
 
-def submit_order(user, operation_key, payload):
+def attendance_problem(user, now=None):
+    """Chuỗi rỗng nếu `user` được gửi đơn lúc này, không thì lý do (quyết định của Chủ quán 28/11/2026):
+    nhân viên phải đang trong ca, tức đã bấm Vào ca và lượt đó chưa bị coi là quên ra ca. Chủ quán luôn được."""
+    from apps.staff import timekeeping
+
+    if user.is_owner:
+        return ""
+    att = timekeeping.open_attendance(user)
+    if att is None or timekeeping.is_forgotten(att, now):
+        return "Bạn chưa vào ca. Mở Chấm công, bấm Vào ca rồi mới gửi đơn."
+    return ""
+
+
+def submit_order(user, operation_key, payload, check_attendance=False):
     """Nhận đơn và giữ nguyên liệu của cả đơn trong một giao dịch. Thiếu thì không nhận gì.
+
+    `check_attendance`: màn Tạo đơn bật cờ này để chặn nhân viên chưa vào ca. Kiểm tra nằm trong `action` nên
+    gửi lại đơn đã nhận (cùng mã) vẫn trả đúng đơn đó kể cả khi người gửi vừa ra ca.
 
     `payload["payment"]` = {"mode": "truoc", "method", "transfer_confirmed", "cash_received"} thì thu tiền ngay trong
     cùng giao dịch (prepaid.py): lỗi ở bất kỳ bước nào thì không có đơn, không giữ kho, không có tiền.
@@ -159,12 +178,16 @@ def submit_order(user, operation_key, payload):
             if problem:
                 raise prepaid.PrepayDenied(problem)  # kiểm tra ở máy chủ, không chỉ ẩn nút trên màn hình
             prepaid.check_spec(spec)
+        if check_attendance:
+            problem = attendance_problem(user)
+            if problem:
+                raise ValidationError(problem)
         stock.reserve(_totals(lines))
         from apps.shifts.models import Shift
 
         order = Order.objects.create(
             store=table.store, code=_next_code(table.store), table=table, note=clean_payload["note"],
-            created_by=user, operation_key=operation_key, shift=Shift.objects.operating(),
+            created_by=user, operation_key=operation_key, shift=Shift.objects.operating_locked(),
             total=sum(l["unit_price"] * l["quantity"] for l in lines))
         for position, line in enumerate(lines, start=1):
             order_line = OrderLine.objects.create(
@@ -219,7 +242,7 @@ def complete_line(user, operation_key, line_id, cups, expected_done):
     payload = {"line": int(line_id), "cups": int(cups), "expected_done": int(expected_done)}
 
     def action():
-        line = OrderLine.objects.select_for_update().select_related("order").get(pk=payload["line"])
+        line = OrderLine.objects.select_for_update(of=("self",)).select_related("order").get(pk=payload["line"])
         if line.done_quantity != payload["expected_done"]:
             return {"line": line.pk, "done": line.done_quantity, "applied": 0,
                     "message": "Dòng này vừa được cập nhật ở nơi khác; không trừ thêm."}
@@ -269,7 +292,7 @@ def serve_line(user, operation_key, line_id):
     payload = {"line": int(line_id)}
 
     def action():
-        line = OrderLine.objects.select_for_update().select_related("order", "order__table").get(pk=payload["line"])
+        line = OrderLine.objects.select_for_update(of=("self",)).select_related("order", "order__table").get(pk=payload["line"])
         if line.status == OrderLine.Status.SERVED:
             return {"line": line.pk, "applied": False, "message": "Món này đã được ghi mang ra."}
         if line.status != OrderLine.Status.DONE:

@@ -76,7 +76,8 @@ class ScreenTests(TestCase):
         self.assertContains(page, f'id="ca-{self.shifts[0].pk}"')
         self.assertContains(page, 'name="need_pha_che"')
         self.assertContains(page, "Bình")
-        ctx = board.build(self.week)
+        # Cố định lúc xem là trước hạn đăng ký: chạy sau hạn (sau trưa thứ Năm) thì bước Đăng ký đã xong là đúng.
+        ctx = board.build(self.week, now=sv.deadline_for(self.week) - timedelta(hours=1))
         self.assertEqual(len(ctx["grid"]), 2)  # Ca sáng, Ca chiều
         self.assertEqual(ctx["short"], 11)  # 6 ca × 2 pha chế, đã xếp 1
         self.assertEqual([s["key"] for s in ctx["steps"] if s["done"]], ["ca", "can"])

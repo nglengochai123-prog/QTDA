@@ -233,13 +233,18 @@ def _unallocated(amount, order_ids):
 
 
 def _payment_entries(start, end):
-    payments = list(Payment.objects.filter(created_at__gte=start, created_at__lt=end)
-                    .select_related('shift').prefetch_related('orders__created_by', 'orders__lines__item__group',
-                                                              'prepaid_charge__order'))
+    from django.db.models import prefetch_related_objects
+
+    payments = list(Payment.objects.filter(created_at__gte=start, created_at__lt=end).select_related('shift'))
     snapshots = {}
     for log in (AuditLog.objects.filter(object_type=ALLOCATION_TYPE, object_id__in=[str(p.pk) for p in payments],
                                         action=Action.CREATE).order_by('id')):
         snapshots.setdefault(log.object_id, log.after or {})
+    # Chỉ khoản thu chưa có sổ phân bổ mới cần đọc đơn và dòng món để ghép lại; khoản đã có sổ (gần như mọi khoản)
+    # không phải dựng hàng nghìn dòng món (báo cáo doanh thu chậm vì bước này, QA BUG-03).
+    unsnapped = [p for p in payments if not (snapshots.get(str(p.pk), {}).get('lines'))]
+    if unsnapped:
+        prefetch_related_objects(unsnapped, 'orders__created_by', 'orders__lines__item__group', 'prepaid_charge__order')
     result = []
     for p in payments:
         allocation = snapshots.get(str(p.pk), {}).get('lines') or []
@@ -311,10 +316,16 @@ def _reallocation_entries(start, end):
 
 def entries(start, end, *, refunds=True):
     """Mọi bút toán phân bổ trong [start, end): thu (dương), hoàn (âm), chuyển giữa các dòng (tổng 0)."""
-    result = _payment_entries(start, end) + _reallocation_entries(start, end)
-    if refunds:
-        result += _refund_entries(start, end)
-    return result
+    from apps.core.reqcache import get_or_set
+
+    def read():
+        result = _payment_entries(start, end) + _reallocation_entries(start, end)
+        if refunds:
+            result += _refund_entries(start, end)
+        return result
+
+    # Báo cáo doanh thu đọc cùng kỳ hai lần (bảng số và phân tích bán hàng); trả bản sao để nơi gọi sửa thoải mái.
+    return [dict(e) for e in get_or_set(("receipt_entries", start, end, refunds), read)]
 
 
 def key(entry, dim):

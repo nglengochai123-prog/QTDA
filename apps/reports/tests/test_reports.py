@@ -22,9 +22,13 @@ from apps.shifts.models import Discrepancy, Shift
 
 
 class ReportTests(Base):
+    auto_opening = False  # các ca trong lớp này tự ghi tiền đầu ca
+
     def paid(self, quantity=1, method="tien_mat"):
         order, line = self.order(quantity=quantity)
         self.finish(line)
+        if method == "tien_mat":
+            self.ensure_opening()
         payments.pay_table(self.cashier, key(), order.table_id, method, transfer_confirmed=True)
         return Order.objects.get(pk=order.pk)
 

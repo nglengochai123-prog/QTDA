@@ -10,7 +10,7 @@ from apps.inventory import stock
 from apps.orders import services
 from apps.orders.models import Order, OrderLine
 
-from .helpers import D, build_menu, cart, levels
+from .helpers import D, build_menu, cart, clock_in, levels
 
 
 def key():
@@ -82,6 +82,7 @@ class ShortageDetailTests(TestCase):
 class FlowViewTests(TestCase):
     def setUp(self):
         self.d = build_menu()
+        clock_in(self.d["waiter"])  # màn Tạo đơn chặn người chưa vào ca
         self.client.force_login(self.d["waiter"])
         body = {"operation_key": key(), "order": cart(self.d, quantity=1, options=[self.d["cream"]], note="ít ngọt")}
         self.code = self.client.post(reverse("orders:submit"), json.dumps(body), content_type="application/json").json()["code"]

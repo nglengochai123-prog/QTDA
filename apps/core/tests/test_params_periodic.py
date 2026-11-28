@@ -22,6 +22,8 @@ Level = AdjustmentRequest.Level
 
 
 class ParameterHistoryTests(Base):
+    auto_opening = False  # các ca trong lớp này tự ghi tiền đầu ca
+
     def test_value_has_effective_time_and_history(self):
         owner = self.d["owner"]
         self.assertEqual(params.get("cash_threshold"), 50000)

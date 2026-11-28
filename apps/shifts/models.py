@@ -28,6 +28,28 @@ class ShiftQuerySet(models.QuerySet):
                                     .select_related("approver", "backup_approver", "payment_authorizer")
                                     .order_by("-starts_at").first())
 
+    def operating_locked(self, at=None):
+        """Như `operating`, nhưng khóa dòng ca rồi đọc lại trạng thái; gọi trong giao dịch trước khi ghi đơn, tiền
+        hoặc hoàn tiền vào ca. Kết ca cũng khóa dòng này, nên nếu ca vừa kết xong thì ở đây thấy ca đã kết và chọn
+        lại, thay vì ghi vào ca đã chốt số (QA BUG-02). Trên SQLite cả tệp đã bị khóa khi ghi nên không cần thêm."""
+        for _ in range(3):
+            shift = self.operating(at)
+            if shift is None:
+                return None
+            locked = (self.model.objects.select_for_update(of=("self",)).filter(pk=shift.pk, status=Shift.Status.OPEN)
+                      .select_related("approver", "backup_approver", "payment_authorizer").first())
+            if locked is not None:
+                return locked
+        return None
+
+
+def require_opening_cash(shift):
+    """Thu tiền mặt chỉ khi ca đã xác nhận tiền đầu ca (quyết định của Chủ quán 28/11/2026): có số đầu ca thì
+    tiền trong két mới đối soát được ngay từ khoản thu đầu tiên. Chuyển khoản không cần."""
+    if not shift.cash_entries.filter(kind="dau_ca").exists():
+        raise ValidationError(f"{shift} chưa xác nhận tiền đầu ca. Vào Ca của tôi, ghi tiền đầu ca (két trống thì "
+                              "ghi 0) rồi mới thu tiền mặt.")
+
 
 class Shift(StoreScopedModel):
     class Status(models.TextChoices):
