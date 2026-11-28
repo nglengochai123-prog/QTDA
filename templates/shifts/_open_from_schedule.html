@@ -5,3 +5,10 @@
   </form>{% endfor %}
   <p class="hint">Mở đúng giờ và người phụ trách trong lịch đã công bố; Chủ quán được báo.</p>
 </div>{% endif %}
+{% if can_open_now %}<div class="open-from-schedule">
+  <form method="post" action="{% url 'shifts:open_now' %}" data-once data-online-only>{% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <button class="btn btn-primary" type="submit">Mở ca theo giờ hiện tại</button>
+  </form>
+  <p class="hint">Lúc này không có ca nào giữ quỹ và lịch không có ca để mở. Ca mới chạy từ bây giờ tới giờ đóng cửa; ca cũ chưa kết (nếu có) kết và điều chỉnh sau.</p>
+</div>{% endif %}

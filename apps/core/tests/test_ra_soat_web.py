@@ -8,7 +8,7 @@ from django.urls import reverse
 from apps.catalog.models import Option, OptionGroup
 from apps.orders import services
 from apps.orders.models import OrderLine
-from apps.orders.tests.helpers import PASSWORD, build_menu, cart
+from apps.orders.tests.helpers import PASSWORD, build_menu, cart, confirm_opening
 
 
 class TicketNameTests(TestCase):
@@ -198,6 +198,7 @@ class HomeOverdueShiftTests(TestCase):
         now = timezone.now()
         shift = Shift.objects.create(store=self.d["store"], name="Ca sáng", starts_at=now - timedelta(days=2),
                                      ends_at=now - timedelta(days=2) + timedelta(hours=8), approver=self.d["owner"])
+        confirm_opening(shift)  # ca đã thực sự mở rồi quên kết (ca lịch chưa ai mở thì không tính là việc quá hạn)
         html = self.client.get(reverse("core:notifications")).content.decode()
         self.assertIn(f"Việc quá hạn của ca sáng {timezone.localtime(shift.starts_at):%d/%m}", html)
 

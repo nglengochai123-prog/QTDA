@@ -18,7 +18,7 @@
       {% for v, l in reasons %}<label class="pick"><input type="radio" name="reason" value="{{ v }}" required><span>{{ l }}</span></label>{% endfor %}</div></fieldset>
     <label class="field"><span>Lô</span><select class="input" name="lot" data-lots-for="w-ing">
       <option value="">Để hệ thống chọn lô</option>{% for l in open_lots %}<option value="{{ l.pk }}" data-ingredient="{{ l.ingredient_id }}">{{ l.code }} · còn {{ l.remaining|floatformat:"-2g" }} {{ l.ingredient.get_unit_display }}{% if l.expiry_date %} · HSD {{ l.expiry_date|date:"d/m" }}{% if l.expiry_date < today %} (quá hạn){% endif %}{% endif %}</option>{% endfor %}</select>
-      <span class="hint">Chọn lô nếu biết hàng hỏng thuộc lô nào; để trống thì trừ lô quá hạn trước, rồi theo thứ tự lấy lô.</span></label>
+      <span class="hint">Mã lô do hệ thống tự đặt khi hàng vào kho: PN2811-01/2 là dòng 2 của phiếu nhập PN2811-01, BTP… là mẻ bán thành phẩm, KK… là hàng thừa khi kiểm kê, DK… là tồn đầu kỳ. Mã hiện sau khi lưu phiếu nhập; ghi lên thùng, hộp khi cất hàng nếu muốn chọn đúng lô. Để trống thì trừ lô quá hạn trước, rồi lô hết hạn sớm nhất. Xem hạn dùng và còn bao nhiêu của từng lô ở <a href="{% url 'inventory:lots' %}">Kho › Lô hàng</a>.</span></label>
     <label class="field"><span>Ghi chú</span><input class="input" name="note" maxlength="255" placeholder="Ví dụ: rơi hộp khi xếp tủ"></label>
     {% if is_owner %}<label class="check"><input type="checkbox" name="one_off" value="1"> Sự cố đơn lẻ, không tính vào hao hụt thường lệ khi ước tính</label>{% endif %}
     <button class="btn btn-primary" type="submit">Lưu hao hụt</button>

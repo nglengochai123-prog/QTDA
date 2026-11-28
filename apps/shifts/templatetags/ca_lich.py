@@ -13,10 +13,22 @@ def mo_ca_theo_lich(context):
 
     request = context.get("request")
     user = getattr(request, "user", None)
-    rows = []
+    from ..models import Shift
+
+    rows, can_open_now = [], False
     if user is not None and user.is_authenticated and user_can(user, Cap.CASH_FUND):
         rows = [{"ws": ws, "start": window(ws)[0], "end": window(ws)[1]} for ws in openable()]
-    return {"rows": rows, "csrf_token": context.get("csrf_token"), "next": request.get_full_path() if request else ""}
+        can_open_now = not rows and Shift.objects.operating() is None
+    return {"rows": rows, "can_open_now": can_open_now, "csrf_token": context.get("csrf_token"),
+            "next": request.get_full_path() if request else ""}
+
+
+@register.simple_tag
+def ca_cu_chua_ket():
+    """Ca đã bắt đầu, quá giờ kết thúc hơn 2 giờ mà chưa kết (cũ nhất trước)."""
+    from ..models import Shift
+
+    return list(Shift.objects.stale())
 
 
 @register.filter

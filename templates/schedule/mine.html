@@ -34,14 +34,24 @@
 {% for w in weeks %}
 <section class="card">
   <div class="card-head"><h2>{% if w.label %}{{ w.label }} · {% endif %}{{ w.week|date:"d/m" }} – {{ w.week_end|date:"d/m" }}</h2><span class="muted">{{ w.items|length }} ca · {{ w.hours|floatformat:"-1" }} giờ</span></div>
-  <ul class="row-list">
-    {% for x in w.items %}
-    <li class="is-{{ x.state }}{% if x.today %} is-today{% endif %}"><span class="row-day">{{ x.short }} {{ x.shift.date|date:"d/m" }}</span>
-      <span class="row-main"><strong>{{ x.shift.name }}</strong> {{ x.shift.start|time:"H:i" }}–{{ x.shift.end|time:"H:i" }}<small>{{ x.role }}</small>
-        <small class="row-team">{% if x.team %}Cùng ca: {% for g in x.team_by_role %}<span class="row-team-role">{{ g.role|lower }}</span> {{ g.names }}{% if not forloop.last %} · {% endif %}{% endfor %}{% else %}Chưa có ai khác cùng ca{% endif %}</small></span>
-      {% if x.state == "now" %}<span class="pill pill-info">Đang làm</span>{% elif x.state == "done" %}<span class="pill pill-neutral">Đã qua</span>{% elif x.today %}<span class="pill pill-info">Hôm nay</span>{% endif %}</li>
+  <div class="table-wrap my-week"><table class="data-table">
+    <thead><tr><th scope="col">Ngày</th><th scope="col">Ca</th><th scope="col">Giờ</th><th scope="col">Vị trí</th><th scope="col" class="stack-hide">Cùng ca</th></tr></thead>
+    <tbody>
+    {% for d in w.days %}
+      {% for x in d.items %}
+      <tr class="is-{{ x.state }}{% if d.today %} is-today{% endif %}">
+        {% if forloop.first %}<th scope="row" rowspan="{{ d.items|length }}" class="my-day">{{ d.short }} <span>{{ d.date|date:"d/m" }}</span>{% if d.today %} <span class="pill pill-info">Hôm nay</span>{% endif %}</th>{% endif %}
+        <td><strong>{{ x.shift.name }}</strong>{% if x.state == "now" %} <span class="pill pill-ok">Đang làm</span>{% endif %}</td>
+        <td class="num">{{ x.shift.start|time:"H:i" }}–{{ x.shift.end|time:"H:i" }}</td>
+        <td>{{ x.role }}</td>
+        <td class="stack-hide">{% if x.team %}{% for g in x.team_by_role %}<span class="muted">{{ g.role }}:</span> {{ g.names }}{% if not forloop.last %}<br>{% endif %}{% endfor %}{% else %}<span class="muted">Chưa có ai khác</span>{% endif %}</td>
+      </tr>
+      {% empty %}
+      <tr class="is-off{% if d.today %} is-today{% endif %}"><th scope="row" class="my-day">{{ d.short }} <span>{{ d.date|date:"d/m" }}</span>{% if d.today %} <span class="pill pill-info">Hôm nay</span>{% endif %}</th><td colspan="4" class="muted">Nghỉ</td></tr>
+      {% endfor %}
     {% endfor %}
-  </ul>
+    </tbody>
+  </table></div>
 </section>
 {% empty %}
 <div class="empty"><p><strong>Chưa có lịch đã công bố.</strong></p><p>Khi Chủ quán công bố lịch, ca của bạn và những người làm cùng ca hiện ở đây, kèm thông báo trên điện thoại.</p></div>

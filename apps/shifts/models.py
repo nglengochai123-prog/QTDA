@@ -24,9 +24,24 @@ class ShiftQuerySet(models.QuerySet):
         """Ca đang giữ quỹ lúc `at`: ca trong khung giờ; nếu không có thì ca đã bắt đầu, quá giờ kết thúc dự kiến
         nhưng chưa kết (khách trả tiền muộn sau 22 giờ vẫn vào quỹ ca đó, BRU-01, BRU-06)."""
         at = at or timezone.now()
-        return self.current(at) or (self.filter(status=Shift.Status.OPEN, starts_at__lte=at)
+        # Quá giờ kết thúc hơn OVERRUN_HOURS mà chưa kết (quên kết ca hôm trước) thì không còn giữ quỹ: tiền và đơn
+        # lúc này không dồn vào ca cũ; thu ngân mở ca theo giờ hiện tại, ca cũ kết và điều chỉnh sau (Hai, 28/11/2026).
+        from datetime import timedelta
+
+        return self.current(at) or (self.filter(status=Shift.Status.OPEN, starts_at__lte=at,
+                                                ends_at__gt=at - timedelta(hours=Shift.OVERRUN_HOURS))
                                     .select_related("approver", "backup_approver", "payment_authorizer")
                                     .order_by("-starts_at").first())
+
+    def stale(self, at=None):
+        """Ca đã bắt đầu (có tiền đầu ca hoặc có đơn) mà quá giờ kết thúc hơn OVERRUN_HOURS vẫn chưa kết."""
+        from datetime import timedelta
+
+        from django.db.models import Q
+
+        at = at or timezone.now()
+        return (self.filter(status=Shift.Status.OPEN, ends_at__lte=at - timedelta(hours=Shift.OVERRUN_HOURS))
+                .filter(Q(cash_entries__kind="dau_ca") | Q(orders__isnull=False)).distinct().order_by("starts_at"))
 
     def operating_locked(self, at=None):
         """Như `operating`, nhưng khóa dòng ca rồi đọc lại trạng thái; gọi trong giao dịch trước khi ghi đơn, tiền
@@ -104,8 +119,9 @@ class Shift(StoreScopedModel):
 
     @property
     def overrun(self):
-        """Ca còn mở đã quá giờ kết thúc dự kiến hơn 2 giờ: thường là quên kết ca hôm trước và chưa mở ca mới, nên tiền
-        thu bây giờ vẫn vào ca cũ. Khách trả muộn ít phút sau giờ đóng cửa thì không tính (BRU-06)."""
+        """Ca còn mở đã quá giờ kết thúc dự kiến hơn 2 giờ: thường là quên kết ca. Từ 28/11/2026 tiền thu lúc này
+        không vào ca này nữa (xem `operating`); ca chỉ còn chờ kết và điều chỉnh. Khách trả muộn ít phút sau giờ đóng
+        cửa thì vẫn vào ca (BRU-06)."""
         return (self.status == self.Status.OPEN
                 and (timezone.now() - self.ends_at).total_seconds() > self.OVERRUN_HOURS * 3600)
 

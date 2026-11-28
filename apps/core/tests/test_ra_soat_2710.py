@@ -462,7 +462,7 @@ class ShiftOverrunTests(Base):
         Shift.objects.filter(pk=self.shift.pk).update(starts_at=now - timedelta(hours=20),
                                                       ends_at=now - timedelta(hours=4))
         self.assertContains(self.client.get(reverse("orders:cashier")), "đã quá giờ kết thúc")
-        self.assertContains(self.client.get(reverse("orders:overview")), "Tiền thu lúc này vẫn vào quỹ của ca đó")
+        self.assertContains(self.client.get(reverse("orders:overview")), "Tiền thu và đơn mới không vào ca cũ nữa")
         self.assertContains(self.client.get(reverse("reports:dashboard")), "đã quá giờ kết thúc")
         Shift.objects.filter(pk=self.shift.pk).update(ends_at=now - timedelta(minutes=30))  # khách trả muộn ít phút
         self.assertNotContains(self.client.get(reverse("orders:cashier")), "đã quá giờ kết thúc")

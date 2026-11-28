@@ -106,6 +106,14 @@ def my_page(user, now=None):
                              "Tuần sau" if w == this_week + timedelta(days=7) else ""})
         weeks[w]["items"].append(item)
         weeks[w]["hours"] += s.hours
+    # Bảng tuần: đủ 7 ngày, ngày không có ca ghi Nghỉ, để nhân viên nhìn một lần là thấy cả tuần (Hai, 28/11/2026).
+    for w in weeks.values():
+        by_day = {}
+        for item in w["items"]:
+            by_day.setdefault(item["shift"].date, []).append(item)
+        w["days"] = [{"date": d, "day": DAY_NAMES[d.weekday()], "short": DAY_SHORT[d.weekday()], "today": d == today,
+                      "past": d < today, "items": by_day.get(d, [])}
+                     for d in (w["week"] + timedelta(days=i) for i in range(7))]
     next_week = this_week + timedelta(days=7)
     deadline = sv.deadline_for(next_week)
     regs_next = Registration.objects.filter(user=user, cancelled_at__isnull=True, shift__date__gte=next_week,

@@ -161,6 +161,23 @@ def open_from_schedule(request):
     return redirect("shifts:my_shift_detail", shift_id=shift.pk)
 
 
+@capability_required(Cap.CASH_FUND)
+@require_POST
+def open_now(request):
+    """Mở ca theo giờ hiện tại khi không có ca giữ quỹ và lịch không có ca để mở."""
+    from . import from_schedule
+
+    try:
+        shift, created = from_schedule.open_now(request.user)
+    except ValidationError as error:
+        for message in _errors(error):
+            messages.error(request, message)
+        return links.back(request, "shifts:my_shift")
+    messages.success(request, f"Đã mở {shift}. Xác nhận tiền đầu ca để bắt đầu thu tiền mặt."
+                     if created else f"{shift} đang giữ quỹ lúc này; không mở thêm ca.")
+    return redirect("shifts:my_shift_detail", shift_id=shift.pk)
+
+
 @capability_required(Cap.SHIFT_CLOSE)
 @require_POST
 def close(request, shift_id):

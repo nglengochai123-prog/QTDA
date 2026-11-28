@@ -566,6 +566,37 @@ class ShiftMoneyTests(Base):
 
 # ------------------------------------------------------------- Giai đoạn 7: ngoại lệ, tổn thất
 
+class StaleShiftTests(Base):
+    def test_qa_shift_04_forgotten_shift_does_not_take_new_money_and_new_shift_opens_now(self):
+        """QA-SHIFT-04 (yêu cầu 28/11): ca quên kết đã quá giờ hơn 2 giờ thì đơn và tiền mới không vào ca đó; thu ngân
+        mở ca theo giờ hiện tại; ca cũ vẫn kết được sau."""
+        from apps.shifts import from_schedule
+
+        confirm_opening(self.shift)
+        now = timezone.now()
+        Shift.objects.filter(pk=self.shift.pk).update(starts_at=now - timedelta(hours=20), ends_at=now - timedelta(hours=5))
+        self.assertIsNone(Shift.objects.operating())
+        self.assertEqual(list(Shift.objects.stale()), [Shift.objects.get(pk=self.shift.pk)])
+        c = Client()
+        c.force_login(self.cashier)
+        self.assertContains(c.get(reverse("shifts:my_shift")), "Mở ca theo giờ hiện tại")
+        r = c.post(reverse("shifts:open_now"))
+        new = Shift.objects.exclude(pk=self.shift.pk).get()
+        self.assertRedirects(r, reverse("shifts:my_shift_detail", args=[new.pk]))
+        self.assertEqual(Shift.objects.operating(), new)
+        again, created = from_schedule.open_now(self.cashier)  # bấm lại: không mở ca thứ hai
+        self.assertEqual((again, created, Shift.objects.count()), (new, False, 2))
+        order = self.submit()
+        self.assertEqual(order.shift, new)
+        self.finish(order)
+        shifts.add_cash_entry(self.cashier, key(), new.pk, "dau_ca", 0)
+        self.pay()
+        self.assertEqual(Payment.objects.get().shift, new)
+        shifts.close_shift(self.owner, self.shift.pk)  # ca cũ kết sau, không có tiền mới lọt vào
+        self.assertEqual(Shift.objects.get(pk=self.shift.pk).closed_cash_revenue, 0)
+        self.assertEqual(problems(), [])
+
+
 class LossCaseTests(Base):
     def test_qa_loss_01_recovery_bounded_and_owner_only(self):
         """QA-LOSS-01: thu hồi sau xác minh, không vượt phần còn lại, chỉ Chủ quán; gửi lại cùng mã không ghi hai lần."""

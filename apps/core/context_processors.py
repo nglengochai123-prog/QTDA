@@ -117,7 +117,7 @@ def navigation(request):
                  ("receipt", "Phiếu nhập", reverse("inventory:receipt"), Cap.STOCK_OPERATIONS),
                  ("count", "Kiểm kê", reverse("inventory:count"), Cap.STOCK_OPERATIONS),
                  ("waste", "Hao hụt", reverse("inventory:waste"), Cap.STOCK_OPERATIONS),
-                 ("semi", "Làm bán thành phẩm", reverse("inventory:semi"), Cap.STOCK_OPERATIONS),
+                 ("lots", "Lô hàng", reverse("inventory:lots"), Cap.STOCK_OPERATIONS),
                  ("po", "Đặt hàng", reverse("inventory:purchase_orders"), Cap.STOCK_CONFIRM_ORDERING),
                  ("payables", "Phải trả", reverse("inventory:payables"), Cap.STOCK_CONFIRM_ORDERING)]),
         ("Dự báo", [

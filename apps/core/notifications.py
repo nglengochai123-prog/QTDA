@@ -144,7 +144,8 @@ def pending_tasks(user, live=True):
         if handovers:  # hiếm khi có, nên chỉ hiện ô khi đang có khoản chờ
             task("Tiền nộp chờ tôi xác nhận", handovers, reverse("shifts:my_shift"), urgent=True)
         # Cùng ca mà màn Ca của tôi mở: ca đang giữ quỹ, nếu không có thì ca đã kết nhưng chưa có báo cáo cuối ca.
-        shift = Shift.objects.operating() or Shift.objects.filter(status=Shift.Status.CLOSED, report__isnull=True).first()
+        shift = (Shift.objects.operating() or Shift.objects.stale().first()
+                 or Shift.objects.filter(status=Shift.Status.CLOSED, report__isnull=True).first())
         status = shift_services.data_status(shift) if shift is not None else None
         if status and status["issues"]:  # chưa kết ca khi đã quá giờ, thiếu báo cáo, phiếu dự phòng, kiểm kê
             day = timezone.localtime(shift.starts_at)

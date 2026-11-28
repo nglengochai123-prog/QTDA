@@ -183,3 +183,44 @@ def open_from_schedule(user, work_shift_id, now=None):
                      f"{shift} {timezone.localtime(start):%H:%M}–{timezone.localtime(end):%H:%M}; bạn phụ trách ca này.",
                      "/ca/tinh-trang/")
     return shift, True
+
+
+@transaction.atomic
+def open_now(user, now=None):
+    """Mở ca theo giờ hiện tại khi quán không có ca nào giữ quỹ lúc này và lịch cũng không có ca để mở (ví dụ ca
+    trước quên kết, đã quá giờ; hoặc chưa lập lịch). Ca chạy từ bây giờ tới giờ đóng cửa (ít nhất 2 giờ). Ca cũ chưa
+    kết vẫn giữ nguyên để kết và điều chỉnh sau. Chủ quán được báo."""
+    from apps.accounts.permissions import Cap, user_can
+    from apps.core import params
+    from apps.core.models import Store
+
+    if not user_can(user, Cap.CASH_FUND):
+        raise ValidationError("Bạn không có quyền mở ca.")
+    now = now or timezone.now()
+    list(Store.objects.select_for_update().all())  # hai người cùng bấm: lần lượt, người sau thấy ca vừa mở
+    current = Shift.objects.operating(now)
+    if current is not None:
+        return current, False
+    if openable(now):
+        raise ValidationError("Lịch đã công bố có ca cho giờ này; dùng nút Mở ca theo lịch.")
+    owners = [u for u in User.objects.filter(is_active=True).order_by("pk") if u.is_owner]
+    approver = user if user.is_owner else (owners[0] if owners else None)
+    if approver is None:
+        raise ValidationError("Quán chưa có tài khoản Chủ quán đang làm để phụ trách ca; báo Chủ quán.")
+    start = timezone.localtime(now).replace(second=0, microsecond=0)
+    close = start.replace(hour=0, minute=0) + timedelta(hours=params.get("close_hour"))
+    end = close if close - start >= timedelta(hours=2) else start + timedelta(hours=2)
+    shift = Shift.objects.create(store=user.store or Store.get_default(), name=f"Ca {start:%H:%M}", starts_at=start,
+                                 ends_at=end, approver=approver,
+                                 payment_authorizer=user if user_can(user, Cap.PAYMENT) else None)
+    record(Action.CREATE, actor=user, obj=shift, object_type="shifts.Shift",
+           after={"ca": str(shift), "gio": f"{start:%H:%M}–{timezone.localtime(end):%H:%M}", "phu_trach": str(approver),
+                  "ca_cu_chua_ket": [str(s) for s in Shift.objects.stale(now)]},
+           reason="Mở ca theo giờ hiện tại (không có ca nào giữ quỹ lúc này)")
+    if approver.pk != user.pk:
+        from apps.core.push import notify_later
+
+        notify_later([approver.pk], f"{user} đã mở ca theo giờ hiện tại",
+                     f"{shift} {start:%H:%M}–{timezone.localtime(end):%H:%M}. Ca cũ chưa kết (nếu có) kết sau.",
+                     "/ca/tinh-trang/")
+    return shift, True

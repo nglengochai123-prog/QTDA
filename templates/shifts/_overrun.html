@@ -1,7 +1,7 @@
-{% load ca_lich %}{% if shift and shift.overrun %}
+{% load ca_lich %}{% ca_cu_chua_ket as stale_shifts %}{% if stale_shifts %}
 <div class="notice notice-warn" role="status"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>
-  <div><strong>{{ shift }} đã quá giờ kết thúc ({{ shift.ends_at|date:"H:i d/m" }}) mà chưa kết.</strong>
-    Tiền thu lúc này vẫn vào quỹ của ca đó. {% if request.user.is_owner %}Kết ca ở <a href="{% url 'shifts:my_shift_detail' shift.pk %}">Quỹ ca</a> và mở ca mới ở <a href="{% url 'masterdata:list' 'ca' %}">Ca làm việc</a> nếu đã sang ca khác.{% elif request.user|co_quyen:"shift_close" %}Đếm tiền và kết ca ở <a href="{% url 'shifts:my_shift_detail' shift.pk %}">Ca của tôi</a>; nếu đã sang ca khác thì mở ca mới theo lịch.{% else %}Báo thu ngân hoặc Chủ quán kết ca nếu đã sang ca khác.{% endif %}
+  <div><strong>{% if stale_shifts|length == 1 %}{{ stale_shifts.0 }} đã quá giờ kết thúc ({{ stale_shifts.0.ends_at|date:"H:i d/m" }}) mà chưa kết.{% else %}{{ stale_shifts|length }} ca đã quá giờ mà chưa kết.{% endif %}</strong>
+    Tiền thu và đơn mới không vào ca cũ nữa. {% if request.user|co_quyen:"shift_close" %}Kết và điều chỉnh sau ở {% for s in stale_shifts %}<a href="{% url 'shifts:my_shift_detail' s.pk %}">{{ s }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}.{% else %}Báo thu ngân hoặc Chủ quán kết ca cũ sau.{% endif %}
     {% mo_ca_theo_lich %}</div>
 </div>
 {% endif %}
