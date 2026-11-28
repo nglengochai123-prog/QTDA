@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Loại bán thành phẩm · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div><h1>Loại bán thành phẩm</h1><p class="page-sub">Thứ quán tự làm từ nguyên liệu gốc (cà phê cốt, nước đường, foam...): một mẻ dùng gì, ra bao nhiêu.</p></div>
+  <div class="page-tools"><a class="btn btn-quiet" href="{% url 'inventory:semi_plan' %}">Kế hoạch mẻ</a></div>
+</header>
+
+<section class="card" aria-labelledby="types-title">
+  <div class="card-head"><h2 id="types-title">Đang có</h2><span class="muted">{{ products|length }} loại</span></div>
+  {% if products %}<div class="table-wrap"><table class="data-table">
+    <thead><tr><th scope="col">Tên</th><th scope="col">Một mẻ</th><th scope="col" class="stack-hide">Hạn dùng</th><th scope="col"></th></tr></thead>
+    <tbody>{% for p in products %}<tr>
+      <th scope="row">{{ p.name }}{% if not p.is_active %} <span class="pill">Ngừng dùng</span>{% endif %}</th>
+      <td>{% if p.semi_recipe %}{% for l in p.semi_recipe.lines.all %}{{ l.quantity|floatformat:"-2g" }} {{ l.ingredient.get_unit_display }} {{ l.ingredient.name }}{% if not forloop.last %} + {% endif %}{% endfor %} → {{ p.semi_recipe.batch_output|floatformat:"-2g" }} {{ p.get_unit_display }}{% else %}<span class="muted">Chưa có định mức mẻ</span>{% endif %}</td>
+      <td class="stack-hide">{% if p.shelf_life_days %}{{ p.shelf_life_days }} ngày{% else %}–{% endif %}</td>
+      <td>{% if p.semi_recipe %}<a class="btn btn-ghost btn-sm" href="{% url 'masterdata:edit' 'ban-thanh-pham' p.semi_recipe.pk %}">Sửa định mức</a>{% else %}<a class="btn btn-ghost btn-sm" href="{% url 'masterdata:create' 'ban-thanh-pham' %}">Khai định mức</a>{% endif %} <a class="btn btn-ghost btn-sm" href="{% url 'masterdata:edit' 'nguyen-lieu' p.pk %}">Tên, hạn dùng, ngừng dùng</a></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>{% else %}<div class="card-body"><p class="muted">Chưa có loại nào.</p></div>{% endif %}
+</section>
+
+<section class="card" aria-labelledby="new-title">
+  <div class="card-head"><h2 id="new-title">Thêm loại mới</h2></div>
+  <form method="post" class="card-body" data-once>{% csrf_token %}
+    <div class="form-grid">
+      <label class="field"><span>Tên</span><input class="input" name="name" required maxlength="100" placeholder="Ví dụ: Nước đường"></label>
+      <label class="field"><span>Đơn vị tính</span><select class="input" name="unit" required>{% for v, l in units %}<option value="{{ v }}"{% if v == "ml" %} selected{% endif %}>{{ l }}</option>{% endfor %}</select></label>
+      <label class="field"><span>Một mẻ thu được</span><input class="input" name="output" inputmode="decimal" required placeholder="Ví dụ: 1600"></label>
+      <label class="field"><span>Hạn dùng (ngày)</span><input class="input" name="shelf" inputmode="numeric" placeholder="Ví dụ: 2"></label>
+    </div>
+    <fieldset class="field"><legend>Nguyên liệu cho một mẻ</legend>
+      {% for i in rows %}<div class="form-grid">
+        <label class="field"><span>Nguyên liệu {{ i }}</span><select class="input" name="ing_{{ i }}"><option value="">{% if i == 1 %}Chọn nguyên liệu{% else %}Không dùng{% endif %}</option>{% for r in raws %}<option value="{{ r.pk }}">{{ r.name }} ({{ r.get_unit_display }})</option>{% endfor %}</select></label>
+        <label class="field"><span>Lượng</span><input class="input" name="qty_{{ i }}" inputmode="decimal"></label>
+      </div>{% endfor %}
+    </fieldset>
+    <label class="check"><input type="checkbox" name="measured" value="1"> Đã cân đo lượng thu được thực tế</label>
+    <button class="btn btn-primary" type="submit">Thêm bán thành phẩm</button>
+  </form>
+</section>
+{% endblock %}

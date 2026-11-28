@@ -10,16 +10,18 @@ def site(request):
 
 # Biểu tượng, nhãn ngắn trên thanh trên và màu ô biểu tượng (trang chủ) của từng phân hệ.
 GROUP_ICONS = {"Tổng quan": "home", "Bán hàng": "order", "Ca và nhân sự": "shift", "Kho": "stock", "Dự báo": "forecast",
-               "Kiểm soát": "control_report", "Báo cáo": "revenue", "Quản trị": "params"}
-GROUP_SHORT = {"Ca và nhân sự": "Ca, nhân sự"}
+               "Kiểm soát": "control_report", "Báo cáo": "revenue", "Quản trị": "params",
+               "Bán thành phẩm": "beaker"}
+GROUP_SHORT = {"Ca và nhân sự": "Ca, nhân sự", "Bán thành phẩm": "Làm mẻ"}
 GROUP_TONES = {"Tổng quan": "blue", "Bán hàng": "orange", "Ca và nhân sự": "green", "Kho": "teal", "Dự báo": "indigo",
-               "Kiểm soát": "red", "Báo cáo": "pink", "Quản trị": "gray"}
+               "Kiểm soát": "red", "Báo cáo": "pink", "Quản trị": "gray",
+               "Bán thành phẩm": "teal"}
 
 # Mục không có biểu tượng cùng tên dùng biểu tượng ở đây (templates/partials/icons.html).
 ICONS = {"fc_overview": "forecast", "fc_plans": "po", "fc_prior": "bulb", "fc_season": "sun", "fc_history": "upload",
          "md_ca": "shift", "md_nhan-vien": "people", "md_mon": "brand", "md_nhom-mon": "tag", "md_tuy-chon": "sliders",
          "md_ban": "table", "md_nguyen-lieu": "stock", "md_dinh-muc": "beaker", "md_nha-cung-cap": "truck", "md_ly-do": "note",
-         "semi": "beaker", "md_ban-thanh-pham": "beaker", "profit": "revenue"}
+         "semi": "beaker", "semi_plan": "schedule", "semi_types": "beaker", "md_ban-thanh-pham": "beaker", "profit": "revenue"}
 
 # Một dòng mô tả cho thẻ chức năng ở trang chủ: nói chức năng dùng để làm gì, không nói cách tính.
 DESCRIPTIONS = {
@@ -74,6 +76,8 @@ DESCRIPTIONS = {
     "md_nguyen-lieu": "Đơn vị, quy cách, hạn dùng, nhà cung cấp",
     "md_dinh-muc": "Lượng nguyên liệu cho mỗi ly",
     "md_ban-thanh-pham": "Nguyên liệu cho một mẻ và lượng thu được",
+    "semi_plan": "Ngày nào làm bán thành phẩm nào, bao nhiêu mẻ",
+    "semi_types": "Thêm loại bán thành phẩm và định mức mẻ",
     "md_nha-cung-cap": "Liên hệ và thời gian giao hàng",
     "md_ly-do": "Lý do dùng khi hủy, đổi món, chuyển bàn",
     "log": "Ai đã làm gì, lúc nào",
@@ -88,7 +92,7 @@ def navigation(request):
     # Mục đánh dấu desktop chỉ hiện trên máy tính (thanh dưới điện thoại giữ tối đa 4 mục).
     desktop_only = {"bar", "data", "log", "cashier", "status", "exceptions", "cases", "params", "backup", "workload",
                     "revenue", "profit", "control_report", "materials", "dashboard", "lookup", "ledger", "lots", "pick", "receipt",
-                    "count", "waste", "semi", "po", "payables", "stock_report"} | {
+                    "count", "waste", "semi", "semi_plan", "semi_types", "po", "payables", "stock_report"} | {
         "md_ca", "md_nhan-vien", "md_mon", "md_nhom-mon", "md_tuy-chon", "md_ban", "md_nguyen-lieu", "md_dinh-muc",
         "md_ban-thanh-pham", "md_nha-cung-cap", "md_ly-do", "schedule", "fc_overview", "fc_plans", "fc_prior", "fc_season", "fc_history"}
     # Nhóm điều hướng theo nghiệp vụ (DESIGN.md: bố cục quản trị); trên điện thoại chỉ hiện tối đa 5 mục.
@@ -121,6 +125,11 @@ def navigation(request):
                  ("lots", "Lô hàng", reverse("inventory:lots"), Cap.STOCK_OPERATIONS),
                  ("po", "Đặt hàng", reverse("inventory:purchase_orders"), Cap.STOCK_CONFIRM_ORDERING),
                  ("payables", "Phải trả", reverse("inventory:payables"), Cap.STOCK_CONFIRM_ORDERING)]),
+        # Mục riêng cho việc làm mẻ hằng ngày (Hai, 28/11/2026).
+        ("Bán thành phẩm", [("semi", "Mẻ hôm nay", reverse("inventory:semi"), Cap.STOCK_OPERATIONS),
+                            ("semi_plan", "Kế hoạch mẻ", reverse("inventory:semi_plan"), Cap.MASTER_INVENTORY),
+                            ("semi_types", "Loại bán thành phẩm", reverse("inventory:semi_types"),
+                             Cap.MASTER_INVENTORY)]),
         ("Dự báo", [
             ("fc_overview", "Dự báo nhu cầu", reverse("forecast:overview"), Cap.FORECASTS),
             ("fc_plans", "Kế hoạch mua", reverse("forecast:plans"), Cap.FORECASTS),
@@ -147,8 +156,6 @@ def navigation(request):
             ("md_ban", "Bàn", reverse("masterdata:list", args=["ban"]), Cap.MASTER_DATA),
             ("md_nguyen-lieu", "Nguyên vật liệu", reverse("masterdata:list", args=["nguyen-lieu"]), Cap.MASTER_INVENTORY),
             ("md_dinh-muc", "Định mức", reverse("masterdata:list", args=["dinh-muc"]), Cap.MASTER_INVENTORY),
-            ("md_ban-thanh-pham", "Định mức bán thành phẩm", reverse("masterdata:list", args=["ban-thanh-pham"]),
-             Cap.MASTER_INVENTORY),
             ("md_nha-cung-cap", "Nhà cung cấp", reverse("masterdata:list", args=["nha-cung-cap"]), Cap.MASTER_INVENTORY),
             ("md_ly-do", "Lý do điều chỉnh", reverse("masterdata:list", args=["ly-do"]), Cap.MASTER_DATA),
             ("log", "Nhật ký", reverse("masterdata:audit_log"), Cap.AUDIT_LOG)]),

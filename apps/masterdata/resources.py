@@ -399,7 +399,8 @@ register(Resource(
     inlines=[Inline(SemiRecipeLine, ["ingredient", "quantity"], "Nguyên liệu cho một mẻ", extra=3, can_delete=True,
                     prepare=_semi_lines_prepare)],
     note="Nguyên liệu cho một mẻ và lượng bán thành phẩm thu được, ví dụ 500 g cà phê bột ra 1.000 ml cà phê cốt. "
-         "Nguyên liệu phải có loại Bán thành phẩm. Ghi mẻ đã làm ở Kho, Làm bán thành phẩm.",
+         "Nguyên liệu phải có loại Bán thành phẩm. Thêm loại mới nhanh ở Bán thành phẩm › Loại bán thành phẩm; "
+         "ghi mẻ đã làm ở Bán thành phẩm › Mẻ hôm nay.",
 ))
 
 

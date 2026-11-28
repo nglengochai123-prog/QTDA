@@ -442,6 +442,29 @@ class SemiBatch(StoreScopedModel):
         return f"{self.product.name} · {self.batches} mẻ"
 
 
+class SemiTask(StoreScopedModel):
+    """Kế hoạch mẻ của một ngày do Chủ quán đặt (Hai, 28/11/2026): ngày đó pha chế phải làm bán thành phẩm nào, bao
+    nhiêu mẻ. Đã làm hay chưa suy ra từ các mẻ đã ghi trong ngày (SemiBatch), không đánh dấu riêng."""
+
+    day = models.DateField("Ngày")
+    product = models.ForeignKey(Ingredient, verbose_name="Bán thành phẩm", on_delete=models.PROTECT,
+                                related_name="semi_tasks", limit_choices_to={"kind": IngredientKind.SEMI})
+    batches = models.DecimalField("Số mẻ cần làm", max_digits=8, decimal_places=2, default=1,
+                                  validators=[MinValueValidator(Decimal("0.01"))])
+    note = models.CharField("Ghi chú", max_length=255, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, verbose_name="Người đặt", on_delete=models.PROTECT,
+                                   related_name="+")
+
+    class Meta:
+        verbose_name = "Kế hoạch mẻ"
+        verbose_name_plural = "Kế hoạch mẻ"
+        ordering = ["day", "product__name"]
+        constraints = [models.UniqueConstraint(fields=["day", "product"], name="uniq_semi_task_day_product")]
+
+    def __str__(self):
+        return f"{self.product.name} · {self.batches} mẻ · {self.day:%d/%m}"
+
+
 class IngredientStock(TimeStampedModel):
     """Số dư tồn của một nguyên liệu (BRU-18), cập nhật cùng giao dịch với mỗi biến động.
 

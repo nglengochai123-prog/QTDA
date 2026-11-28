@@ -503,12 +503,16 @@ class Simulation:
     def _make_semi(self, product):
         """Pha chế ca sáng làm một mẻ mỗi bán thành phẩm; thiếu nguyên liệu gốc thì bỏ qua như ngoài đời."""
         from apps.inventory import operations as ops
-        from apps.inventory.models import SemiBatch
+        from apps.inventory.models import SemiBatch, SemiTask
 
         if SemiBatch.objects.filter(product=product, created_at__date=self.day).exists():
             return
+        tasks = SemiTask.objects.filter(day=self.day)
+        if tasks.exists() and not tasks.filter(product=product).exists():
+            return  # Chủ quán đã đặt kế hoạch ngày này mà không có bán thành phẩm này
+        task = tasks.filter(product=product).first()
         try:
-            ops.produce_semi(self.u["phache"], key(), product.pk, 1)
+            ops.produce_semi(self.u["phache"], key(), product.pk, task.batches if task else 1)
         except Exception:  # noqa: BLE001
             pass
 

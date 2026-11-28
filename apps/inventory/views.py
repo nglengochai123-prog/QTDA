@@ -244,11 +244,10 @@ def semi(request):
     rows = production_suggestions()
     for r in rows:
         r["operation_key"] = uuid.uuid4().hex
-    suggested = {r["ingredient"].pk: r.get("batches") for r in rows}
     today = today_status()
     for t in today:
         t["operation_key"] = uuid.uuid4().hex
-        t["suggested"] = suggested.get(t["ingredient"].pk) or 1
+        t["suggested"] = t["left"] if t["left"] else 1
     return render(request, "inventory/semi.html", {
         "rows": rows, "today_rows": today, "today": timezone.localdate(), "recent": SemiBatch.objects.select_related("product", "actor", "lot")[:12],
         "can_setup": user_can(request.user, Cap.MASTER_INVENTORY),

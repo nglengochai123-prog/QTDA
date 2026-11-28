@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import views, views_ledger, views_lots
+from . import views, views_ledger, views_lots, views_semi
 
 app_name = "inventory"
 
@@ -12,6 +12,8 @@ urlpatterns = [
     path("kho/kiem-ke/", views.count, name="count"),
     path("kho/hao-hut/", views.waste, name="waste"),
     path("kho/ban-thanh-pham/", views.semi, name="semi"),
+    path("kho/ban-thanh-pham/ke-hoach/", views_semi.plan, name="semi_plan"),
+    path("kho/ban-thanh-pham/loai/", views_semi.types, name="semi_types"),
     path("kho/phieu-nhap/", views.receipt, name="receipt"),
     path("kho/dat-hang/", views.purchase_orders, name="purchase_orders"),
     path("kho/phai-tra/", views.payables, name="payables"),

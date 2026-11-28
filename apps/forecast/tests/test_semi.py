@@ -235,3 +235,40 @@ class SemiTodayTests(SemiBase):
         with mock.patch("django.utils.timezone.now", return_value=at(timezone.localdate(), 23)):
             items = reports.attention({})
         self.assertFalse([i for i in items if "Bán thành phẩm" in i["title"]])
+
+
+class SemiPlanTests(SemiBase):
+    def test_owner_plans_day_barista_follows_and_owner_adds_new_type(self):
+        """Hai 28/11: Chủ quán thêm loại bán thành phẩm mới, đặt kế hoạch ngày nào làm mẻ nào; pha chế thấy đúng kế
+        hoạch, làm đủ số mẻ mới là xong."""
+        from apps.inventory.models import SemiTask
+        from apps.inventory.semi_today import missing_today, today_status
+
+        today = timezone.localdate()
+        self.client.login(username=self.owner.username, password=PASSWORD)
+        self.client.post(reverse("inventory:semi_types"), {"name": "Nước đường", "unit": "ml", "output": "1600",
+                                                          "shelf": "3", "ing_1": self.milk.pk, "qty_1": "1000"})
+        syrup = Ingredient.objects.get(name="Nước đường")
+        self.assertEqual((syrup.kind, syrup.semi_recipe.batch_output), (IngredientKind.SEMI, 1600))
+        url = reverse("inventory:semi_plan")
+        self.client.post(url, {"ngay": f"{today:%Y-%m-%d}", "action": "add", "product": self.cf.pk, "batches": "2"})
+        self.client.post(url, {"ngay": f"{today:%Y-%m-%d}", "action": "add", "product": syrup.pk, "batches": "1"})
+        self.assertEqual(sorted(missing_today()), ["Cà phê cốt", "Nước đường"])
+        task = SemiTask.objects.get(day=today, product=syrup)
+        self.client.post(url, {"ngay": f"{today:%Y-%m-%d}", "action": "delete", "task": task.pk})
+        self.assertEqual(missing_today(), ["Cà phê cốt"])
+        ops.produce_semi(self.d["barista"], key(), self.cf.pk, 1)
+        row = today_status()[0]
+        self.assertEqual((row["done"], row["left"]), (False, 1))  # cần 2 mẻ, mới làm 1
+        ops.produce_semi(self.d["barista"], key(), self.cf.pk, 1)
+        self.assertEqual(missing_today(), [])
+        tomorrow = today + timedelta(days=1)
+        self.client.post(url, {"ngay": f"{tomorrow:%Y-%m-%d}", "action": "copy"})
+        self.assertEqual(SemiTask.objects.get(day=tomorrow).batches, 2)
+        self.assertContains(self.client.get(url + f"?ngay={today:%Y-%m-%d}"), "Đã làm")
+        yesterday = today - timedelta(days=1)
+        self.client.post(url, {"ngay": f"{yesterday:%Y-%m-%d}", "action": "add", "product": self.cf.pk})
+        self.assertFalse(SemiTask.objects.filter(day=yesterday).exists())  # ngày đã qua không sửa
+        self.client.force_login(self.d["barista"])
+        self.assertEqual(self.client.get(url).status_code, 403)
+        self.assertEqual(self.client.get(reverse("inventory:semi")).status_code, 200)

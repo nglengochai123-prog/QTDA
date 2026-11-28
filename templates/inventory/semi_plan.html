@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Kế hoạch mẻ · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div><h1>Kế hoạch mẻ {{ day|date:"d/m/Y" }}</h1><p class="page-sub">Ngày đó pha chế phải làm bán thành phẩm nào, bao nhiêu mẻ. Pha chế thấy ở Mẻ hôm nay và Quầy pha chế.</p></div>
+  <div class="page-tools"><a class="btn btn-quiet" href="{% url 'inventory:semi_types' %}">Loại bán thành phẩm</a></div>
+</header>
+
+<nav class="seg" aria-label="Chọn ngày">{% for d in days %}<a href="?ngay={{ d|date:'Y-m-d' }}"{% if d == day %} aria-current="true"{% endif %}>{% if d == today %}Hôm nay{% else %}{{ d|date:"D d/m" }}{% endif %}</a>{% endfor %}</nav>
+
+<section class="card" aria-labelledby="plan-title">
+  <div class="card-head"><h2 id="plan-title">{% if day == today %}Hôm nay{% else %}Ngày {{ day|date:"d/m" }}{% endif %}: {{ tasks|length }} việc</h2></div>
+  {% if tasks %}<div class="table-wrap"><table class="data-table">
+    <thead><tr><th scope="col">Bán thành phẩm</th><th scope="col" class="num">Số mẻ</th><th scope="col" class="stack-hide">Ghi chú</th>{% if day <= today %}<th scope="col">Tình trạng</th>{% endif %}{% if editable %}<th scope="col"></th>{% endif %}</tr></thead>
+    <tbody>{% for t in tasks %}<tr>
+      <th scope="row">{{ t.product.name }}</th><td class="num">{{ t.batches|floatformat:"-2g" }}</td><td class="stack-hide">{{ t.note }}</td>
+      {% if day <= today %}<td>{% if t.status.done %}<span class="pill pill-ok">Đã làm</span> <small class="muted">{{ t.status.last.actor }} {{ t.status.last.created_at|date:"H:i" }}</small>{% elif t.status.count %}<span class="pill pill-warn">Còn {{ t.status.left|floatformat:"-2g" }} mẻ</span>{% else %}<span class="pill pill-warn">Chưa làm</span>{% endif %}</td>{% endif %}
+      {% if editable %}<td><form method="post" data-once>{% csrf_token %}<input type="hidden" name="ngay" value="{{ day|date:'Y-m-d' }}"><input type="hidden" name="action" value="delete"><input type="hidden" name="task" value="{{ t.pk }}"><button class="btn btn-ghost btn-sm" type="submit">Bỏ</button></form></td>{% endif %}
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<div class="card-body"><p class="muted">Chưa có kế hoạch cho ngày này. Khi không có kế hoạch, pha chế thấy mỗi bán thành phẩm cần một mẻ.</p></div>{% endif %}
+  {% if editable %}<div class="card-body">
+    {% if products %}<form method="post" class="form-grid pl-add" data-once>{% csrf_token %}
+      <input type="hidden" name="ngay" value="{{ day|date:'Y-m-d' }}"><input type="hidden" name="action" value="add">
+      <label class="field"><span>Bán thành phẩm</span><select class="input" name="product" required><option value="">Chọn</option>{% for p in products %}<option value="{{ p.pk }}">{{ p.name }} (1 mẻ ra {{ p.semi_recipe.batch_output|floatformat:"-2g" }} {{ p.get_unit_display }})</option>{% endfor %}</select></label>
+      <label class="field"><span>Số mẻ</span><input class="input" name="batches" inputmode="decimal" value="1" required></label>
+      <label class="field"><span>Ghi chú</span><input class="input" name="note" maxlength="255" placeholder="Ví dụ: làm trước 7 giờ"></label>
+      <button class="btn btn-primary" type="submit">Thêm vào kế hoạch</button>
+    </form>
+    <p class="hint">Thêm lại bán thành phẩm đã có trong ngày thì sửa số mẻ.</p>
+    {% else %}<p class="muted">Chưa có loại bán thành phẩm nào có định mức mẻ. <a href="{% url 'inventory:semi_types' %}">Thêm loại bán thành phẩm</a>.</p>{% endif %}
+    {% if not tasks and has_previous %}<form method="post" data-once>{% csrf_token %}<input type="hidden" name="ngay" value="{{ day|date:'Y-m-d' }}"><input type="hidden" name="action" value="copy"><button class="btn btn-quiet btn-sm" type="submit">Chép kế hoạch của ngày gần nhất</button></form>{% endif %}
+  </div>{% else %}<div class="card-body"><p class="muted">Ngày đã qua: chỉ xem.</p></div>{% endif %}
+</section>
+{% endblock %}
