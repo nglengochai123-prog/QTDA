@@ -2163,6 +2163,7 @@ a.stat:hover { box-shadow: var(--shadow-card), 0 4px 12px rgba(0, 0, 0, 0.06); }
 .my-week .my-day { white-space: nowrap; font-weight: 650; }
 .my-week .my-day span:not(.pill) { color: var(--fg-3); font-weight: 500; margin-left: 0.2rem; }
 .my-week tr.is-today > * { background: var(--accent-soft); }
-.my-week tr.is-done td, .my-week tr.is-done th { color: var(--fg-3); }
+.my-week tr.is-done > * { opacity: 0.55; }
+.my-week td.num { text-align: left; }
 .my-week tr.is-off td, .my-week tr.is-off th { color: var(--fg-3); background: var(--surface-2); }
 @media (max-width: 599px) { .my-week .data-table th, .my-week .data-table td { padding: 0.35rem 0.5rem; font-size: 13px; } .my-week .stack-hide { display: none; } }
