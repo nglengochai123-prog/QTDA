@@ -126,13 +126,14 @@ class Command(BaseCommand):
         first_day = timezone.localdate(days_run.first().starts_at)
         # Lần nối trước chạy quá sớm (trước giờ mở cửa) thì ngày đó chỉ có một "Ca ngày" trống: bỏ ca đó và chạy lại
         # trọn ngày, thay vì kết một ca chưa có tiền đầu ca, chưa có đơn nào (ngày 27/11/2026 trống vì lý do này).
+        # Ca trống đó được run_day dùng lại (không xóa: có thể đã có dải phiếu dự phòng gắn vào).
         rerun = False
         last = days_run.last()
+        last_day = timezone.localdate(last.starts_at)
         if (last.status == Shift.Status.OPEN and not last.orders.exists() and not last.cash_entries.exists()
                 and days_run.count() > 1):
-            last.delete()
+            last_day -= timedelta(days=1)
             rerun = True
-        last_day = timezone.localdate(days_run.last().starts_at)
         today = timezone.localdate()
         if last_day >= today:
             self.stdout.write("Bộ mô phỏng đã có tới hôm nay; không nối thêm.")
