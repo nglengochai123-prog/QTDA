@@ -55,4 +55,19 @@
 {% else %}
 <div class="empty"><p><strong>Chưa có dự báo.</strong></p><p>Nhập <a href="{% url 'masterdata:list' 'nhan-dinh' %}">nhận định của Chủ quán</a> cho các món đang bán rồi bấm Cập nhật dự báo.</p></div>
 {% endif %}
+
+{% if cups_check %}{% with c=cups_check %}
+<details class="card semi-more" aria-labelledby="cc-title"{% if c.flagged %} open{% endif %}>
+  <summary class="card-head"><div><h2 id="cc-title">Đối chiếu số ly giữa nhân sự và mua hàng</h2><p class="card-sub">{% if c.mean_pct is not None %}Chênh trung bình {{ c.mean_pct|floatformat:1 }}%{% if c.flagged %}; <strong>{{ c.flagged }} ngày chênh từ {{ c.gap_percent }}% trở lên</strong>{% endif %}.{% else %}Chưa đủ số liệu của cả hai nhánh để so.{% endif %}</p></div></summary>
+  <div class="card-body"><p class="muted">Hai nhánh dùng hai mô hình khác nhau nên được phép lệch. <strong>Nhân sự</strong>: {{ c.staff_source }}; Lịch làm tuần lo đủ người cho phân vị 75% của số này. <strong>Mua hàng</strong>: {{ c.stock_source }}; kế hoạch mua dùng tổng này nhân tỷ trọng món và định mức. Chênh lớn thường do một bên cũ hơn (bấm Cập nhật dự báo hoặc Tính lại kế hoạch mua), hoặc món mới, món bán lác đác mà hai mô hình học khác nhau.</p></div>
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr><th scope="col">Ngày</th><th scope="col" class="num">Nhân sự (ly)</th><th scope="col" class="num">Mua hàng (ly)</th><th scope="col" class="num">Chênh</th><th scope="col" class="num">%</th></tr></thead>
+    <tbody>{% for r in c.rows %}<tr{% if r.flag %} class="is-warn"{% endif %}><th scope="row">{{ r.day|date:"D d/m" }}</th>
+      <td class="num">{% if r.staff is not None %}{{ r.staff|floatformat:"0g" }}{% else %}–{% endif %}</td>
+      <td class="num">{% if r.stock is not None %}{{ r.stock|floatformat:"0g" }}{% else %}–{% endif %}</td>
+      <td class="num">{% if r.gap is not None %}{% if r.gap > 0 %}+{% endif %}{{ r.gap|floatformat:"0g" }}{% endif %}</td>
+      <td class="num">{% if r.pct is not None %}{% if r.flag %}<span class="pill pill-warn">{{ r.pct|floatformat:0 }}%</span>{% else %}{{ r.pct|floatformat:0 }}%{% endif %}{% endif %}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</details>
+{% endwith %}{% endif %}
 {% endblock %}

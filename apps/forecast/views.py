@@ -93,6 +93,9 @@ def overview(request):
     ctx = {"rel": rel, "rows": rows, "today": today, "tomorrow": today + timedelta(days=1)}
     if rows:
         ctx.update(_overview_figures(rows, today))
+    from . import planning
+
+    ctx["cups_check"] = planning.cups_check(today)
     return render(request, "forecast/overview.html", ctx)
 
 

@@ -25,8 +25,8 @@ Các cách tính:
 sai số (thực − dự báo) để lấy phân vị cho tồn an toàn.
 
 Chọn cách tính theo giai đoạn dữ liệu (BRU-21): dưới 14 ngày học được dùng ước tính của Chủ quán; 14 đến 55 ngày dùng
-cách mặc định của giai đoạn (trộn với ước tính của Chủ quán theo số ngày đã có); từ 56 ngày lần đầu chọn cách có MAE
-nhỏ nhất ở cửa sổ quyết định rồi giữ nguyên. Sau đó chỉ đổi khi Chủ quán duyệt (BRU-37): cách khác có MAE thấp hơn ít
+cách mặc định của giai đoạn (trộn với ước tính của Chủ quán theo số ngày đã có); từ 56 ngày lần đầu chọn cách có chi phí sai số
+nhỏ nhất ở cửa sổ quyết định rồi giữ nguyên (dự báo thiếu tính nặng gấp plan_under_weight_percent lần dự báo thừa; 100% là MAE). Sau đó chỉ đổi khi Chủ quán duyệt (BRU-37): cách khác có chi phí sai số thấp hơn ít
 nhất 5% trong 4 tuần gốc gần nhất thì được ghi thành đề xuất, không tự đổi.
 """
 
@@ -63,6 +63,7 @@ class Config:
     switch_gain: float = 0.05
     switch_days: int = 28
     bias_limit: float = 0.5
+    under_weight: float = 1.0  # chọn cách tính theo chi phí sai số: dự báo thiếu nặng gấp ngần này dự báo thừa
     lookback: int = 84
     auto_switch: bool = False
 
@@ -481,6 +482,19 @@ def summarize(origins, h_max=H_MONTH):
     return out
 
 
+def error_cost(errors, under_weight=1.0):
+    """Chi phí sai số trung bình khi dự báo thiếu (thực > dự báo) nặng gấp `under_weight` lần dự báo thừa.
+    under_weight = 1 là MAE. Dùng để chọn cách tính cho mua hàng: thiếu là mất món bán, thừa chỉ là tồn thêm
+    (đánh giá mô hình 28/11/2026: chọn chỉ bằng MAE coi thiếu 10 kg như thừa 10 kg)."""
+    if not errors:
+        return None
+    return sum(under_weight * e if e > 0 else -e for e in errors) / len(errors)
+
+
+def _cost(st, cfg):
+    return error_cost(st.get("errors") or [], cfg.under_weight) if st.get("errors") else st["mae"]
+
+
 def coverage(errors, quantile):
     return sum(1 for e in errors if e <= quantile) / len(errors) if errors else None
 
@@ -495,9 +509,9 @@ def empirical_quantile(values, p):
     return s[lo] + (s[hi] - s[lo]) * (pos - lo)
 
 
-def _recent_gain(inc_origins, new_origins, h, days):
-    """Mức giảm MAE của cách tính mới so với cách đang dùng trên cùng các gốc trong `days` ngày gần nhất; None nếu
-    các gốc chung chưa trải đủ `days` ngày."""
+def _recent_gain(inc_origins, new_origins, h, days, under_weight=1.0):
+    """Mức giảm chi phí sai số (thiếu nặng gấp `under_weight` lần thừa; 1 là MAE) của cách tính mới so với cách đang
+    dùng trên cùng các gốc trong `days` ngày gần nhất; None nếu các gốc chung chưa trải đủ `days` ngày."""
     a = {d: s[h][0] - s[h][1] for d, s in inc_origins if h in s}
     b = {d: s[h][0] - s[h][1] for d, s in new_origins if h in s}
     common = sorted(set(a) & set(b))
@@ -505,8 +519,8 @@ def _recent_gain(inc_origins, new_origins, h, days):
         return None
     cut = common[-1] - timedelta(days=days - 1)
     common = [d for d in common if d >= cut]
-    ma = sum(abs(a[d]) for d in common) / len(common)
-    mb = sum(abs(b[d]) for d in common) / len(common)
+    ma = error_cost([a[d] for d in common], under_weight)
+    mb = error_cost([b[d] for d in common], under_weight)
     return (ma - mb) / ma if ma > 0 else None
 
 
@@ -637,7 +651,7 @@ def _forecast_series(series, *, today, horizon, cfg=DEFAULT, candidates=("WMA",)
             warnings.append(f"Cách tính đã duyệt ({METHOD_LABELS.get(approved, approved)}) chưa dùng được ở cửa sổ "
                             f"{decision_h} ngày; tạm chọn cách khác theo đánh giá.")
         if usable:
-            method = min(usable, key=lambda m: results[m]["by_h"][decision_h]["mae"])
+            method = min(usable, key=lambda m: _cost(results[m]["by_h"][decision_h], cfg))
             out["auto_pick"] = True
         else:
             measured = [m for m in pool if (results[m]["by_h"].get(decision_h) or {}).get("n", 0) >= cfg.min_origins]
@@ -656,7 +670,8 @@ def _forecast_series(series, *, today, horizon, cfg=DEFAULT, candidates=("WMA",)
         # Chỉ so với cách đang dùng đã được chọn trước đó; lần tự chọn đầu tiên đã lấy cách tốt nhất.
         if m == method:
             continue
-        gain = _recent_gain(results[method]["origins"], results[m]["origins"], decision_h, cfg.switch_days)
+        gain = _recent_gain(results[method]["origins"], results[m]["origins"], decision_h, cfg.switch_days,
+                            cfg.under_weight)
         if gain is not None and gain >= cfg.switch_gain and (best is None or gain > best[1]):
             best = (m, gain)
     if best:

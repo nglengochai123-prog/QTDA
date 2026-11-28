@@ -64,6 +64,8 @@ DEFAULTS = {
     "plan_switch_gain_percent": (5, "%", "Chỉ đổi phương pháp dự báo khi sai số thấp hơn ít nhất mức này", "Thiết kế mua 4.4"),
     "plan_switch_weeks": (4, "tuần", "Khoảng gốc dự báo dùng để so khi đổi phương pháp", "Thiết kế mua 4.4"),
     "plan_bias_limit_percent": (50, "% của σ", "Độ chệch vượt mức này thì không dùng phương pháp đó", "Thiết kế mua 6.2"),
+    "plan_under_weight_percent": (200, "%", "Khi chọn cách dự báo: một đơn vị dự báo thiếu tính nặng bằng ngần này phần trăm "
+                                  "một đơn vị dự báo thừa (100 là như MAE)", "Đánh giá mô hình 28/11"),
     "plan_blocked_limit_percent": (20, "%", "Tỷ lệ ngày bị chặn do hết hàng trong 8 tuần để cảnh báo dự báo thấp", "Thiết kế mua 5.5"),
     "plan_indirect_share_percent": (20, "%", "Món bị ngừng bán chiếm từ mức này tiêu hao của nguyên liệu thì ngày bị chặn gián tiếp", "Thiết kế mua 5.5"),
     "plan_reconcile_gap_permille": (10, "‰", "Lệch đối soát tiêu hao với sổ kho vượt mức này thì báo lỗi dữ liệu", "Thiết kế mua 5.3"),
@@ -114,6 +116,8 @@ DEFAULTS = {
     "schedule_wait_target_minutes": (4, "phút", "Gợi ý số người: việc phải chờ trong hàng không quá số phút này trước khi có "
                                                 "người làm", "BRU-27, BRU-28"),
     "schedule_service_percent": (70, "%", "Gợi ý số người: tỷ lệ việc mỗi giờ được bắt đầu trong số phút trên", "BRU-27, BRU-28"),
+    "schedule_break_percent": (10, "%", "Gợi ý số người: phần thời gian một người không làm việc theo đơn (nghỉ, dọn dẹp, "
+                               "chuẩn bị đầu ca, việc cố định); sức làm mỗi giờ được trừ phần này", "Đánh giá mô hình 28/11"),
     # Kho theo lô (inventory/lots.py)
     "lot_near_expiry_days": (2, "ngày", "Báo lô Sắp hết hạn khi còn từ số ngày này trở xuống", "Kho theo lô"),
     "lot_near_expiry_percent": (20, "% hạn dùng", "Hoặc khi thời gian còn lại dưới phần này của thời hạn sử dụng "
@@ -123,7 +127,7 @@ DEFAULTS = {
 # Tham số của mô hình: chỉ sửa trong file này (người dùng chỉ thấy kết quả, không thấy cách tính).
 MODEL_KEYS = frozenset(k for k in DEFAULTS if k.startswith(("forecast_", "plan_"))) | {
     "schedule_productivity_pha_che", "schedule_productivity_phuc_vu", "schedule_productivity_thu_ngan",
-    "schedule_wait_target_minutes", "schedule_service_percent", "schedule_demand_percent",
+    "schedule_wait_target_minutes", "schedule_service_percent", "schedule_demand_percent", "schedule_break_percent",
     "schedule_task_minutes_phuc_vu", "schedule_task_minutes_thu_ngan"}
 
 
@@ -199,6 +203,8 @@ BASIS = {
     "plan_switch_gain_percent": (ASSUMPTION, "Mục 4.4, BRU-37: thấp hơn ít nhất 5% mới đổi phương pháp"),
     "plan_switch_weeks": (ASSUMPTION, "Mục 4.4: trên ít nhất 4 tuần gốc dự báo"),
     "plan_bias_limit_percent": (FRAMEWORK, "Mục 6.2: độ chệch vượt 0,5 σ h thì không dùng phương pháp"),
+    "plan_under_weight_percent": (ASSUMPTION, "Thiếu nguyên liệu là mất món bán, thừa chỉ là tồn thêm vài ngày (hàng dễ hỏng có "
+                                  "hạn dùng giới hạn riêng); tạm coi thiếu nặng gấp 2 thừa, chỉnh lại khi đo được chi phí thật"),
     "plan_blocked_limit_percent": (FRAMEWORK, "Mục 5.5: bị chặn trên 20% số ngày trong 8 tuần"),
     "plan_indirect_share_percent": (FRAMEWORK, "Mục 5.5: món bị ngừng bán chiếm từ 20% tiêu hao"),
     "plan_reconcile_gap_permille": (FRAMEWORK, "Mục 5.3: lệch trên 1% thì báo lỗi dữ liệu"),
@@ -238,6 +244,8 @@ BASIS = {
                                             "khoảng 3 ngày trên 4 không thiếu người vì bán đông hơn dự báo"),
     "schedule_wait_target_minutes": (ASSUMPTION, "Chọn qua mô phỏng hàng đợi: chờ trong hàng 4 phút cộng thời gian pha và mang ra "
                                                  "vẫn dưới chuẩn 10 phút của AC-79"),
+    "schedule_break_percent": (ASSUMPTION, "Ca 8 tiếng thường có khoảng 45 phút nghỉ và dọn dẹp, chuẩn bị (khoảng 10%); "
+                               "chưa đo ở quán, chỉnh khi có số thật"),
     "schedule_service_percent": (ASSUMPTION, "Chọn qua mô phỏng: 70% cho khoảng 96% số giờ đạt chuẩn chờ (BO-03 đòi 90%), giờ "
                                              "công chỉ hơn lịch cũ khoảng 5% khi đã đặt sức làm; 80% thêm khoảng 7% giờ công"),
     "lot_near_expiry_days": (ASSUMPTION, "Sữa tươi hạn 7 ngày: báo trước 2 ngày đủ để đẩy món dùng sữa hoặc chuyển sang làm "

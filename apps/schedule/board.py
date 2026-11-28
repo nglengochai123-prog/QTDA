@@ -167,7 +167,13 @@ def build(week, now=None):
     recent = (WorkShift.objects.filter(date__lt=week + timedelta(days=7), date__gte=week - timedelta(days=28))
               .values_list("name", "start", "end").distinct())
     presets = sorted({(n, a, b) for n, a, b in recent}, key=lambda p: (p[1], p[0]))[:6]
+    # Kiểm chứng gợi ý bằng số thật (đánh giá mô hình 28/11): số người gợi ý dựa trên mô hình hàng đợi xấp xỉ, nên đặt
+    # cạnh tỷ lệ khung giờ thực sự đạt chuẩn chờ của 4 tuần qua.
+    from apps.reports.services import service_level
+
+    actual = service_level(today - timedelta(days=28), today - timedelta(days=1), today)
     return {
+        "actual_service": actual if actual.get("frames") else None,
         "week": week, "week_end": week + timedelta(days=6), "prev": week - timedelta(days=7),
         "next": week + timedelta(days=7), "this_week": sv.week_start(today),
         "days": [{"date": d, "name": DAY_NAMES[d.weekday()], "short": DAY_SHORT[d.weekday()], "today": d == today,

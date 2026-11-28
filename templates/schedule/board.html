@@ -18,6 +18,7 @@
   </div>
 </header>
 
+{% if actual_service %}<p class="hint wk-check">Kiểm chứng trên số thật: 4 tuần qua {{ actual_service.percent }}% khung giờ mở cửa đạt chuẩn chờ (mục tiêu {{ actual_service.target }}%){% if actual_service.worst %}; ngày nhiều giờ quá tải nhất: {% for d, n in actual_service.worst %}{{ d|date:"D d/m" }} ({{ n }} giờ){% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}. Số người gợi ý dùng mô hình hàng đợi xấp xỉ; nếu tỷ lệ này dưới mục tiêu thì tăng số người hoặc đặt lại sức làm ở Tham số.</p>{% endif %}
 <ol class="steps" aria-label="Các bước lập lịch">
   {% for s in steps %}
   <li class="step{% if s.done %} is-done{% endif %}{% if s.current %} is-current{% endif %}">

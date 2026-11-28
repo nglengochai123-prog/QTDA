@@ -51,6 +51,7 @@ def method_config():
         min_origins=g("forecast_min_origins"), quantile_min=g("forecast_quantile_min"),
         switch_gain=g("plan_switch_gain_percent") / 100, switch_days=7 * g("plan_switch_weeks"),
         bias_limit=g("plan_bias_limit_percent") / 100, lookback=g("forecast_lookback_days"),
+        under_weight=g("plan_under_weight_percent") / 100,
         auto_switch=bool(g("forecast_auto_switch")))
 
 
@@ -261,7 +262,9 @@ def build_forecasts(now=None, ingredients=None, report=None):
         report["tong"] = {"stage": tfc.get("stage"), "provisional": tfc.get("provisional"),
                           "eligible_days": tfc.get("eligible_days"), "proposal": tfc.get("proposal"),
                           "wape_7": st7.get("wape"), "bias_7": st7.get("bias"), "item_wape_1": h.get("item_wape"),
-                          "items": len(items)}
+                          "items": len(items), "method": tfc.get("method"),
+                          # Tổng số ly từng ngày mà kế hoạch mua dựa vào, để đối chiếu với nhánh nhân sự (cups_check).
+                          "daily": {iso: round(float(v), 1) for iso, v in list((tfc.get("daily") or {}).items())[:14]}}
     costs = _unit_costs()
     out, values = {}, {}
     unmeasured = _unmeasured_yields(data["book"])
@@ -942,3 +945,46 @@ def _suggestion_components(plan):
     keep = ("s", "S", "ip_s", "ip_S", "q0", "packs", "delta", "risk_date", "order_by", "mu_s", "mu_S", "ss_s",
             "ss_S", "binding", "action")
     return {"ke_hoach": plan.pk, "ma_du_lieu": plan.data_hash[:12], **{k: r.get(k) for k in keep}}
+
+
+# ---------------- đối chiếu số ly giữa hai nhánh (đánh giá mô hình 28/11/2026) ----------------
+
+CUPS_GAP_PERCENT = 15  # chênh từ mức này trở lên thì đánh dấu để Chủ quán xem
+
+
+def cups_check(today=None, days=14):
+    """Số ly mỗi ngày tới theo hai nhánh: nhân sự (dự báo số ly theo món, Poisson động, kỳ vọng) và mua nguyên liệu
+    (tổng số ly cả quán của dự báo phân cấp, lần tính toàn bộ gần nhất). Hai nhánh dùng hai mô hình khác nhau nên được
+    phép lệch, nhưng phải thấy được: chênh từ CUPS_GAP_PERCENT% trở lên được đánh dấu kèm nguyên nhân thường gặp."""
+    from apps.schedule.services import _daily_cups
+
+    from .services import latest_release
+
+    today = today or timezone.localdate()
+    run = PlanRun.objects.filter(kind__in=[PlanRun.Kind.FULL, PlanRun.Kind.MANUAL]).first()
+    total = ((run.summary or {}).get("tong") or {}) if run else {}
+    stock_daily = total.get("daily") or {}
+    rel = latest_release()
+    rows = []
+    for k in range(days):
+        d = today + timedelta(days=k)
+        staff, _src = _daily_cups(d, today) if rel else (None, "")
+        stock = stock_daily.get(d.isoformat())
+        gap = pct = None
+        if staff is not None and stock is not None:
+            gap = stock - staff
+            base = max(staff, stock)
+            pct = abs(gap) / base * 100 if base else 0
+        rows.append({"day": d, "staff": round(staff, 1) if staff is not None else None,
+                     "stock": stock, "gap": round(gap, 1) if gap is not None else None,
+                     "pct": round(pct, 1) if pct is not None else None,
+                     "flag": pct is not None and pct >= CUPS_GAP_PERCENT})
+    compared = [r for r in rows if r["pct"] is not None]
+    return {"rows": rows, "flagged": sum(1 for r in rows if r["flag"]),
+            "mean_pct": round(sum(r["pct"] for r in compared) / len(compared), 1) if compared else None,
+            "staff_source": (f"Dự báo số ly theo món phát hành {timezone.localtime(rel.issued_at):%d/%m %H:%M}"
+                             if rel else "Chưa phát hành dự báo số ly"),
+            "stock_source": (f"Tổng số ly của kế hoạch mua tính lúc {timezone.localtime(run.started_at):%d/%m %H:%M}"
+                             f" ({methods.METHOD_LABELS.get(total.get('method'), 'chưa rõ cách tính')})"
+                             if run and stock_daily else "Chưa có lần tính kế hoạch mua kèm số ly theo ngày"),
+            "gap_percent": CUPS_GAP_PERCENT}

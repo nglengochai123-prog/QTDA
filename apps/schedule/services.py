@@ -365,14 +365,19 @@ def suggest_day(day, shifts, inputs=None):
             for s in shifts:
                 out[s.pk][r] = (None, {"missing": "Chưa đủ dữ liệu bán theo giờ hoặc sức làm; nhập số người cần."})
             continue
-        x, need, uncovered = staffing.staff_shifts(loads, rate["value"], wait_min, target, scv, minimum, hours, spans)
+        # Người trong ca không làm việc theo đơn suốt giờ (nghỉ, dọn dẹp, chuẩn bị, việc cố định): trừ phần đó khỏi sức
+        # làm (đánh giá mô hình 28/11/2026).
+        brk = params.get("schedule_break_percent")
+        eff = rate["value"] * (1 - brk / 100)
+        x, need, uncovered = staffing.staff_shifts(loads, eff, wait_min, target, scv, minimum, hours, spans)
         for s, span, n in zip(shifts, spans, x):
             mine = [h for h in hours if staffing.covers(span, h)]
             out[s.pk][r] = (n, {
                 "cups": round(cups, 1), "cups_mean": round(mean, 1), "cups_sigma": round(sigma, 1),
                 "demand_percent": percent, "cups_source": source, "unit": unit, "unit_label": unit_label,
                 "per_cup": round(per_cup, 3) if per_cup is not None else None, "work_basis": work_basis,
-                "rate": rate["value"], "rate_source": rate["source"],
+                "rate": round(eff, 2), "rate_full": rate["value"], "break_percent": brk,
+                "rate_source": rate["source"] + (f"; trừ {brk}% thời gian nghỉ, việc cố định" if brk else ""),
                 "rate_kind": rate["kind"], "wait_minutes": wait_min, "service_percent": round(target * 100),
                 "scv": scv, "minimum": minimum,
                 "hours": [[h, round(loads[h], 3), need[h]] for h in mine],

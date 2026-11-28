@@ -75,6 +75,9 @@ def explain(n, basis, role_label):
             sentence += (f"; còn {peak_need - 1} người thì " + ("không kịp, hàng chờ dài mãi"
                          if peak_need - 1 <= busy_one else f"chỉ còn {_pct(fewer)}"))
         lines.append(sentence + ".")
+        lines.append("Phần trăm trên là ước tính xấp xỉ của mô hình hàng đợi (Erlang C, hiệu chỉnh độ biến động theo "
+                     "Allen–Cunneen), đã kiểm bằng mô phỏng; số đo thật ở dòng Kiểm chứng đầu trang và mục Tải và "
+                     "thời gian chờ.")
         short = (f"Giờ đông nhất {_hour(peak_h)} cần {peak_need} {label} để {_pct(ok)} {done_noun} "
                  f"trong {numbers.fmt(wait, 0)} phút.")
     if n < peak_need:

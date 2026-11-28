@@ -272,3 +272,37 @@ class SemiPlanTests(SemiBase):
         self.client.force_login(self.d["barista"])
         self.assertEqual(self.client.get(url).status_code, 403)
         self.assertEqual(self.client.get(reverse("inventory:semi")).status_code, 200)
+
+
+class CupsCheckTests(SemiBase):
+    def test_both_branches_compared_and_big_gap_flagged(self):
+        """Đánh giá mô hình 28/11: số ly mỗi ngày của nhánh nhân sự và nhánh mua hàng hiện cạnh nhau, chênh lớn bị đánh dấu."""
+        from apps.forecast.models import PlanRun
+
+        today = timezone.localdate()
+        run = PlanRun.objects.create(kind=PlanRun.Kind.FULL, started_at=timezone.now(),
+                                     summary={"tong": {"method": "WMA", "daily": {today.isoformat(): 120.0,
+                                                                                 (today + timedelta(days=1)).isoformat(): 100.0}}})
+        from types import SimpleNamespace
+
+        rel = SimpleNamespace(issued_at=timezone.now())
+        with mock.patch("apps.forecast.services.latest_release", return_value=rel), \
+                mock.patch("apps.schedule.services._daily_cups", side_effect=lambda d, t: (100.0, "thử")):
+            data = planning.cups_check(today, days=2)
+        self.assertEqual([(r["staff"], r["stock"], r["flag"]) for r in data["rows"]], [(100.0, 120.0, True), (100.0, 100.0, False)])
+        self.assertEqual(data["flagged"], 1)
+        self.assertTrue(run.pk)
+        self.client.login(username=self.owner.username, password=PASSWORD)
+        self.assertContains(self.client.get(reverse("forecast:overview")), "Đối chiếu số ly giữa nhân sự và mua hàng")
+
+
+class ErrorCostTests(TestCase):
+    def test_under_forecast_weighs_more_than_over(self):
+        """Đánh giá mô hình 28/11: MAE coi thiếu 10 như thừa 10; khi chọn cách tính cho mua hàng, thiếu nặng gấp đôi."""
+        from apps.forecast import methods
+
+        under = [10.0] * 8  # thực > dự báo: dự báo thiếu
+        over = [-12.0] * 8  # dự báo thừa
+        self.assertLess(methods.error_cost(under, 1.0), methods.error_cost(over, 1.0))  # theo MAE: chọn cách dự báo thiếu
+        self.assertGreater(methods.error_cost(under, 2.0), methods.error_cost(over, 2.0))  # thiếu ×2: chọn cách dự báo thừa
+        self.assertEqual(methods.error_cost([], 2.0), None)
