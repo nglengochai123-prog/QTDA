@@ -124,6 +124,14 @@ class Command(BaseCommand):
         if not days_run.exists() or not Command._is_simulation():
             raise CommandError("Không thấy bộ mô phỏng (tài khoản demo_*, ca \"Ca ngày\"). Hãy tạo bằng lệnh không có --noi-them.")
         first_day = timezone.localdate(days_run.first().starts_at)
+        # Lần nối trước chạy quá sớm (trước giờ mở cửa) thì ngày đó chỉ có một "Ca ngày" trống: bỏ ca đó và chạy lại
+        # trọn ngày, thay vì kết một ca chưa có tiền đầu ca, chưa có đơn nào (ngày 27/11/2026 trống vì lý do này).
+        rerun = False
+        last = days_run.last()
+        if (last.status == Shift.Status.OPEN and not last.orders.exists() and not last.cash_entries.exists()
+                and days_run.count() > 1):
+            last.delete()
+            rerun = True
         last_day = timezone.localdate(days_run.last().starts_at)
         today = timezone.localdate()
         if last_day >= today:
@@ -136,7 +144,8 @@ class Command(BaseCommand):
         with mock.patch("django.utils.timezone.now", clock), override_settings(MEDIA_ROOT=tempfile.mkdtemp()):
             sim = Simulation(clock, first_day, days, real_now, rnd, self.stdout)
             sim.load(last_day)
-            sim.close_unfinished(last_day)
+            if not rerun:
+                sim.close_unfinished(last_day)
             for offset in range((last_day - first_day).days + 1, days + 1):
                 sim.run_day(offset)
             sim.finish()
@@ -329,6 +338,9 @@ class Simulation:
             att.clock_out = self.clock.now
             att.save(update_fields=["clock_out"])
         if self.shift is not None and self.shift.status == Shift.Status.OPEN:
+            if not self.shift.cash_entries.filter(kind="dau_ca").exists():
+                self.clock.at(day, 6, 5)
+                self._open_cash()  # ca chưa kịp xác nhận tiền đầu ca thì không kết được
             self.clock.at(day, 22, 0)
             self._close_day()
         self.clock.at(day, 22, 30)
@@ -344,7 +356,9 @@ class Simulation:
         self.weekend = self.day.weekday() >= 5
         self.clock.at(self.day, 6, 0)
         self._drop_schedule_shifts(self.day)
-        shift = Shift.objects.filter(starts_at__date=self.day).first()
+        # Chỉ dùng lại ca còn trống của ngày; ca có đơn hay tiền (ví dụ Hai tự thử trên trình duyệt) giữ nguyên.
+        shift = (Shift.objects.filter(starts_at__date=self.day, status=Shift.Status.OPEN, orders__isnull=True,
+                                      cash_entries__isnull=True).distinct().first())
         if shift is None:
             shift = Shift.objects.create(store=self.store, name="Ca ngày", starts_at=self.clock.now,
                                          ends_at=self.clock.now + timedelta(hours=16), approver=self.u["chuquan"],
