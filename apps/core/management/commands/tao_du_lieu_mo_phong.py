@@ -186,6 +186,33 @@ EXTRA_STAFF = {"thungan2": ("thu_ngan", ["thu_ngan", "phuc_vu"], 24000, "Lê Th�
                "phucvu4": ("phuc_vu", ["phuc_vu", "thu_ngan"], 21000, "Bùi Thị", "Lan", "0905123414")}
 
 
+SEMI = [  # (tên, đơn vị, nguyên liệu gốc, lượng mỗi mẻ, lượng thu, hạn dùng ngày)
+    ("Cà phê cốt", "ml", "Cà phê rang xay", 250, 600, 2),
+    ("Trà đen ủ", "ml", "Trà đen", 60, 1500, 1),
+]
+
+
+def ensure_semi(store):
+    """Bán thành phẩm mẫu để thử màn Làm mẻ (Hai, 28/11/2026): pha chế làm mẻ mới mỗi sáng. Chưa gắn vào định mức
+    món nên không đổi cách trừ kho khi bán. Trả danh sách nguyên liệu bán thành phẩm."""
+    from apps.inventory.models import Ingredient, IngredientKind, SemiRecipe, SemiRecipeLine
+
+    out = []
+    for name, unit, raw_name, qty, output, days in SEMI:
+        raw = Ingredient.objects.filter(name=raw_name).first()
+        if raw is None:
+            continue
+        product, _ = Ingredient.objects.get_or_create(
+            store=store, name=name, defaults={"unit": unit, "kind": IngredientKind.SEMI, "pack_size": output,
+                                              "lead_time_days": 0, "shelf_life_days": days})
+        recipe, created = SemiRecipe.objects.get_or_create(store=store, product=product,
+                                                           defaults={"batch_output": output, "yield_measured": True})
+        if created:
+            SemiRecipeLine.objects.create(recipe=recipe, ingredient=raw, quantity=qty)
+        out.append(product)
+    return out
+
+
 def ensure_extra_staff(store):
     """Tạo tài khoản và hồ sơ cho nhân viên thêm nếu chưa có. Trả số người vừa tạo."""
     from apps.accounts.models import User
@@ -374,6 +401,10 @@ class Simulation:
         self._push(self._at(6, 5), self._open_cash)
         self._push(self._at(6, 10), self._dispose_expired)
         self._push(self._at(6, 40), self._deliveries)
+        if not hasattr(self, "semi"):
+            self.semi = ensure_semi(self.store)
+        for n, product in enumerate(self.semi):
+            self._push(self._at(6, 45 + 3 * n), self._make_semi, product)
         self._push(self._at(9, 0), self._pay_suppliers)
         self._push(self._at(10, 0), self._purchase_orders)
         self._orders()
@@ -468,6 +499,18 @@ class Simulation:
         if att:
             att.clock_out = self.clock.now
             att.save(update_fields=["clock_out"])
+
+    def _make_semi(self, product):
+        """Pha chế ca sáng làm một mẻ mỗi bán thành phẩm; thiếu nguyên liệu gốc thì bỏ qua như ngoài đời."""
+        from apps.inventory import operations as ops
+        from apps.inventory.models import SemiBatch
+
+        if SemiBatch.objects.filter(product=product, created_at__date=self.day).exists():
+            return
+        try:
+            ops.produce_semi(self.u["phache"], key(), product.pk, 1)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _open_cash(self):
         from apps.shifts import services as shifts
