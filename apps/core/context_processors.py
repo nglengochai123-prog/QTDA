@@ -19,7 +19,7 @@ GROUP_TONES = {"Tổng quan": "blue", "Bán hàng": "orange", "Ca và nhân sự
 ICONS = {"fc_overview": "forecast", "fc_plans": "po", "fc_prior": "bulb", "fc_season": "sun", "fc_history": "upload",
          "md_ca": "shift", "md_nhan-vien": "people", "md_mon": "brand", "md_nhom-mon": "tag", "md_tuy-chon": "sliders",
          "md_ban": "table", "md_nguyen-lieu": "stock", "md_dinh-muc": "beaker", "md_nha-cung-cap": "truck", "md_ly-do": "note",
-         "semi": "beaker", "md_ban-thanh-pham": "beaker"}
+         "semi": "beaker", "md_ban-thanh-pham": "beaker", "profit": "revenue"}
 
 # Một dòng mô tả cho thẻ chức năng ở trang chủ: nói chức năng dùng để làm gì, không nói cách tính.
 DESCRIPTIONS = {
@@ -61,6 +61,7 @@ DESCRIPTIONS = {
     "exceptions": "Sự việc bất thường cần xem xét",
     "cases": "Theo dõi khoản thiếu đến khi kết luận",
     "revenue": "Doanh thu theo ngày, món, giờ, cách trả",
+    "profit": "Doanh thu trừ chi phí ra lợi nhuận theo tháng",
     "control_report": "Tiền thiếu, đã xác minh và đã thu hồi",
     "materials": "Nhập, xuất, tồn và hao hụt theo kỳ",
     "params": "Ngưỡng cảnh báo, thời hạn, giờ mở cửa",
@@ -86,7 +87,7 @@ def navigation(request):
         return {}
     # Mục đánh dấu desktop chỉ hiện trên máy tính (thanh dưới điện thoại giữ tối đa 4 mục).
     desktop_only = {"bar", "data", "log", "cashier", "status", "exceptions", "cases", "params", "backup", "workload",
-                    "revenue", "control_report", "materials", "dashboard", "lookup", "ledger", "lots", "pick", "receipt",
+                    "revenue", "profit", "control_report", "materials", "dashboard", "lookup", "ledger", "lots", "pick", "receipt",
                     "count", "waste", "semi", "po", "payables", "stock_report"} | {
         "md_ca", "md_nhan-vien", "md_mon", "md_nhom-mon", "md_tuy-chon", "md_ban", "md_nguyen-lieu", "md_dinh-muc",
         "md_ban-thanh-pham", "md_nha-cung-cap", "md_ly-do", "schedule", "fc_overview", "fc_plans", "fc_prior", "fc_season", "fc_history"}
@@ -131,6 +132,7 @@ def navigation(request):
             ("cases", "Vụ việc tổn thất", reverse("control:cases"), Cap.EXCEPTION_REVIEW)]),
         ("Báo cáo", [
             ("revenue", "Doanh thu", reverse("reports:revenue"), Cap.VIEW_DASHBOARD),
+            ("profit", "Lãi lỗ", reverse("reports:profit"), Cap.VIEW_FINANCIALS),
             ("control_report", "Kiểm soát doanh thu", reverse("reports:revenue_control"), Cap.EXCEPTION_REVIEW),
             ("materials", "Nhập xuất tồn", reverse("reports:materials"), Cap.VIEW_DASHBOARD),
             ("stock_report", "Tồn và hạn dùng", reverse("reports:inventory"), Cap.VIEW_DASHBOARD),

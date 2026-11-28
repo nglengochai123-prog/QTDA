@@ -2167,3 +2167,12 @@ a.stat:hover { box-shadow: var(--shadow-card), 0 4px 12px rgba(0, 0, 0, 0.06); }
 .my-week td.num { text-align: left; }
 .my-week tr.is-off td, .my-week tr.is-off th { color: var(--fg-3); background: var(--surface-2); }
 @media (max-width: 599px) { .my-week .data-table th, .my-week .data-table td { padding: 0.35rem 0.5rem; font-size: 13px; } .my-week .stack-hide { display: none; } }
+
+/* Lãi lỗ (28/11/2026) */
+.pl-table .pl-group th { background: var(--surface-2); font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; color: var(--fg-3); }
+.pl-table .pl-item { font-weight: 500; padding-left: 1.5rem; }
+.pl-table .pl-sum th, .pl-table .pl-sum td { font-weight: 650; }
+.pl-table .pl-sub th, .pl-table .pl-sub td { font-weight: 600; color: var(--fg-2); font-style: italic; }
+.pl-table .pl-total th, .pl-table .pl-total td { font-weight: 700; font-size: 15px; border-top: 2px solid var(--border-strong); }
+.stat-value.is-negative { color: var(--danger); }
+.pl-add { align-items: end; margin-bottom: 0.75rem; }

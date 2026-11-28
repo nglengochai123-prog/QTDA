@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% block title %}Lãi lỗ · {{ STORE_NAME }}{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div><h1>Lãi lỗ tháng {{ first|date:"m/Y" }}</h1><p class="page-sub">Lợi nhuận = doanh thu thuần − chi phí.{% if running %} Tháng đang chạy: tính đến hết {{ upto|date:"d/m" }}.{% endif %}</p></div>
+  <div class="page-tools">
+    <a class="btn btn-quiet" href="?thang={{ prev_month|date:'Y-m' }}">‹ Tháng {{ prev_month|date:"m/Y" }}</a>
+    {% if next_month %}<a class="btn btn-quiet" href="?thang={{ next_month|date:'Y-m' }}">Tháng {{ next_month|date:"m/Y" }} ›</a>{% endif %}
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat"><p class="stat-label">Doanh thu thuần</p><p class="stat-value">{{ net|intcomma }} <small>đ</small></p><p class="stat-note">Tháng trước {{ prev.net|intcomma }} đ</p></div>
+  <div class="stat"><p class="stat-label">Tổng chi phí</p><p class="stat-value">{{ total_cost|intcomma }} <small>đ</small></p><p class="stat-note">Tháng trước {{ prev.total_cost|intcomma }} đ</p></div>
+  <div class="stat"><p class="stat-label">Lợi nhuận</p><p class="stat-value{% if profit < 0 %} is-negative{% endif %}">{{ profit|intcomma }} <small>đ</small></p><p class="stat-note">{% if profit_pct is not None %}{{ profit_pct|floatformat:1 }}% doanh thu · {% endif %}tháng trước {{ prev.profit|intcomma }} đ</p></div>
+</div>
+
+<section class="card" aria-labelledby="pl-title">
+  <div class="card-head"><h2 id="pl-title">Bảng lãi lỗ</h2></div>
+  <div class="table-wrap"><table class="data-table pl-table">
+    <thead><tr><th scope="col">Khoản</th><th scope="col" class="num">Tháng {{ first|date:"m/Y" }}</th><th scope="col" class="num">% doanh thu</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">Tiền đã thu</th><td class="num">{{ receipts|intcomma }}</td><td></td></tr>
+      <tr><th scope="row">− Hoàn tiền đã trả</th><td class="num">{{ refunds|intcomma }}</td><td></td></tr>
+      <tr class="pl-sum"><th scope="row">Doanh thu thuần</th><td class="num">{{ net|intcomma }}</td><td class="num">100%</td></tr>
+      {% regroup costs by group as groups %}
+      {% for g in groups %}
+      <tr class="pl-group"><th scope="rowgroup" colspan="3">{{ g.grouper }}</th></tr>
+      {% for c in g.list %}<tr><th scope="row" class="pl-item">− {{ c.label }}</th><td class="num">{{ c.amount|intcomma }}</td><td class="num">{% if c.pct is not None %}{{ c.pct|floatformat:1 }}%{% endif %}</td></tr>{% endfor %}
+      {% if g.grouper == "Nguyên liệu" %}<tr class="pl-sub"><th scope="row">Lãi gộp (doanh thu − giá vốn nguyên liệu)</th><td class="num">{{ gross|intcomma }}</td><td class="num">{% if gross_pct is not None %}{{ gross_pct|floatformat:1 }}%{% endif %}</td></tr>{% endif %}
+      {% endfor %}
+      <tr class="pl-sum"><th scope="row">Tổng chi phí</th><td class="num">{{ total_cost|intcomma }}</td><td></td></tr>
+      <tr class="pl-total"><th scope="row">Lợi nhuận</th><td class="num">{{ profit|intcomma }}</td><td class="num">{% if profit_pct is not None %}{{ profit_pct|floatformat:1 }}%{% endif %}</td></tr>
+    </tbody>
+  </table></div>
+  <div class="card-body"><ul class="notice-list muted">
+    <li>Giá vốn nguyên liệu tính từ lượng thực trừ kho khi pha và khi làm bán thành phẩm, theo đơn giá nhập gần nhất.</li>
+    <li>Tiền trả nhà cung cấp không trừ riêng: hàng nhập chỉ thành chi phí khi dùng (giá vốn) hoặc bỏ đi (hao hụt).</li>
+    <li>Lương theo giờ công = giờ chấm công có giờ ra × lương giờ trong hồ sơ nhân viên.{% if no_wage %} <strong>Chưa có lương giờ: {{ no_wage|join:", " }}</strong> (nhập ở Quản trị › Nhân viên).{% endif %}</li>
+  </ul></div>
+</section>
+
+<section class="card" aria-labelledby="fx-title">
+  <div class="card-head"><div><h2 id="fx-title">Chi phí tháng {{ first|date:"m/Y" }}</h2><p class="card-sub">Khoản không trả từ két: mặt bằng, điện nước, internet, khấu hao... Khoản đã chi bằng tiền trong két thì đã có ở Chi từ quỹ ca, không nhập lại.</p></div><span class="muted">{{ fixed_total|intcomma }} đ</span></div>
+  {% if fixed %}<div class="table-wrap"><table class="data-table">
+    <thead><tr><th scope="col">Loại</th><th scope="col" class="num">Số tiền</th><th scope="col" class="stack-hide">Ghi chú</th><th scope="col"></th></tr></thead>
+    <tbody>{% for e in fixed %}<tr><th scope="row">{{ e.get_category_display }}</th><td class="num">{{ e.amount|intcomma }}</td><td class="stack-hide">{{ e.note }}</td>
+      <td><form method="post" data-once data-confirm="Bỏ khoản {{ e.get_category_display|lower }} {{ e.amount|intcomma }} đ?">{% csrf_token %}<input type="hidden" name="thang" value="{{ first|date:'Y-m' }}"><input type="hidden" name="action" value="delete"><input type="hidden" name="expense" value="{{ e.pk }}"><button class="btn btn-ghost btn-sm" type="submit">Bỏ</button></form></td></tr>{% endfor %}</tbody>
+  </table></div>{% endif %}
+  <div class="card-body">
+    <form method="post" class="form-grid pl-add" data-once>{% csrf_token %}
+      <input type="hidden" name="thang" value="{{ first|date:'Y-m' }}"><input type="hidden" name="action" value="add">
+      <label class="field"><span>Loại</span><select class="input" name="category" required><option value="">Chọn loại</option>{% for v, l in categories %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></label>
+      <label class="field"><span>Số tiền (đ)</span><input class="input" name="amount" inputmode="numeric" autocomplete="off" required placeholder="Ví dụ 8.000.000"></label>
+      <label class="field"><span>Ghi chú</span><input class="input" name="note" maxlength="255"></label>
+      <button class="btn btn-primary" type="submit">Thêm chi phí</button>
+    </form>
+    {% if not fixed %}<form method="post" data-once>{% csrf_token %}<input type="hidden" name="thang" value="{{ first|date:'Y-m' }}"><input type="hidden" name="action" value="copy_prev"><button class="btn btn-quiet btn-sm" type="submit">Chép chi phí từ tháng {{ prev_month|date:"m/Y" }}</button></form>{% endif %}
+  </div>
+</section>
+{% endblock %}

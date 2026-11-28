@@ -104,3 +104,72 @@ def inventory(request):
     today = timezone.localdate()
     return render(request, "reports/inventory.html", {"start": start, "end": end, "presets": presets(today),
                                                       "show_value": True, **inv.dashboard(start, end, today)})
+
+
+@capability_required(Cap.VIEW_FINANCIALS)
+def profit(request):
+    """Lãi lỗ theo tháng và chi phí tháng do Chủ quán nhập (Hai, 28/11/2026)."""
+    from datetime import timedelta
+
+    from django.contrib import messages
+    from django.db import transaction
+    from django.shortcuts import redirect
+
+    from apps.audit.models import Action
+    from apps.audit.services import record
+    from apps.core import numbers
+    from apps.core.models import Store
+
+    from . import profit as pl
+    from .models import MonthlyExpense
+
+    today = timezone.localdate()
+    first = parse_month(request.GET.get("thang") or request.POST.get("thang")) or today.replace(day=1)
+    back = f"{request.path}?thang={first:%Y-%m}"
+    if request.method == "POST":
+        action = request.POST.get("action")
+        with transaction.atomic():
+            if action == "add":
+                try:
+                    amount = numbers.whole(request.POST.get("amount", ""))
+                except Exception:  # noqa: BLE001
+                    amount = 0
+                category = request.POST.get("category", "")
+                if amount <= 0 or category not in MonthlyExpense.Category.values:
+                    messages.error(request, "Chọn loại chi phí và nhập số tiền lớn hơn 0.")
+                    return redirect(back)
+                e = MonthlyExpense.objects.create(store=Store.get_default(), month=first, category=category,
+                                                  amount=amount, note=request.POST.get("note", "")[:255],
+                                                  created_by=request.user)
+                record(Action.CREATE, request=request, obj=e, after={"thang": f"{first:%m/%Y}",
+                                                                     "loai": e.get_category_display(), "so_tien": amount,
+                                                                     "ghi_chu": e.note})
+                messages.success(request, f"Đã ghi {e.get_category_display().lower()} {numbers.fmt(amount, 0)} đ.")
+            elif action == "delete":
+                e = MonthlyExpense.objects.filter(pk=request.POST.get("expense"), month=first).first()
+                if e is not None:
+                    record(Action.DELETE, request=request, obj=e, before={"loai": e.get_category_display(),
+                                                                          "so_tien": e.amount, "ghi_chu": e.note})
+                    e.delete()
+                    messages.success(request, "Đã bỏ khoản chi phí.")
+            elif action == "copy_prev":
+                prev = (first - timedelta(days=1)).replace(day=1)
+                rows = list(MonthlyExpense.objects.filter(month=prev))
+                if MonthlyExpense.objects.filter(month=first).exists() or not rows:
+                    messages.error(request, "Tháng này đã có chi phí, hoặc tháng trước chưa có khoản nào để chép.")
+                else:
+                    for r in rows:
+                        MonthlyExpense.objects.create(store=r.store, month=first, category=r.category, amount=r.amount,
+                                                      note=r.note, created_by=request.user)
+                    record(Action.CREATE, request=request, object_type="reports.MonthlyExpense",
+                           after={"thang": f"{first:%m/%Y}", "chep_tu": f"{prev:%m/%Y}", "so_khoan": len(rows)})
+                    messages.success(request, f"Đã chép {len(rows)} khoản từ tháng {prev:%m/%Y}; sửa số nếu khác.")
+        return redirect(back)
+    data = pl.month(first, today)
+    prev_first = (first - timedelta(days=1)).replace(day=1)
+    prev = pl.month(prev_first, today)
+    nxt = (first + timedelta(days=32)).replace(day=1)
+    return render(request, "reports/profit.html", {
+        **data, "prev": prev, "prev_month": prev_first, "next_month": nxt if nxt <= today else None,
+        "categories": MonthlyExpense.Category.choices,
+    })
