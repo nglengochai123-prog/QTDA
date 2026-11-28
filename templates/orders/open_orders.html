@@ -2,7 +2,7 @@
 {% load humanize %}
 {% block title %}Đơn đang mở · {{ STORE_NAME }}{% endblock %}
 {% block content %}
-<header class="page-head"><div><h1>Đơn đang mở</h1><p class="page-sub">Muốn hủy món, đổi món hay chuyển bàn thì gửi yêu cầu điều chỉnh.</p></div></header>
+<header class="page-head"><div><h1>Đơn đang mở</h1><p class="page-sub">Muốn hủy món, đổi món hay chuyển bàn thì gửi yêu cầu điều chỉnh. Đơn khách đã trả tiền mà cần hủy, hoàn tiền thì xem mục Đơn đã thu hôm nay bên dưới.</p></div></header>
 {% if orders %}
 <div class="order-list">
   {% for order in orders %}
@@ -37,4 +37,16 @@
 {% else %}
 <div class="empty"><p><strong>Không có đơn nào đang mở.</strong></p><p>Đơn đã thanh toán hoặc đã hủy không hiện ở đây.</p></div>
 {% endif %}
+
+<section class="card" aria-labelledby="paid-title">
+  <div class="card-head"><h2 id="paid-title">Đơn đã thu hôm nay</h2><span class="muted">Hủy hóa đơn, hoàn tiền cho khách: gửi yêu cầu, Chủ quán duyệt, thu ngân trả tiền rồi bấm Đã hoàn tiền.</span></div>
+  {% if paid %}<div class="table-wrap"><table class="data-table">
+    <thead><tr><th scope="col">Đơn</th><th scope="col">Bàn</th><th scope="col" class="num">Tiền</th><th scope="col" class="stack-hide">Thu lúc</th><th scope="col"></th></tr></thead>
+    <tbody>{% for o in paid %}<tr>
+      <th scope="row">{{ o.code }}</th><td>{{ o.table.code }}</td><td class="num">{{ o.total|intcomma }} đ</td>
+      <td class="stack-hide">{{ o.payment.created_at|date:"H:i" }} · {{ o.payment.get_method_display }}</td>
+      <td>{% with req=o.pending_request %}{% if req %}<span class="flag-pending">Đang chờ duyệt: {{ req.summary }}</span>{% else %}<a class="btn btn-quiet btn-sm" href="{% url 'orders:request_adjustment' o.pk %}">Yêu cầu hủy hóa đơn</a>{% endif %}{% endwith %}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>{% else %}<div class="card-body"><p class="muted">Hôm nay chưa có đơn nào đã thu tiền.</p></div>{% endif %}
+</section>
 {% endblock %}

@@ -40,7 +40,12 @@ def open_orders(request):
     orders = (Order.objects.exclude(status__in=[Order.Status.PAID, Order.Status.CANCELLED])
               .select_related("table").prefetch_related("lines__options", "adjustment_requests")
               .order_by("table__sort_order", "table__code", "created_at"))
-    return render(request, "orders/open_orders.html", {"orders": orders})
+    # Đơn đã thu tiền hôm nay: chỗ gửi yêu cầu Hủy hóa đơn, hoàn tiền cho khách (Chủ quán duyệt).
+    from django.utils import timezone
+
+    paid = (Order.objects.filter(status=Order.Status.PAID, payment__created_at__date=timezone.localdate())
+            .select_related("table", "payment").prefetch_related("adjustment_requests").order_by("-payment__created_at"))
+    return render(request, "orders/open_orders.html", {"orders": orders, "paid": paid})
 
 
 @capability_required(Cap.ORDER_CREATE)
