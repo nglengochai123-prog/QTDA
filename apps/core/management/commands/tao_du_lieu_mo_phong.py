@@ -130,8 +130,7 @@ class Command(BaseCommand):
         rerun = False
         last = days_run.last()
         last_day = timezone.localdate(last.starts_at)
-        if (last.status == Shift.Status.OPEN and not last.orders.exists() and not last.cash_entries.exists()
-                and days_run.count() > 1):
+        if last.status == Shift.Status.OPEN and not last.orders.exists() and days_run.count() > 1:
             last_day -= timedelta(days=1)
             rerun = True
         today = timezone.localdate()
@@ -359,7 +358,9 @@ class Simulation:
         self._drop_schedule_shifts(self.day)
         # Chỉ dùng lại ca còn trống của ngày; ca có đơn hay tiền (ví dụ Hai tự thử trên trình duyệt) giữ nguyên.
         shift = (Shift.objects.filter(starts_at__date=self.day, status=Shift.Status.OPEN, orders__isnull=True,
-                                      cash_entries__isnull=True).distinct().first())
+                                      name="Ca ngày").first()
+                 or Shift.objects.filter(starts_at__date=self.day, status=Shift.Status.OPEN, orders__isnull=True,
+                                         cash_entries__isnull=True).distinct().first())
         if shift is None:
             shift = Shift.objects.create(store=self.store, name="Ca ngày", starts_at=self.clock.now,
                                          ends_at=self.clock.now + timedelta(hours=16), approver=self.u["chuquan"],
@@ -452,6 +453,12 @@ class Simulation:
     def _clock_in(self, name, role):
         from apps.staff.models import Attendance
 
+        open_att = Attendance.objects.filter(user=self.u[name], clock_out__isnull=True).first()
+        if open_att is not None:
+            if timezone.localdate(open_att.clock_in) == self.day:
+                return  # đã vào ca (ví dụ Hai tự bấm Vào ca khi thử), giữ lượt đó
+            open_att.clock_out = min(self.clock.now, open_att.clock_in + timedelta(hours=16))  # lượt sót từ hôm trước
+            open_att.save(update_fields=["clock_out"])
         Attendance.objects.create(store=self.store, user=self.u[name], role=role, clock_in=self.clock.now)
 
     def _clock_out(self, name, role):
@@ -465,6 +472,8 @@ class Simulation:
     def _open_cash(self):
         from apps.shifts import services as shifts
 
+        if self.shift.cash_entries.filter(kind="dau_ca").exists():
+            return  # lần chạy trước đã ghi
         shifts.add_cash_entry(self.u["thungan"], key(), self.shift.pk, "dau_ca", 500000)
 
     def _dispose_expired(self):
